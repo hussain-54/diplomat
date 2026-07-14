@@ -11,6 +11,7 @@ export default defineConfig({
     tailwindcss(),
     tsconfigPaths(),
   ],
+  envPrefix: ["VITE_", "SUPABASE_"],
   resolve: {
     alias: {
       "@": "/src",
