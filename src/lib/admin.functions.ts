@@ -122,7 +122,8 @@ export const upsertAmbassador = async ({
   };
 }) => {
   await checkAuth();
-  const payload = { ...data, id: undefined };
+  const payload = { ...data };
+  delete payload.id;
   if (data.id) {
     const { error } = await supabase.from("ambassadors").update(payload).eq("id", data.id);
     if (error) throw error;
@@ -159,7 +160,8 @@ export const upsertEmbassy = async ({
   };
 }) => {
   await checkAuth();
-  const payload = { ...data, id: undefined };
+  const payload = { ...data };
+  delete payload.id;
   if (data.id) {
     const { error } = await supabase.from("embassies").update(payload).eq("id", data.id);
     if (error) throw error;
@@ -196,7 +198,8 @@ export const upsertWar = async ({
   };
 }) => {
   await checkAuth();
-  const payload = { ...data, id: undefined };
+  const payload = { ...data };
+  delete payload.id;
   if (data.id) {
     const { error } = await supabase.from("war_monitor_items").update(payload).eq("id", data.id);
     if (error) throw error;
@@ -227,7 +230,8 @@ export const upsertTicker = async ({
   data: { id?: string; text: string; tag?: string; active: boolean; sort_order: number };
 }) => {
   await checkAuth();
-  const payload = { ...data, id: undefined };
+  const payload = { ...data };
+  delete payload.id;
   if (data.id) {
     const { error } = await supabase.from("ticker_items").update(payload).eq("id", data.id);
     if (error) throw error;
@@ -265,7 +269,8 @@ export const upsertVideo = async ({
   };
 }) => {
   await checkAuth();
-  const payload = { ...data, id: undefined };
+  const payload = { ...data };
+  delete payload.id;
   if (data.id) {
     const { error } = await supabase.from("videos").update(payload).eq("id", data.id);
     if (error) throw error;
