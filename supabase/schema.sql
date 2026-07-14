@@ -478,24 +478,24 @@ ON CONFLICT (id) DO NOTHING;
 
 -- 4. War Monitor Items
 INSERT INTO public.war_monitor_items (id, conflict_name, countries, headline, status) VALUES
-  ('w1111111-1111-1111-1111-111111111111', 'Eastern Europe Conflict', ARRAY['Ukraine', 'Russia'], 'Frontline shelling intensifies in the Donbas sector; energy grid repairs underway.', 'active'),
-  ('w2222222-2222-2222-2222-222222222222', 'Gaza Strip & Border Zone', ARRAY['Israel', 'Palestine'], 'High-level ceasefire negotiations resume in Cairo with international mediators.', 'ceasefire'),
-  ('w3333333-3333-3333-3333-333333333333', 'Red Sea Maritime Corridor', ARRAY['Yemen', 'US', 'UK'], 'Naval coalition intercepts drone threats; global shipping lanes maintain alert status.', 'tension')
+  ('c1111111-1111-1111-1111-111111111111', 'Eastern Europe Conflict', ARRAY['Ukraine', 'Russia'], 'Frontline shelling intensifies in the Donbas sector; energy grid repairs underway.', 'active'),
+  ('c2222222-2222-2222-2222-222222222222', 'Gaza Strip & Border Zone', ARRAY['Israel', 'Palestine'], 'High-level ceasefire negotiations resume in Cairo with international mediators.', 'ceasefire'),
+  ('c3333333-3333-3333-3333-333333333333', 'Red Sea Maritime Corridor', ARRAY['Yemen', 'US', 'UK'], 'Naval coalition intercepts drone threats; global shipping lanes maintain alert status.', 'tension')
 ON CONFLICT (id) DO NOTHING;
 
 -- 5. Ticker Items
 INSERT INTO public.ticker_items (id, text, tag, active, sort_order) VALUES
-  ('t1111111-1111-1111-1111-111111111111', 'UNSC convenes emergency session on maritime security in the Red Sea.', 'LIVE', true, 1),
-  ('t2222222-2222-2222-2222-222222222222', 'Saudi Arabia announces $2B investment program in green hydrogen sectors.', 'EXCLUSIVE', true, 2),
-  ('t3333333-3333-3333-3333-333333333333', 'G20 summit draft calls for coordinated framework on sovereign debt restructuring.', 'BREAKING', true, 3),
-  ('t4444444-4444-4444-4444-444444444444', 'UK and EU announce joint agreement on cyber defence operations.', 'LIVE', true, 4)
+  ('d1111111-1111-1111-1111-111111111111', 'UNSC convenes emergency session on maritime security in the Red Sea.', 'LIVE', true, 1),
+  ('d2222222-2222-2222-2222-222222222222', 'Saudi Arabia announces $2B investment program in green hydrogen sectors.', 'EXCLUSIVE', true, 2),
+  ('d3333333-3333-3333-3333-333333333333', 'G20 summit draft calls for coordinated framework on sovereign debt restructuring.', 'BREAKING', true, 3),
+  ('d4444444-4444-4444-4444-444444444444', 'UK and EU announce joint agreement on cyber defence operations.', 'LIVE', true, 4)
 ON CONFLICT (id) DO NOTHING;
 
 -- 6. Videos
 INSERT INTO public.videos (id, title, category, thumbnail_url, video_url, duration, published_at) VALUES
-  ('v1111111-1111-1111-1111-111111111111', 'Inside the UNSC Chamber: How Resolutions are Negotiated', 'Special Report', 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?q=80&w=800', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '14:20', now() - interval '2 days'),
-  ('v2222222-2222-2222-2222-222222222222', 'The New Silk Road: Trade, Ports, and Geopolitics', 'Documentary', 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=800', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '22:15', now() - interval '5 days'),
-  ('v3333333-3333-3333-3333-333333333333', 'Interview with Sarah Jenkins: The Future of NATO', 'Interview', 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=800', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '08:45', now() - interval '8 days')
+  ('b1111111-1111-1111-1111-111111111111', 'Inside the UNSC Chamber: How Resolutions are Negotiated', 'Special Report', 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?q=80&w=800', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '14:20', now() - interval '2 days'),
+  ('b2222222-2222-2222-2222-222222222222', 'The New Silk Road: Trade, Ports, and Geopolitics', 'Documentary', 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=800', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '22:15', now() - interval '5 days'),
+  ('b3333333-3333-3333-3333-333333333333', 'Interview with Sarah Jenkins: The Future of NATO', 'Interview', 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=800', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '08:45', now() - interval '8 days')
 ON CONFLICT (id) DO NOTHING;
 
 -- 7. Seed Author Profile
