@@ -498,12 +498,7 @@ INSERT INTO public.videos (id, title, category, thumbnail_url, video_url, durati
   ('b3333333-3333-3333-3333-333333333333', 'Interview with Sarah Jenkins: The Future of NATO', 'Interview', 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=800', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '08:45', now() - interval '8 days')
 ON CONFLICT (id) DO NOTHING;
 
--- 7. Seed Author Profile
-INSERT INTO public.profiles (id, name, bio) VALUES
-  ('00000000-0000-0000-0000-000000000000', 'Editorial Board', 'Core reporting desk for Diplomacy Lens.')
-ON CONFLICT (id) DO NOTHING;
-
--- 8. Seed Articles
+-- 7. Seed Articles
 INSERT INTO public.articles (id, slug, title, deck, body, section_id, region, author_id, status, badge_type, hero_image_url, published_at) VALUES
   (
     'f1111111-1111-1111-1111-111111111111',
@@ -517,7 +512,7 @@ Senior military officers stated that patrols are now utilizing advanced air-defe
 Diplomatic sources in Riyadh and Cairo have welcomed the expansion, noting that stable transit routes are essential for global trade stability and for preventing inflation in regional food and energy supplies.',
     '11111111-1111-1111-1111-111111111111',
     'Red Sea',
-    '00000000-0000-0000-0000-000000000000',
+    NULL,
     'published',
     'breaking',
     'https://images.unsplash.com/photo-1541872703-74c5e44368f9?q=80&w=1200',
@@ -535,7 +530,7 @@ Zhang stressed that international bodies must adapt to the economic realities of
 "Our goal should not be to dismantle the existing system, but to reform it from within. We need structures that prioritize cooperative development and shield developing nations from abrupt economic shocks," Zhang remarked during the 45-minute discussion.',
     '22222222-2222-2222-2222-222222222222',
     'New York',
-    '00000000-0000-0000-0000-000000000000',
+    NULL,
     'published',
     'exclusive',
     'https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=1200',
@@ -553,7 +548,7 @@ Sovereign debt restructuring, climate finance, and digital trade rules are no lo
 This shift represents a democratization of global governance, but it also increases the complexity of achieving binding global treaties. Diplomats must prepare for a more fragmented, yet highly interconnected, international landscape.',
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
     'Global',
-    '00000000-0000-0000-0000-000000000000',
+    NULL,
     'published',
     'opinion',
     'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1200',
@@ -569,7 +564,7 @@ This shift represents a democratization of global governance, but it also increa
 This initiative is expected to reduce reliance on imported fossil fuels and provide stable, low-cost power to remote regional sectors. Construction is slated to begin early next year, with full operation targeted by 2028.',
     '44444444-4444-4444-4444-444444444444',
     'Islamabad',
-    '00000000-0000-0000-0000-000000000000',
+    NULL,
     'published',
     'none',
     NULL,
