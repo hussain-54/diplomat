@@ -1,0 +1,578 @@
+-- ============ SCHEMAS ============
+CREATE SCHEMA IF NOT EXISTS app_hidden;
+GRANT USAGE ON SCHEMA app_hidden TO authenticated, service_role;
+
+-- ============ ENUMS ============
+DO $$ BEGIN
+  CREATE TYPE public.app_role AS ENUM ('super_admin', 'section_editor', 'contributor');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE public.article_status AS ENUM ('draft', 'review', 'published');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE public.badge_type AS ENUM ('none','breaking','live','exclusive','opinion','premium','alert');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE public.ambassador_status AS ENUM ('active','recalled','vacant');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE public.embassy_status AS ENUM ('open','limited','closed','alert');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE public.war_status AS ENUM ('active','ceasefire','tension');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
+-- ============ TABLES ============
+
+-- Profiles
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT,
+  avatar_url TEXT,
+  bio TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- User Roles
+CREATE TABLE IF NOT EXISTS public.user_roles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role public.app_role NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(user_id, role)
+);
+
+-- Sections
+CREATE TABLE IF NOT EXISTS public.sections (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  color TEXT,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Editor Section Access
+CREATE TABLE IF NOT EXISTS public.editor_section_access (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  section_id UUID NOT NULL REFERENCES public.sections(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(profile_id, section_id)
+);
+
+-- Tags
+CREATE TABLE IF NOT EXISTS public.tags (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL
+);
+
+-- Articles
+CREATE TABLE IF NOT EXISTS public.articles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  deck TEXT,
+  body TEXT,
+  section_id UUID REFERENCES public.sections(id) ON DELETE SET NULL,
+  region TEXT,
+  author_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  status public.article_status NOT NULL DEFAULT 'draft',
+  badge_type public.badge_type NOT NULL DEFAULT 'none',
+  hero_image_url TEXT,
+  published_at TIMESTAMPTZ,
+  scheduled_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS articles_section_idx ON public.articles(section_id);
+CREATE INDEX IF NOT EXISTS articles_status_pub_idx ON public.articles(status, published_at DESC);
+
+-- Article Tags
+CREATE TABLE IF NOT EXISTS public.article_tags (
+  article_id UUID NOT NULL REFERENCES public.articles(id) ON DELETE CASCADE,
+  tag_id UUID NOT NULL REFERENCES public.tags(id) ON DELETE CASCADE,
+  PRIMARY KEY(article_id, tag_id)
+);
+
+-- Ambassadors
+CREATE TABLE IF NOT EXISTS public.ambassadors (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  country TEXT NOT NULL,
+  position TEXT,
+  flag_emoji TEXT,
+  avatar_url TEXT,
+  quote TEXT,
+  tags TEXT[] DEFAULT '{}',
+  interview_url TEXT,
+  status public.ambassador_status NOT NULL DEFAULT 'active',
+  featured BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Embassies
+CREATE TABLE IF NOT EXISTS public.embassies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  country TEXT NOT NULL,
+  ambassador_id UUID REFERENCES public.ambassadors(id) ON DELETE SET NULL,
+  headline TEXT,
+  status public.embassy_status NOT NULL DEFAULT 'open',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- War Monitor
+CREATE TABLE IF NOT EXISTS public.war_monitor_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  conflict_name TEXT NOT NULL,
+  countries TEXT[] DEFAULT '{}',
+  headline TEXT,
+  status public.war_status NOT NULL DEFAULT 'active',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Ticker
+CREATE TABLE IF NOT EXISTS public.ticker_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  text TEXT NOT NULL,
+  tag TEXT,
+  active BOOLEAN NOT NULL DEFAULT true,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Videos
+CREATE TABLE IF NOT EXISTS public.videos (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  category TEXT,
+  thumbnail_url TEXT,
+  video_url TEXT,
+  duration TEXT,
+  published_at TIMESTAMPTZ DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ============ SECURITY HELPER FUNCTIONS ============
+
+CREATE OR REPLACE FUNCTION app_hidden.has_role(_user_id uuid, _role public.app_role)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT EXISTS(SELECT 1 FROM public.user_roles WHERE user_id = _user_id AND role = _role)
+$$;
+
+CREATE OR REPLACE FUNCTION app_hidden.can_edit_section(_user_id uuid, _section_id uuid)
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT app_hidden.has_role(_user_id,'super_admin')
+      OR EXISTS(SELECT 1 FROM public.editor_section_access WHERE profile_id = _user_id AND section_id = _section_id);
+$$;
+
+REVOKE ALL ON FUNCTION app_hidden.has_role(uuid, public.app_role) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app_hidden.can_edit_section(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION app_hidden.has_role(uuid, public.app_role) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION app_hidden.can_edit_section(uuid, uuid) TO authenticated, service_role;
+
+-- ============ ROW LEVEL SECURITY POLICIES ============
+
+-- Enable RLS
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.editor_section_access ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.articles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.article_tags ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ambassadors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.embassies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.war_monitor_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ticker_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.videos ENABLE ROW LEVEL SECURITY;
+
+-- Grants
+GRANT SELECT ON public.profiles TO anon;
+GRANT SELECT, INSERT, UPDATE ON public.profiles TO authenticated;
+GRANT ALL ON public.profiles TO service_role;
+
+GRANT SELECT ON public.user_roles TO authenticated;
+GRANT ALL ON public.user_roles TO service_role;
+
+GRANT SELECT ON public.sections TO anon, authenticated;
+GRANT ALL ON public.sections TO service_role;
+
+GRANT SELECT ON public.editor_section_access TO authenticated;
+GRANT ALL ON public.editor_section_access TO service_role;
+
+GRANT SELECT ON public.tags TO anon, authenticated;
+GRANT ALL ON public.tags TO service_role;
+GRANT INSERT, UPDATE, DELETE ON public.tags TO authenticated;
+
+GRANT SELECT ON public.articles TO anon, authenticated;
+GRANT ALL ON public.articles TO service_role;
+
+GRANT SELECT ON public.article_tags TO anon, authenticated;
+GRANT INSERT, DELETE ON public.article_tags TO authenticated;
+GRANT ALL ON public.article_tags TO service_role;
+
+GRANT SELECT ON public.ambassadors TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.ambassadors TO authenticated;
+GRANT ALL ON public.ambassadors TO service_role;
+
+GRANT SELECT ON public.embassies TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.embassies TO authenticated;
+GRANT ALL ON public.embassies TO service_role;
+
+GRANT SELECT ON public.war_monitor_items TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.war_monitor_items TO authenticated;
+GRANT ALL ON public.war_monitor_items TO service_role;
+
+GRANT SELECT ON public.ticker_items TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.ticker_items TO authenticated;
+GRANT ALL ON public.ticker_items TO service_role;
+
+GRANT SELECT ON public.videos TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.videos TO authenticated;
+GRANT ALL ON public.videos TO service_role;
+
+-- Policies
+
+-- profiles
+DROP POLICY IF EXISTS "profiles are public readable" ON public.profiles;
+CREATE POLICY "profiles are public readable" ON public.profiles FOR SELECT USING (true);
+DROP POLICY IF EXISTS "users update own profile" ON public.profiles;
+CREATE POLICY "users update own profile" ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
+DROP POLICY IF EXISTS "users insert own profile" ON public.profiles;
+CREATE POLICY "users insert own profile" ON public.profiles FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
+
+-- user_roles
+DROP POLICY IF EXISTS "users view own roles" ON public.user_roles;
+CREATE POLICY "users view own roles" ON public.user_roles FOR SELECT TO authenticated USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "super admins manage roles" ON public.user_roles;
+CREATE POLICY "super admins manage roles" ON public.user_roles FOR ALL USING (app_hidden.has_role(auth.uid(),'super_admin')) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin'));
+
+-- sections
+DROP POLICY IF EXISTS "sections public read" ON public.sections;
+CREATE POLICY "sections public read" ON public.sections FOR SELECT USING (true);
+DROP POLICY IF EXISTS "super admins manage sections" ON public.sections;
+CREATE POLICY "super admins manage sections" ON public.sections FOR ALL USING (app_hidden.has_role(auth.uid(),'super_admin')) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin'));
+
+-- editor_section_access
+DROP POLICY IF EXISTS "editors view own access" ON public.editor_section_access;
+CREATE POLICY "editors view own access" ON public.editor_section_access FOR SELECT USING ((auth.uid() = profile_id) OR app_hidden.has_role(auth.uid(),'super_admin'));
+DROP POLICY IF EXISTS "super admins manage access" ON public.editor_section_access;
+CREATE POLICY "super admins manage access" ON public.editor_section_access FOR ALL USING (app_hidden.has_role(auth.uid(),'super_admin')) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin'));
+
+-- tags
+DROP POLICY IF EXISTS "tags public read" ON public.tags;
+CREATE POLICY "tags public read" ON public.tags FOR SELECT USING (true);
+DROP POLICY IF EXISTS "editors manage tags" ON public.tags;
+CREATE POLICY "editors manage tags" ON public.tags FOR ALL USING (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor') OR app_hidden.has_role(auth.uid(),'contributor')) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor') OR app_hidden.has_role(auth.uid(),'contributor'));
+
+-- articles
+DROP POLICY IF EXISTS "published articles public" ON public.articles;
+CREATE POLICY "published articles public" ON public.articles FOR SELECT USING (status = 'published');
+DROP POLICY IF EXISTS "authors view own drafts" ON public.articles;
+CREATE POLICY "authors view own drafts" ON public.articles FOR SELECT USING ((author_id = auth.uid()) OR app_hidden.has_role(auth.uid(),'super_admin') OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id)));
+DROP POLICY IF EXISTS "authorized create articles" ON public.articles;
+CREATE POLICY "authorized create articles" ON public.articles FOR INSERT WITH CHECK ((author_id = auth.uid()) AND (app_hidden.has_role(auth.uid(),'super_admin') OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id)) OR (app_hidden.has_role(auth.uid(),'contributor') AND (status = 'draft'::public.article_status))));
+DROP POLICY IF EXISTS "authorized update articles" ON public.articles;
+CREATE POLICY "authorized update articles" ON public.articles FOR UPDATE USING (app_hidden.has_role(auth.uid(),'super_admin') OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id)) OR ((author_id = auth.uid()) AND (status <> 'published'::public.article_status))) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin') OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id)) OR ((author_id = auth.uid()) AND (status <> 'published'::public.article_status)));
+DROP POLICY IF EXISTS "authorized delete articles" ON public.articles;
+CREATE POLICY "authorized delete articles" ON public.articles FOR DELETE USING (app_hidden.has_role(auth.uid(),'super_admin') OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id)));
+
+-- article_tags
+DROP POLICY IF EXISTS "article_tags public read" ON public.article_tags;
+CREATE POLICY "article_tags public read" ON public.article_tags FOR SELECT USING (true);
+DROP POLICY IF EXISTS "editors manage article_tags" ON public.article_tags;
+CREATE POLICY "editors manage article_tags" ON public.article_tags FOR ALL USING (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor') OR app_hidden.has_role(auth.uid(),'contributor')) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor') OR app_hidden.has_role(auth.uid(),'contributor'));
+
+-- ambassadors
+DROP POLICY IF EXISTS "ambassadors public read" ON public.ambassadors;
+CREATE POLICY "ambassadors public read" ON public.ambassadors FOR SELECT USING (true);
+DROP POLICY IF EXISTS "editors manage ambassadors" ON public.ambassadors;
+CREATE POLICY "editors manage ambassadors" ON public.ambassadors FOR ALL USING (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor')) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor'));
+
+-- embassies
+DROP POLICY IF EXISTS "embassies public read" ON public.embassies;
+CREATE POLICY "embassies public read" ON public.embassies FOR SELECT USING (true);
+DROP POLICY IF EXISTS "editors manage embassies" ON public.embassies;
+CREATE POLICY "editors manage embassies" ON public.embassies FOR ALL USING (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor')) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor'));
+
+-- war_monitor_items
+DROP POLICY IF EXISTS "war public read" ON public.war_monitor_items;
+CREATE POLICY "war public read" ON public.war_monitor_items FOR SELECT USING (true);
+DROP POLICY IF EXISTS "editors manage war" ON public.war_monitor_items;
+CREATE POLICY "editors manage war" ON public.war_monitor_items FOR ALL USING (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor')) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor'));
+
+-- ticker_items
+DROP POLICY IF EXISTS "ticker public read active" ON public.ticker_items;
+CREATE POLICY "ticker public read active" ON public.ticker_items FOR SELECT USING (active OR app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor'));
+DROP POLICY IF EXISTS "editors manage ticker" ON public.ticker_items;
+CREATE POLICY "editors manage ticker" ON public.ticker_items FOR ALL USING (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor')) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor'));
+
+-- videos
+DROP POLICY IF EXISTS "videos public read" ON public.videos;
+CREATE POLICY "videos public read" ON public.videos FOR SELECT USING (true);
+DROP POLICY IF EXISTS "editors manage videos" ON public.videos;
+CREATE POLICY "editors manage videos" ON public.videos FOR ALL USING (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor')) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin') OR app_hidden.has_role(auth.uid(),'section_editor'));
+
+
+-- ============ TRIGGERS AND FUNCTIONS ============
+
+CREATE OR REPLACE FUNCTION public.touch_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS articles_touch ON public.articles;
+CREATE TRIGGER articles_touch BEFORE UPDATE ON public.articles FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+
+DROP TRIGGER IF EXISTS ambassadors_touch ON public.ambassadors;
+CREATE TRIGGER ambassadors_touch BEFORE UPDATE ON public.ambassadors FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+
+DROP TRIGGER IF EXISTS embassies_touch ON public.embassies;
+CREATE TRIGGER embassies_touch BEFORE UPDATE ON public.embassies FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+
+DROP TRIGGER IF EXISTS war_touch ON public.war_monitor_items;
+CREATE TRIGGER war_touch BEFORE UPDATE ON public.war_monitor_items FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+
+-- New User trigger function to auto-profile/role creation
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  INSERT INTO public.profiles(id, name, avatar_url)
+  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)), NEW.raw_user_meta_data->>'avatar_url')
+  ON CONFLICT (id) DO NOTHING;
+  
+  INSERT INTO public.user_roles(user_id, role) VALUES (NEW.id, 'contributor')
+  ON CONFLICT (user_id, role) DO NOTHING;
+  
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ============ STORAGE BUCKET POLICIES ============
+
+-- Ensure storage buckets exist
+INSERT INTO storage.buckets (id, name, public) VALUES ('article-hero', 'article-hero', true) ON CONFLICT (id) DO NOTHING;
+INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true) ON CONFLICT (id) DO NOTHING;
+
+-- Policies for objects in storage
+DROP POLICY IF EXISTS "public read hero" ON storage.objects;
+CREATE POLICY "public read hero" ON storage.objects FOR SELECT USING (bucket_id = 'article-hero');
+
+DROP POLICY IF EXISTS "public read avatars" ON storage.objects;
+CREATE POLICY "public read avatars" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
+
+DROP POLICY IF EXISTS "authed upload hero" ON storage.objects;
+CREATE POLICY "authed upload hero" ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'article-hero' AND (
+      app_hidden.has_role(auth.uid(),'super_admin')
+      OR app_hidden.has_role(auth.uid(),'section_editor')
+      OR app_hidden.has_role(auth.uid(),'contributor')
+    )
+  );
+
+DROP POLICY IF EXISTS "authed upload avatars" ON storage.objects;
+CREATE POLICY "authed upload avatars" ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'avatars' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+DROP POLICY IF EXISTS "authed update avatars own" ON storage.objects;
+CREATE POLICY "authed update avatars own" ON storage.objects FOR UPDATE TO authenticated
+  USING (bucket_id = 'avatars' AND (storage.foldername(name))[1] = auth.uid()::text)
+  WITH CHECK (bucket_id = 'avatars' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+DROP POLICY IF EXISTS "authed update hero editorial" ON storage.objects;
+CREATE POLICY "authed update hero editorial" ON storage.objects FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'article-hero' AND (
+      owner = auth.uid()
+      OR app_hidden.has_role(auth.uid(),'super_admin')
+      OR app_hidden.has_role(auth.uid(),'section_editor')
+    )
+  )
+  WITH CHECK (
+    bucket_id = 'article-hero' AND (
+      owner = auth.uid()
+      OR app_hidden.has_role(auth.uid(),'super_admin')
+      OR app_hidden.has_role(auth.uid(),'section_editor')
+    )
+  );
+
+DROP POLICY IF EXISTS "authed delete avatars own" ON storage.objects;
+CREATE POLICY "authed delete avatars own" ON storage.objects FOR DELETE TO authenticated
+  USING (bucket_id = 'avatars' AND (storage.foldername(name))[1] = auth.uid()::text);
+
+DROP POLICY IF EXISTS "authed delete hero editorial" ON storage.objects;
+CREATE POLICY "authed delete hero editorial" ON storage.objects FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'article-hero' AND (
+      owner = auth.uid()
+      OR app_hidden.has_role(auth.uid(),'super_admin')
+      OR app_hidden.has_role(auth.uid(),'section_editor')
+    )
+  );
+
+
+-- ============ SEED DATA ============
+
+-- 1. Sections
+INSERT INTO public.sections (id, slug, name, color, sort_order) VALUES
+  ('11111111-1111-1111-1111-111111111111', 'war', 'War Monitor', '#B31B2E', 1),
+  ('22222222-2222-2222-2222-222222222222', 'ambassadors', 'Ambassadors', '#0E1524', 2),
+  ('33333333-3333-3333-3333-333333333333', 'embassy-watch', 'Embassy Watch', '#B4893C', 3),
+  ('44444444-4444-4444-4444-444444444444', 'pakistan', 'Pakistan', '#0f766e', 4),
+  ('55555555-5555-5555-5555-555555555555', 'uae', 'UAE', '#0284c7', 5),
+  ('66666666-6666-6666-6666-666666666666', 'india', 'India', '#ea580c', 6),
+  ('77777777-7777-7777-7777-777777777777', 'world', 'World', '#4f46e5', 7),
+  ('88888888-8888-8888-8888-888888888888', 'business', 'Business', '#059669', 8),
+  ('99999999-9999-9999-9999-999999999999', 'sports', 'Sports', '#2563eb', 9),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'lifestyle', 'Lifestyle', '#db2777', 10),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'opinion', 'Opinion', '#7c3aed', 11),
+  ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'sci-tech', 'Sci-Tech', '#0369a1', 12)
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. Ambassadors
+INSERT INTO public.ambassadors (id, name, country, position, flag_emoji, quote, tags, status, featured) VALUES
+  ('a1111111-1111-1111-1111-111111111111', 'His Excellency Zhang Wei', 'China', 'Ambassador to the United Nations', '🇨🇳', 'Diplomacy is not about winning arguments, but about finding common ground for global peace.', ARRAY['UNSC', 'Multilateralism', 'Trade'], 'active', true),
+  ('a2222222-2222-2222-2222-222222222222', 'Her Excellency Sarah Jenkins', 'United Kingdom', 'Ambassador to the United States', '🇬🇧', 'In a complex world, our partnerships are our greatest strength. We build bridges, not walls.', ARRAY['Special Relationship', 'NATO', 'Climate Action'], 'active', true),
+  ('a3333333-3333-3333-3333-333333333333', 'His Excellency Faisal Al-Saud', 'Saudi Arabia', 'Ambassador to Pakistan', '🇸🇦', 'The bonds between our nations are rooted in shared history, values, and a mutual vision for regional stability.', ARRAY['Bilateral Relations', 'Investment', 'Energy Cooperation'], 'active', true),
+  ('a4444444-4444-4444-4444-444444444444', 'Her Excellency Elena Rostova', 'Russia', 'Ambassador to India', '🇷🇺', 'Bilateral cooperation in aerospace and defense remains the cornerstone of our strategic partnership.', ARRAY['BRICS', 'Defense', 'Space Exploration'], 'active', false)
+ON CONFLICT (id) DO NOTHING;
+
+-- 3. Embassies
+INSERT INTO public.embassies (id, country, ambassador_id, headline, status) VALUES
+  ('e1111111-1111-1111-1111-111111111111', 'United States', 'a2222222-2222-2222-2222-222222222222', 'Embassy watch lists increased security guidelines following regional cyber warnings.', 'open'),
+  ('e2222222-2222-2222-2222-222222222222', 'Saudi Arabia', 'a3333333-3333-3333-3333-333333333333', 'Consular services fully operational; trade delegation scheduled for next month.', 'open'),
+  ('e3333333-3333-3333-3333-333333333333', 'Ukraine', NULL, 'Consulate operating under limited hours due to power infrastructure constraints.', 'limited'),
+  ('e4444444-4444-4444-4444-444444444444', 'Sudan', NULL, 'Operations temporarily suspended. All diplomatic staff recalled to regional bureau.', 'closed'),
+  ('e5555555-5555-5555-5555-555555555555', 'Lebanon', NULL, 'Embassy watch issues travel alert for citizens inside the capital zone.', 'alert')
+ON CONFLICT (id) DO NOTHING;
+
+-- 4. War Monitor Items
+INSERT INTO public.war_monitor_items (id, conflict_name, countries, headline, status) VALUES
+  ('w1111111-1111-1111-1111-111111111111', 'Eastern Europe Conflict', ARRAY['Ukraine', 'Russia'], 'Frontline shelling intensifies in the Donbas sector; energy grid repairs underway.', 'active'),
+  ('w2222222-2222-2222-2222-222222222222', 'Gaza Strip & Border Zone', ARRAY['Israel', 'Palestine'], 'High-level ceasefire negotiations resume in Cairo with international mediators.', 'ceasefire'),
+  ('w3333333-3333-3333-3333-333333333333', 'Red Sea Maritime Corridor', ARRAY['Yemen', 'US', 'UK'], 'Naval coalition intercepts drone threats; global shipping lanes maintain alert status.', 'tension')
+ON CONFLICT (id) DO NOTHING;
+
+-- 5. Ticker Items
+INSERT INTO public.ticker_items (id, text, tag, active, sort_order) VALUES
+  ('t1111111-1111-1111-1111-111111111111', 'UNSC convenes emergency session on maritime security in the Red Sea.', 'LIVE', true, 1),
+  ('t2222222-2222-2222-2222-222222222222', 'Saudi Arabia announces $2B investment program in green hydrogen sectors.', 'EXCLUSIVE', true, 2),
+  ('t3333333-3333-3333-3333-333333333333', 'G20 summit draft calls for coordinated framework on sovereign debt restructuring.', 'BREAKING', true, 3),
+  ('t4444444-4444-4444-4444-444444444444', 'UK and EU announce joint agreement on cyber defence operations.', 'LIVE', true, 4)
+ON CONFLICT (id) DO NOTHING;
+
+-- 6. Videos
+INSERT INTO public.videos (id, title, category, thumbnail_url, video_url, duration, published_at) VALUES
+  ('v1111111-1111-1111-1111-111111111111', 'Inside the UNSC Chamber: How Resolutions are Negotiated', 'Special Report', 'https://images.unsplash.com/photo-1541872703-74c5e44368f9?q=80&w=800', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '14:20', now() - interval '2 days'),
+  ('v2222222-2222-2222-2222-222222222222', 'The New Silk Road: Trade, Ports, and Geopolitics', 'Documentary', 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=800', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '22:15', now() - interval '5 days'),
+  ('v3333333-3333-3333-3333-333333333333', 'Interview with Sarah Jenkins: The Future of NATO', 'Interview', 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=800', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', '08:45', now() - interval '8 days')
+ON CONFLICT (id) DO NOTHING;
+
+-- 7. Seed Author Profile
+INSERT INTO public.profiles (id, name, bio) VALUES
+  ('00000000-0000-0000-0000-000000000000', 'Editorial Board', 'Core reporting desk for Diplomacy Lens.')
+ON CONFLICT (id) DO NOTHING;
+
+-- 8. Seed Articles
+INSERT INTO public.articles (id, slug, title, deck, body, section_id, region, author_id, status, badge_type, hero_image_url, published_at) VALUES
+  (
+    'f1111111-1111-1111-1111-111111111111',
+    'red-sea-naval-coalition-patrols',
+    'Red Sea Naval Coalition Expands Maritime Security Patrols',
+    'The joint command has increased anti-drone sweeps in the commercial shipping lanes as transit volumes begin to stabilize.',
+    'A coalition of naval forces led by US and UK commands has formally expanded its maritime security operations in the southern Red Sea. The security desk reported a 15% increase in commercial transit volumes over the past ten days, indicating that shippers are beginning to regain confidence in the patrol coverage.
+
+Senior military officers stated that patrols are now utilizing advanced air-defense sweeps and coordinated drone interception capabilities. The goal is to provide a continuous security umbrella for container ships passing through the Bab-el-Mandeb strait.
+
+Diplomatic sources in Riyadh and Cairo have welcomed the expansion, noting that stable transit routes are essential for global trade stability and for preventing inflation in regional food and energy supplies.',
+    '11111111-1111-1111-1111-111111111111',
+    'Red Sea',
+    '00000000-0000-0000-0000-000000000000',
+    'published',
+    'breaking',
+    'https://images.unsplash.com/photo-1541872703-74c5e44368f9?q=80&w=1200',
+    now()
+  ),
+  (
+    'f2222222-2222-2222-2222-222222222222',
+    'exclusive-interview-zhang-wei',
+    'Exclusive: UN Ambassador Zhang Wei on Multilateral Reform',
+    'In a wide-ranging interview, Ambassador Zhang calls for a renewed focus on G20 cooperation and sovereign debt security.',
+    'We sat down with Chinese Ambassador Zhang Wei at the UN headquarters to discuss the rising tensions in multilateral frameworks and the prospects of global financial governance reform.
+
+Zhang stressed that international bodies must adapt to the economic realities of the global south. He argued that the current structures, built in the mid-20th century, no longer fully reflect the interests of emerging economies.
+
+"Our goal should not be to dismantle the existing system, but to reform it from within. We need structures that prioritize cooperative development and shield developing nations from abrupt economic shocks," Zhang remarked during the 45-minute discussion.',
+    '22222222-2222-2222-2222-222222222222',
+    'New York',
+    '00000000-0000-0000-0000-000000000000',
+    'published',
+    'exclusive',
+    'https://images.unsplash.com/photo-1578575437130-527eed3abbec?q=80&w=1200',
+    now() - interval '1 hour'
+  ),
+  (
+    'f3333333-3333-3333-3333-333333333333',
+    'future-of-global-cooperation-g20',
+    'The Future of Global Cooperation Lies in BRICS and G20 Integration',
+    'An analysis of how emerging alliances are reshaping traditional trade treaties and diplomatic negotiations.',
+    'Traditional global institutions are facing unprecedented structural headwinds. As polarization increases between major power blocs, alternative platforms like the G20 and BRICS are emerging as the main venues for substantive policy coordination.
+
+Sovereign debt restructuring, climate finance, and digital trade rules are no longer being decided solely within western-led organizations. Instead, consensus is being built across wider networks.
+
+This shift represents a democratization of global governance, but it also increases the complexity of achieving binding global treaties. Diplomats must prepare for a more fragmented, yet highly interconnected, international landscape.',
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+    'Global',
+    '00000000-0000-0000-0000-000000000000',
+    'published',
+    'opinion',
+    'https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1200',
+    now() - interval '4 hours'
+  ),
+  (
+    'f4444444-4444-4444-4444-444444444444',
+    'pakistan-secures-new-green-energy-grants',
+    'Pakistan Secures New Green Energy Infrastructure Grants',
+    'The funding will support solar and wind grid installations in Balochistan and Sindh provinces.',
+    'The Ministry of Energy has finalized a new round of funding grants with international development banks to expand renewable energy capacity. The grants, totaling $450M, will go directly toward grid integration for solar and wind arrays in southwestern Pakistan.
+
+This initiative is expected to reduce reliance on imported fossil fuels and provide stable, low-cost power to remote regional sectors. Construction is slated to begin early next year, with full operation targeted by 2028.',
+    '44444444-4444-4444-4444-444444444444',
+    'Islamabad',
+    '00000000-0000-0000-0000-000000000000',
+    'published',
+    'none',
+    NULL,
+    now() - interval '1 day'
+  )
+ON CONFLICT (id) DO NOTHING;
