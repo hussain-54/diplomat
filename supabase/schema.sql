@@ -187,10 +187,9 @@ RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
       OR EXISTS(SELECT 1 FROM public.editor_section_access WHERE profile_id = _user_id AND section_id = _section_id);
 $$;
 
-REVOKE ALL ON FUNCTION app_hidden.has_role(uuid, public.app_role) FROM PUBLIC;
-REVOKE ALL ON FUNCTION app_hidden.can_edit_section(uuid, uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION app_hidden.has_role(uuid, public.app_role) TO authenticated, service_role;
-GRANT EXECUTE ON FUNCTION app_hidden.can_edit_section(uuid, uuid) TO authenticated, service_role;
+GRANT USAGE ON SCHEMA app_hidden TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION app_hidden.has_role(uuid, public.app_role) TO PUBLIC;
+GRANT EXECUTE ON FUNCTION app_hidden.can_edit_section(uuid, uuid) TO PUBLIC;
 
 -- ============ ROW LEVEL SECURITY POLICIES ============
 
