@@ -47,7 +47,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 await queryClient.cancelQueries();
                 queryClient.clear();
                 await supabase.auth.signOut();
-                navigate({ to: "/auth", replace: true });
+                navigate({ to: "/auth", search: { redirect: "/admin" }, replace: true });
               }}
               className="rounded-sm border border-navy-foreground/30 px-2 py-1 uppercase tracking-widest hover:bg-navy-foreground/10"
             >

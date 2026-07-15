@@ -6,11 +6,14 @@ import { SiteShell } from "@/components/site-shell";
 import { z } from "zod";
 
 const authSearchSchema = z.object({
-  redirect: z.string().optional(),
+  redirect: z
+    .union([z.string(), z.number(), z.boolean(), z.null(), z.undefined()])
+    .optional()
+    .transform((v) => (typeof v === "string" && v.startsWith("/") && !v.startsWith("//") ? v : undefined)),
 });
 
 export const Route = createFileRoute("/auth")({
-  validateSearch: authSearchSchema,
+  validateSearch: (search) => authSearchSchema.parse(search),
   head: () => ({ meta: [{ title: "Sign in — Diplomacy Lens" }] }),
   component: AuthPage,
 });
@@ -83,7 +86,7 @@ function AuthPage() {
         setMsg("Magic link sent. Check your email.");
       }
     } catch (err) {
-      setMsg((err as Error).message);
+      setMsg(err instanceof Error ? err.message : "Sign-in failed");
     } finally {
       setBusy(false);
     }

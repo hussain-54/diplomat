@@ -16,7 +16,10 @@ function Overview() {
   const drafts = list.filter((a) => a.status === "draft").length;
   const bySection: Record<string, number> = {};
   for (const a of list) {
-    const name = a.sections?.name ?? "Unassigned";
+    const section = a.sections as { name?: string } | { name?: string }[] | null | undefined;
+    const name = Array.isArray(section)
+      ? (section[0]?.name ?? "Unassigned")
+      : (section?.name ?? "Unassigned");
     bySection[name] = (bySection[name] ?? 0) + 1;
   }
 
@@ -49,7 +52,10 @@ function Overview() {
                 >
                   <div className="font-serif text-base text-ink">{a.title}</div>
                   <div className="text-xs text-muted-foreground">
-                    {a.sections?.name ?? "—"} · updated {new Date(a.updated_at).toLocaleString()}
+                    {(Array.isArray(a.sections)
+                      ? a.sections[0]?.name
+                      : (a.sections as { name?: string } | null)?.name) ?? "—"}{" "}
+                    · updated {new Date(a.updated_at).toLocaleString()}
                   </div>
                 </Link>
               ))

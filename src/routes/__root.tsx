@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, Link, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { safeErrorMessage } from "@/lib/safe-error";
 
 function NotFoundComponent() {
   return (
@@ -28,6 +29,7 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  const details = safeErrorMessage(error);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -36,9 +38,9 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
-        {error && (
+        {details && (
           <div className="mt-4 rounded bg-destructive/10 p-3 text-left text-xs font-mono text-destructive">
-            <span className="font-bold">Error Details:</span> {error.message || String(error)}
+            <span className="font-bold">Error Details:</span> {details}
           </div>
         )}
         <div className="mt-6 flex flex-wrap justify-center gap-2">

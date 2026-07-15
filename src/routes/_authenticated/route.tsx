@@ -6,9 +6,11 @@ export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async ({ location }) => {
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) {
+      // location.search is a parsed object — use searchStr, never stringify search
+      const returnTo = `${location.pathname}${location.searchStr || ""}`;
       throw redirect({
         to: "/auth",
-        search: { redirect: `${location.pathname}${location.search}` },
+        search: { redirect: returnTo.startsWith("/") ? returnTo : "/admin" },
       });
     }
 
@@ -18,17 +20,17 @@ export const Route = createFileRoute("/_authenticated")({
       .eq("user_id", data.user.id);
 
     if (rolesError) {
-      throw new Error(rolesError.message);
+      throw new Error(rolesError.message || "Failed to load newsroom roles");
     }
 
-    const roleList = (roles ?? []).map((r) => r.role);
+    const roleList = (roles ?? []).map((r) => r.role).filter(Boolean);
     if (!roleList.length) {
       throw new Error(
-        "Your account has no newsroom role yet. Sign up creates a contributor role automatically — if this persists, run the promote SQL in INTEGRATION_GUIDE.md.",
+        "Your account has no newsroom role yet. Run supabase/fix-has-role-now.sql (promotes your email to super_admin), then sign out and sign in again.",
       );
     }
 
-    return { user: data.user, roles: roleList };
+    return { userId: data.user.id, roles: roleList };
   },
   component: () => <Outlet />,
 });
