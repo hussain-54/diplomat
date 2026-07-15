@@ -115,6 +115,27 @@ export const upsertArticle = async ({
   const slug = data.slug?.trim() || slugify(data.title);
   const badge = (data.badge_type ?? "none") as BadgeType;
 
+  // Prefer SECURITY DEFINER RPC so table GRANT quirks cannot block editors.
+  const { data: viaRpc, error: rpcError } = await supabase.rpc("admin_upsert_article", {
+    p_id: data.id ?? null,
+    p_title: data.title.trim(),
+    p_deck: data.deck || null,
+    p_body: data.body || null,
+    p_section_id: data.section_id,
+    p_region: data.region || null,
+    p_badge_type: badge,
+    p_hero_image_url: data.hero_image_url || null,
+    p_status: data.status,
+    p_slug: slug,
+  });
+
+  if (!rpcError && viaRpc) return viaRpc;
+
+  // Fallback direct write if RPC not deployed yet
+  if (rpcError && !/could not find the function|schema cache|PGRST202/i.test(rpcError.message)) {
+    throw toAppError(rpcError);
+  }
+
   if (data.id) {
     const { data: existing, error: existingError } = await supabase
       .from("articles")
@@ -124,7 +145,6 @@ export const upsertArticle = async ({
     if (existingError) throw toAppError(existingError);
     if (!existing) throw new Error("Article not found or you cannot edit it.");
 
-    // Preserve first publish time on edits; clear only when unpublishing.
     const published_at = wantsPublish
       ? (existing.published_at ?? new Date().toISOString())
       : null;
@@ -151,7 +171,7 @@ export const upsertArticle = async ({
     if (error) throw toAppError(error);
     if (!r) {
       throw new Error(
-        "Update blocked by permissions. You need super_admin, section_editor, or section access to publish.",
+        "Update blocked by permissions. Run supabase/fix-publish-now.sql, then sign out/in.",
       );
     }
     return r;
@@ -175,7 +195,7 @@ export const upsertArticle = async ({
   if (error) throw toAppError(error);
   if (!r) {
     throw new Error(
-      "Create blocked by permissions. Contributors can only create drafts. Promote your role to publish.",
+      "Create blocked by permissions. Run supabase/fix-publish-now.sql, then sign out/in.",
     );
   }
   return r;

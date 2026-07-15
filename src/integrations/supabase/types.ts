@@ -420,7 +420,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      admin_upsert_article: {
+        Args: {
+          p_title: string
+          p_section_id: string
+          p_status?: Database["public"]["Enums"]["article_status"]
+          p_id?: string | null
+          p_deck?: string | null
+          p_body?: string | null
+          p_region?: string | null
+          p_badge_type?: Database["public"]["Enums"]["badge_type"]
+          p_hero_image_url?: string | null
+          p_slug?: string | null
+        }
+        Returns: Database["public"]["Tables"]["articles"]["Row"]
+      }
     }
     Enums: {
       ambassador_status: "active" | "recalled" | "vacant"
