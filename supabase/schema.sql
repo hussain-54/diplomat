@@ -227,6 +227,7 @@ GRANT ALL ON public.tags TO service_role;
 GRANT INSERT, UPDATE, DELETE ON public.tags TO authenticated;
 
 GRANT SELECT ON public.articles TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.articles TO authenticated;
 GRANT ALL ON public.articles TO service_role;
 
 GRANT SELECT ON public.article_tags TO anon, authenticated;
@@ -293,11 +294,34 @@ CREATE POLICY "published articles public" ON public.articles FOR SELECT USING (s
 DROP POLICY IF EXISTS "authors view own drafts" ON public.articles;
 CREATE POLICY "authors view own drafts" ON public.articles FOR SELECT USING ((author_id = auth.uid()) OR app_hidden.has_role(auth.uid(),'super_admin') OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id)));
 DROP POLICY IF EXISTS "authorized create articles" ON public.articles;
-CREATE POLICY "authorized create articles" ON public.articles FOR INSERT WITH CHECK ((author_id = auth.uid()) AND (app_hidden.has_role(auth.uid(),'super_admin') OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id)) OR (app_hidden.has_role(auth.uid(),'contributor') AND (status = 'draft'::public.article_status))));
+CREATE POLICY "authorized create articles" ON public.articles FOR INSERT WITH CHECK (
+  (author_id = auth.uid()) AND (
+    app_hidden.has_role(auth.uid(), 'super_admin')
+    OR app_hidden.has_role(auth.uid(), 'section_editor')
+    OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id))
+    OR (app_hidden.has_role(auth.uid(), 'contributor') AND status = 'draft'::public.article_status)
+  )
+);
 DROP POLICY IF EXISTS "authorized update articles" ON public.articles;
-CREATE POLICY "authorized update articles" ON public.articles FOR UPDATE USING (app_hidden.has_role(auth.uid(),'super_admin') OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id)) OR ((author_id = auth.uid()) AND (status <> 'published'::public.article_status))) WITH CHECK (app_hidden.has_role(auth.uid(),'super_admin') OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id)) OR ((author_id = auth.uid()) AND (status <> 'published'::public.article_status)));
+CREATE POLICY "authorized update articles" ON public.articles FOR UPDATE
+USING (
+  app_hidden.has_role(auth.uid(), 'super_admin')
+  OR app_hidden.has_role(auth.uid(), 'section_editor')
+  OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id))
+  OR ((author_id = auth.uid()) AND (status <> 'published'::public.article_status))
+)
+WITH CHECK (
+  app_hidden.has_role(auth.uid(), 'super_admin')
+  OR app_hidden.has_role(auth.uid(), 'section_editor')
+  OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id))
+  OR ((author_id = auth.uid()) AND (status <> 'published'::public.article_status))
+);
 DROP POLICY IF EXISTS "authorized delete articles" ON public.articles;
-CREATE POLICY "authorized delete articles" ON public.articles FOR DELETE USING (app_hidden.has_role(auth.uid(),'super_admin') OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id)));
+CREATE POLICY "authorized delete articles" ON public.articles FOR DELETE USING (
+  app_hidden.has_role(auth.uid(), 'super_admin')
+  OR app_hidden.has_role(auth.uid(), 'section_editor')
+  OR ((section_id IS NOT NULL) AND app_hidden.can_edit_section(auth.uid(), section_id))
+);
 
 -- article_tags
 DROP POLICY IF EXISTS "article_tags public read" ON public.article_tags;

@@ -3,13 +3,20 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { SiteShell } from "@/components/site-shell";
+import { z } from "zod";
+
+const authSearchSchema = z.object({
+  redirect: z.string().optional(),
+});
 
 export const Route = createFileRoute("/auth")({
+  validateSearch: authSearchSchema,
   head: () => ({ meta: [{ title: "Sign in — Diplomacy Lens" }] }),
   component: AuthPage,
 });
 
 function AuthPage() {
+  const { redirect: redirectTo } = Route.useSearch();
   const [mode, setMode] = useState<"signin" | "signup" | "magic">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,6 +25,14 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
   const { user } = useSession();
   const navigate = useNavigate();
+
+  const goAfterAuth = () => {
+    if (redirectTo?.startsWith("/") && !redirectTo.startsWith("//")) {
+      window.location.assign(redirectTo);
+      return;
+    }
+    navigate({ to: "/admin" });
+  };
 
   if (user) {
     return (
@@ -47,20 +62,22 @@ function AuthPage() {
           email,
           password,
           options: {
-            emailRedirectTo: window.location.origin,
+            emailRedirectTo: window.location.origin + "/admin",
             data: { name },
           },
         });
         if (error) throw error;
-        setMsg("Account created. If email confirmation is enabled, check your inbox.");
+        setMsg(
+          "Account created as contributor (drafts only). A super admin must grant section_editor or super_admin before you can publish. If email confirmation is enabled, check your inbox.",
+        );
       } else if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate({ to: "/admin" });
+        goAfterAuth();
       } else {
         const { error } = await supabase.auth.signInWithOtp({
           email,
-          options: { emailRedirectTo: window.location.origin + "/admin" },
+          options: { emailRedirectTo: window.location.origin + (redirectTo || "/admin") },
         });
         if (error) throw error;
         setMsg("Magic link sent. Check your email.");

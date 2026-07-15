@@ -38,7 +38,9 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </div>
           <div className="flex items-center gap-3 text-xs">
             <span className="text-navy-foreground/70">
-              {me?.profile?.name ?? me?.userId?.slice(0, 8)} · {me?.roles.join(", ") || "no role"}
+              {meQ.isLoading
+                ? "Loading…"
+                : `${me?.profile?.name ?? me?.userId?.slice(0, 8) ?? "Editor"} · ${me?.roles.join(", ") || "no role"}`}
             </span>
             <button
               onClick={async () => {

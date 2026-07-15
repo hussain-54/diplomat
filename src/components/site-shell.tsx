@@ -1,6 +1,6 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { useQuery, useQueryClient, queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import { getTicker, getSections } from "@/lib/content.functions";
@@ -63,13 +63,17 @@ function TopStrip() {
 
 function AccountMenu() {
   const { user, loading } = useSession();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   if (loading) return <div className="h-8 w-20" />;
   if (!user) {
-    // Public visitors do NOT see a sign-in link. Admin access is via /admin URL only.
     return (
-      <button className="rounded-sm bg-crimson px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-crimson-foreground hover:opacity-90">
+      <Link
+        to="/newsletter"
+        className="rounded-sm bg-crimson px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-crimson-foreground hover:opacity-90"
+      >
         Subscribe
-      </button>
+      </Link>
     );
   }
   return (
@@ -82,7 +86,10 @@ function AccountMenu() {
       </Link>
       <button
         onClick={async () => {
+          await queryClient.cancelQueries();
+          queryClient.clear();
           await supabase.auth.signOut();
+          navigate({ to: "/", replace: true });
         }}
         className="rounded-sm border border-input px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-foreground hover:bg-accent"
       >
@@ -155,7 +162,7 @@ function MainNav() {
 }
 
 function Ticker() {
-  const { data } = useSuspenseQuery(tickerQO);
+  const { data = [] } = useQuery(tickerQO);
   if (!data.length) return null;
   const items = [...data, ...data];
   return (
@@ -187,7 +194,7 @@ function Ticker() {
 const sectionsQO = queryOptions({ queryKey: ["sections"], queryFn: () => getSections() });
 
 function Footer() {
-  const { data: sections } = useSuspenseQuery(sectionsQO);
+  const { data: sections = [] } = useQuery(sectionsQO);
   return (
     <footer className="mt-16 border-t border-border bg-navy text-navy-foreground">
       <div className="mx-auto grid max-w-[1400px] gap-8 px-4 py-12 md:grid-cols-4">

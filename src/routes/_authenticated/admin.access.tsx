@@ -1,9 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listEditors, setUserRole, toggleSectionAccess } from "@/lib/admin.functions";
 import { getSections } from "@/lib/content.functions";
 
 export const Route = createFileRoute("/_authenticated/admin/access")({
+  beforeLoad: ({ context }) => {
+    const roles = (context as { roles?: string[] }).roles ?? [];
+    if (!roles.includes("super_admin")) {
+      throw redirect({ to: "/admin" });
+    }
+  },
   component: Page,
 });
 
