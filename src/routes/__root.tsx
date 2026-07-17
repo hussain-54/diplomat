@@ -1,8 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Outlet, Link, createRootRouteWithContext, useRouter } from "@tanstack/react-router";
+import {
+  HeadContent,
+  Outlet,
+  Link,
+  createRootRouteWithContext,
+  useRouter,
+} from "@tanstack/react-router";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { safeErrorMessage } from "@/lib/safe-error";
+import { DEFAULT_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/seo";
 
 function NotFoundComponent() {
   return (
@@ -66,6 +73,25 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  head: () => ({
+    meta: [
+      { title: SITE_NAME },
+      { name: "description", content: DEFAULT_DESCRIPTION },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { property: "og:site_name", content: SITE_NAME },
+      { property: "og:type", content: "website" },
+      { property: "og:title", content: SITE_NAME },
+      { property: "og:description", content: DEFAULT_DESCRIPTION },
+      { property: "og:url", content: siteUrl() },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: SITE_NAME },
+      { name: "twitter:description", content: DEFAULT_DESCRIPTION },
+    ],
+    links: [
+      { rel: "canonical", href: siteUrl() },
+      { rel: "alternate", type: "application/rss+xml", title: `${SITE_NAME} RSS`, href: "/rss.xml" },
+    ],
+  }),
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,
@@ -90,6 +116,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <HeadContent />
       <Outlet />
     </QueryClientProvider>
   );

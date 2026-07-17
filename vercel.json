@@ -4,6 +4,14 @@
   "installCommand": "npm install",
   "framework": "vite",
   "rewrites": [
+    { "source": "/robots.txt", "destination": "/api/robots" },
+    { "source": "/sitemap.xml", "destination": "/api/sitemap?type=index" },
+    { "source": "/pages-sitemap.xml", "destination": "/api/sitemap?type=pages" },
+    { "source": "/news-sitemap.xml", "destination": "/api/sitemap?type=news" },
+    { "source": "/images-sitemap.xml", "destination": "/api/sitemap?type=images" },
+    { "source": "/videos-sitemap.xml", "destination": "/api/sitemap?type=videos" },
+    { "source": "/rss.xml", "destination": "/api/rss" },
+    { "source": "/feed.xml", "destination": "/api/rss" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

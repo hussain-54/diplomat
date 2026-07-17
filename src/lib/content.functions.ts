@@ -70,7 +70,7 @@ export const getSectionWithArticles = async ({ data }: { data: { slug: string } 
 export const getArticle = async ({ data }: { data: { slug: string } }) => {
   const { data: article, error } = await supabase
     .from("articles")
-    .select("*, sections(slug,name,color)")
+    .select("*, sections(slug,name,color), author:profiles!articles_author_id_fkey(name,avatar_url,bio)")
     .eq("slug", data.slug)
     .eq("status", "published")
     .maybeSingle();

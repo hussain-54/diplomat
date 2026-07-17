@@ -3,6 +3,7 @@ import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
 import { SiteShell } from "@/components/site-shell";
 import { ArticleCard } from "@/components/article-card";
 import { getSectionWithArticles } from "@/lib/content.functions";
+import { absoluteUrl } from "@/lib/seo";
 
 const qo = (slug: string) =>
   queryOptions({
@@ -20,13 +21,21 @@ export const Route = createFileRoute("/section/$slug")({
     const name = loaderData?.section?.name ?? "Section";
     const title = `${name} — Diplomacy Lens`;
     const description = `Latest ${name} coverage from Diplomacy Lens.`;
+    const canonical = absoluteUrl(`/section/${loaderData?.section?.slug ?? ""}`);
     return {
       meta: [
         { title },
         { name: "description", content: description },
+        { name: "robots", content: "index,follow" },
+        { property: "og:type", content: "website" },
         { property: "og:title", content: title },
         { property: "og:description", content: description },
+        { property: "og:url", content: canonical },
+        { name: "twitter:card", content: "summary" },
+        { name: "twitter:title", content: title },
+        { name: "twitter:description", content: description },
       ],
+      links: [{ rel: "canonical", href: canonical }],
     };
   },
   component: SectionPage,

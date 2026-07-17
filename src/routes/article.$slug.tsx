@@ -12,6 +12,7 @@ import {
   trackArticleView,
 } from "@/lib/content.functions";
 import { formatDate } from "@/lib/format";
+import { articleSeo } from "@/lib/seo";
 
 const qo = (slug: string) =>
   queryOptions({
@@ -27,17 +28,47 @@ export const Route = createFileRoute("/article/$slug")({
   },
   head: ({ loaderData }) => {
     const article = loaderData?.article;
-    const title = article ? `${article.title} — Diplomacy Lens` : "Article — Diplomacy Lens";
-    const description = article?.deck ?? "Diplomacy Lens reporting and analysis.";
+    if (!article) return {};
+    const seo = articleSeo(article);
     return {
       meta: [
-        { title },
-        { name: "description", content: description },
-        { property: "og:title", content: title },
-        { property: "og:description", content: description },
-        ...(article?.hero_image_url
-          ? [{ property: "og:image", content: article.hero_image_url }]
+        { title: seo.documentTitle },
+        { name: "description", content: seo.description },
+        { name: "robots", content: seo.robots },
+        { property: "og:type", content: "article" },
+        { property: "og:title", content: seo.ogTitle },
+        { property: "og:description", content: seo.ogDescription },
+        { property: "og:url", content: seo.canonical },
+        ...(seo.image
+          ? [
+              { property: "og:image", content: seo.image },
+              { property: "og:image:alt", content: article.title },
+            ]
           : []),
+        ...(article.published_at
+          ? [{ property: "article:published_time", content: article.published_at }]
+          : []),
+        { property: "article:modified_time", content: article.updated_at },
+        { name: "twitter:card", content: seo.twitterCard },
+        { name: "twitter:title", content: seo.twitterTitle },
+        { name: "twitter:description", content: seo.twitterDescription },
+        ...(seo.twitterImage
+          ? [{ name: "twitter:image", content: seo.twitterImage }]
+          : []),
+      ],
+      links: [
+        { rel: "canonical", href: seo.canonical },
+        ...Object.entries(seo.hreflang).map(([hrefLang, href]) => ({
+          rel: "alternate",
+          hrefLang,
+          href,
+        })),
+      ],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify(seo.jsonLd).replace(/</g, "\\u003c"),
+        },
       ],
     };
   },

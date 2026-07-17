@@ -10,6 +10,24 @@ import {
 
 type BadgeType = Database["public"]["Enums"]["badge_type"];
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
+export type ArticleSeoInput = {
+  seo_title?: string | null;
+  meta_description?: string | null;
+  focus_keyword?: string | null;
+  canonical_url?: string | null;
+  robots_index: boolean;
+  robots_follow: boolean;
+  schema_type: "NewsArticle" | "Article" | "Review" | "Report";
+  og_title?: string | null;
+  og_description?: string | null;
+  og_image_url?: string | null;
+  twitter_card: "summary" | "summary_large_image";
+  twitter_title?: string | null;
+  twitter_description?: string | null;
+  twitter_image_url?: string | null;
+  rss_inclusion: boolean;
+  hreflang: Record<string, string>;
+};
 
 const slugify = (s: string) =>
   s
@@ -130,6 +148,42 @@ export const getAdminArticle = async ({ data }: { data: { id: string } }) => {
     .maybeSingle();
   if (error) throw toAppError(error);
   return a;
+};
+
+export const updateArticleSeo = async ({
+  data,
+}: {
+  data: ArticleSeoInput & { article_id: string };
+}) => {
+  const { article_id, ...seo } = data;
+  const { data: article, error } = await supabase.rpc("admin_update_article_seo", {
+    p_article_id: article_id,
+    p_seo_title: seo.seo_title || null,
+    p_meta_description: seo.meta_description || null,
+    p_focus_keyword: seo.focus_keyword || null,
+    p_canonical_url: seo.canonical_url || null,
+    p_robots_index: seo.robots_index,
+    p_robots_follow: seo.robots_follow,
+    p_schema_type: seo.schema_type,
+    p_og_title: seo.og_title || null,
+    p_og_description: seo.og_description || null,
+    p_og_image_url: seo.og_image_url || null,
+    p_twitter_card: seo.twitter_card,
+    p_twitter_title: seo.twitter_title || null,
+    p_twitter_description: seo.twitter_description || null,
+    p_twitter_image_url: seo.twitter_image_url || null,
+    p_rss_inclusion: seo.rss_inclusion,
+    p_hreflang: seo.hreflang,
+  });
+  if (error) {
+    if (/admin_update_article_seo|schema cache|PGRST202/i.test(error.message)) {
+      throw new Error(
+        "SEO database module is not installed. Apply supabase/migrations/20260718060000_complete_seo_module.sql, then reload.",
+      );
+    }
+    throw toAppError(error);
+  }
+  return article;
 };
 
 // TAGS
@@ -420,7 +474,7 @@ export const restoreArticleRevision = async ({
   if (!snapshot?.title || !snapshot.section_id) {
     throw new Error("This revision cannot be restored.");
   }
-  return upsertArticle({
+  const article = await upsertArticle({
     data: {
       id: data.article_id,
       title: snapshot.title,
@@ -435,6 +489,42 @@ export const restoreArticleRevision = async ({
       scheduled_at: snapshot.scheduled_at,
     },
   });
+  await updateArticleSeo({
+    data: {
+      article_id: data.article_id,
+      seo_title: snapshot.seo_title,
+      meta_description: snapshot.meta_description,
+      focus_keyword: snapshot.focus_keyword,
+      canonical_url: snapshot.canonical_url,
+      robots_index: snapshot.robots_index,
+      robots_follow: snapshot.robots_follow,
+      schema_type: (
+        ["NewsArticle", "Article", "Review", "Report"].includes(snapshot.schema_type)
+          ? snapshot.schema_type
+          : "NewsArticle"
+      ) as ArticleSeoInput["schema_type"],
+      og_title: snapshot.og_title,
+      og_description: snapshot.og_description,
+      og_image_url: snapshot.og_image_url,
+      twitter_card:
+        snapshot.twitter_card === "summary" ? "summary" : "summary_large_image",
+      twitter_title: snapshot.twitter_title,
+      twitter_description: snapshot.twitter_description,
+      twitter_image_url: snapshot.twitter_image_url,
+      rss_inclusion: snapshot.rss_inclusion,
+      hreflang:
+        snapshot.hreflang &&
+        !Array.isArray(snapshot.hreflang) &&
+        typeof snapshot.hreflang === "object"
+          ? Object.fromEntries(
+              Object.entries(snapshot.hreflang).filter(
+                (entry): entry is [string, string] => typeof entry[1] === "string",
+              ),
+            )
+          : {},
+    },
+  });
+  return article;
 };
 
 // AMBASSADORS

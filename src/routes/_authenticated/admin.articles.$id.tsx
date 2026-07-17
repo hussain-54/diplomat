@@ -9,17 +9,20 @@ import {
   listTags,
   restoreArticleRevision,
   setArticleTags,
+  updateArticleSeo,
   upsertArticle,
   uploadHeroImage,
+  type ArticleSeoInput,
 } from "@/lib/admin.functions";
 import { getSections } from "@/lib/content.functions";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { Database } from "@/integrations/supabase/types";
 import { CmsPageHeader, CmsPanel, CmsStatus, cmsButton, cmsInput } from "@/components/cms-ui";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermissionRoute } from "@/lib/route-guards";
 import { BlockEditor } from "@/components/block-editor";
 import { parseBody, serializeBlocks, type Block } from "@/lib/blocks";
+import { parseHreflang, seoLengthTone, siteUrl } from "@/lib/seo";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
 
@@ -79,6 +82,25 @@ function EditArticle() {
     slug: "",
     scheduled_at: "",
   });
+  const [seo, setSeo] = useState<ArticleSeoInput>({
+    seo_title: "",
+    meta_description: "",
+    focus_keyword: "",
+    canonical_url: "",
+    robots_index: true,
+    robots_follow: true,
+    schema_type: "NewsArticle",
+    og_title: "",
+    og_description: "",
+    og_image_url: "",
+    twitter_card: "summary_large_image",
+    twitter_title: "",
+    twitter_description: "",
+    twitter_image_url: "",
+    rss_inclusion: true,
+    hreflang: {},
+  });
+  const [hreflangRows, setHreflangRows] = useState<Array<{ locale: string; url: string }>>([]);
   const [blocks, setBlocks] = useState<Block[]>(() => parseBody(null));
   const [tagNames, setTagNames] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
@@ -89,6 +111,10 @@ function EditArticle() {
 
   const patchForm = (patch: Partial<typeof form>) => {
     setForm((f) => ({ ...f, ...patch }));
+    setDirty(true);
+  };
+  const patchSeo = (patch: Partial<ArticleSeoInput>) => {
+    setSeo((current) => ({ ...current, ...patch }));
     setDirty(true);
   };
   const changeBlocks = useCallback((next: Block[]) => {
@@ -110,6 +136,33 @@ function EditArticle() {
         scheduled_at: toDateTimeLocal(articleQ.data.scheduled_at),
       });
       setBlocks(parseBody(articleQ.data.body));
+      const hreflang = parseHreflang(articleQ.data.hreflang);
+      setSeo({
+        seo_title: articleQ.data.seo_title ?? "",
+        meta_description: articleQ.data.meta_description ?? "",
+        focus_keyword: articleQ.data.focus_keyword ?? "",
+        canonical_url: articleQ.data.canonical_url ?? "",
+        robots_index: articleQ.data.robots_index ?? true,
+        robots_follow: articleQ.data.robots_follow ?? true,
+        schema_type: (
+          ["NewsArticle", "Article", "Review", "Report"].includes(articleQ.data.schema_type)
+            ? articleQ.data.schema_type
+            : "NewsArticle"
+        ) as ArticleSeoInput["schema_type"],
+        og_title: articleQ.data.og_title ?? "",
+        og_description: articleQ.data.og_description ?? "",
+        og_image_url: articleQ.data.og_image_url ?? "",
+        twitter_card:
+          articleQ.data.twitter_card === "summary" ? "summary" : "summary_large_image",
+        twitter_title: articleQ.data.twitter_title ?? "",
+        twitter_description: articleQ.data.twitter_description ?? "",
+        twitter_image_url: articleQ.data.twitter_image_url ?? "",
+        rss_inclusion: articleQ.data.rss_inclusion ?? true,
+        hreflang,
+      });
+      setHreflangRows(
+        Object.entries(hreflang).map(([locale, url]) => ({ locale, url })),
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articleQ.data]);
@@ -167,6 +220,16 @@ function EditArticle() {
       if (article?.id && mayManageTags) {
         await setArticleTags({ data: { article_id: article.id, tag_names: tagNames } });
       }
+      if (article?.id) {
+        const hreflang = Object.fromEntries(
+          hreflangRows
+            .filter((row) => row.locale.trim() && row.url.trim())
+            .map((row) => [row.locale.trim(), row.url.trim()]),
+        );
+        await updateArticleSeo({
+          data: { article_id: article.id, ...seo, hreflang },
+        });
+      }
       return article;
     },
     onSuccess: (article, variables) => {
@@ -220,7 +283,7 @@ function EditArticle() {
     const timer = setTimeout(() => save.mutate({ auto: true }), AUTOSAVE_DELAY_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autosaveEligible, form, blocks, tagNames]);
+  }, [autosaveEligible, form, blocks, tagNames, seo, hreflangRows]);
 
   // Ctrl+S / Cmd+S saves from anywhere on the page.
   useEffect(() => {
@@ -442,8 +505,51 @@ function EditArticle() {
             </div>
           </CmsPanel>
 
-          <CmsPanel title="SEO" description="How this story appears in search and shares">
-            <div className="space-y-4 p-5">
+          <CmsPanel title="SEO" description="Search metadata, robots, schema, and international targeting">
+            <div className="space-y-5 p-5">
+              <Field label="SEO title" hint={`${(seo.seo_title || form.title).length}/60`}>
+                <input
+                  value={seo.seo_title ?? ""}
+                  disabled={readOnly}
+                  maxLength={120}
+                  onChange={(e) => patchSeo({ seo_title: e.target.value })}
+                  placeholder={form.title || "Custom search title"}
+                  className={cmsInput}
+                />
+                <LengthGuide
+                  length={(seo.seo_title || form.title).length}
+                  min={30}
+                  max={60}
+                />
+              </Field>
+              <Field
+                label="Meta description"
+                hint={`${(seo.meta_description || form.deck).length}/160`}
+              >
+                <textarea
+                  value={seo.meta_description ?? ""}
+                  disabled={readOnly}
+                  maxLength={320}
+                  rows={3}
+                  onChange={(e) => patchSeo({ meta_description: e.target.value })}
+                  placeholder={form.deck || "Describe this story for search results"}
+                  className={`${cmsInput} h-auto py-2`}
+                />
+                <LengthGuide
+                  length={(seo.meta_description || form.deck).length}
+                  min={120}
+                  max={160}
+                />
+              </Field>
+              <Field label="Focus keyword">
+                <input
+                  value={seo.focus_keyword ?? ""}
+                  disabled={readOnly}
+                  onChange={(e) => patchSeo({ focus_keyword: e.target.value })}
+                  placeholder="e.g. UN Security Council"
+                  className={cmsInput}
+                />
+              </Field>
               <Field label="URL slug" hint="auto-generated if blank">
                 <input
                   value={form.slug}
@@ -452,20 +558,179 @@ function EditArticle() {
                   className={cmsInput}
                 />
               </Field>
-              <div>
-                <span className="text-xs font-semibold text-foreground">Search preview</span>
-                <div className="mt-1.5 border border-border bg-background p-3">
-                  <div className="truncate text-sm font-medium text-cat-blue">
-                    {form.title || "Headline appears here"}
-                  </div>
-                  <div className="mt-0.5 truncate text-[11px] text-cat-green">
-                    /article/{form.slug || slugPreview(form.title)}
-                  </div>
-                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                    {form.deck || "The summary / deck is used as the meta description."}
-                  </p>
+              <Field label="Canonical URL" hint="leave blank to use article URL">
+                <input
+                  type="url"
+                  value={seo.canonical_url ?? ""}
+                  disabled={readOnly}
+                  onChange={(e) => patchSeo({ canonical_url: e.target.value })}
+                  placeholder={`${siteUrl()}/article/${form.slug || slugPreview(form.title)}`}
+                  className={cmsInput}
+                />
+              </Field>
+
+              <GoogleSerpPreview
+                title={seo.seo_title || form.title}
+                description={seo.meta_description || form.deck}
+                url={
+                  seo.canonical_url ||
+                  `${siteUrl()}/article/${form.slug || slugPreview(form.title)}`
+                }
+                keyword={seo.focus_keyword || ""}
+              />
+
+              <div className="border-t border-border pt-4">
+                <div className="mb-3 text-xs font-semibold text-foreground">Robots</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <BinaryChoice
+                    label="Search index"
+                    value={seo.robots_index}
+                    trueLabel="Index"
+                    falseLabel="NoIndex"
+                    disabled={readOnly}
+                    onChange={(value) => patchSeo({ robots_index: value })}
+                  />
+                  <BinaryChoice
+                    label="Link crawling"
+                    value={seo.robots_follow}
+                    trueLabel="Follow"
+                    falseLabel="NoFollow"
+                    disabled={readOnly}
+                    onChange={(value) => patchSeo({ robots_follow: value })}
+                  />
                 </div>
               </div>
+
+              <Field label="Schema type">
+                <select
+                  value={seo.schema_type}
+                  disabled={readOnly}
+                  onChange={(e) =>
+                    patchSeo({ schema_type: e.target.value as ArticleSeoInput["schema_type"] })
+                  }
+                  className={cmsInput}
+                >
+                  <option value="NewsArticle">NewsArticle</option>
+                  <option value="Article">Article</option>
+                  <option value="Review">Review</option>
+                  <option value="Report">Report</option>
+                </select>
+              </Field>
+
+              <div className="border-t border-border pt-4">
+                <div className="mb-3 text-xs font-semibold text-foreground">
+                  Distribution
+                </div>
+                <label className="flex items-center justify-between gap-3 border border-border p-3">
+                  <span>
+                    <span className="block text-xs font-semibold text-foreground">
+                      RSS inclusion
+                    </span>
+                    <span className="block text-[11px] text-muted-foreground">
+                      Include this story in the public RSS feed
+                    </span>
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={seo.rss_inclusion}
+                    disabled={readOnly}
+                    onChange={(e) => patchSeo({ rss_inclusion: e.target.checked })}
+                  />
+                </label>
+              </div>
+
+              <HreflangEditor
+                rows={hreflangRows}
+                readOnly={readOnly}
+                onChange={(rows) => {
+                  setHreflangRows(rows);
+                  setDirty(true);
+                }}
+              />
+            </div>
+          </CmsPanel>
+
+          <CmsPanel title="Social" description="Open Graph and Twitter card overrides">
+            <div className="space-y-4 p-5">
+              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                Open Graph
+              </div>
+              <Field label="OG title" hint="falls back to SEO title">
+                <input
+                  value={seo.og_title ?? ""}
+                  disabled={readOnly}
+                  onChange={(e) => patchSeo({ og_title: e.target.value })}
+                  className={cmsInput}
+                />
+              </Field>
+              <Field label="OG description" hint="falls back to meta description">
+                <textarea
+                  value={seo.og_description ?? ""}
+                  disabled={readOnly}
+                  rows={2}
+                  onChange={(e) => patchSeo({ og_description: e.target.value })}
+                  className={`${cmsInput} h-auto py-2`}
+                />
+              </Field>
+              <Field label="OG image URL" hint="falls back to lead image">
+                <input
+                  value={seo.og_image_url ?? ""}
+                  disabled={readOnly}
+                  onChange={(e) => patchSeo({ og_image_url: e.target.value })}
+                  className={cmsInput}
+                />
+              </Field>
+
+              <div className="border-t border-border pt-4 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                Twitter / X
+              </div>
+              <Field label="Card type">
+                <select
+                  value={seo.twitter_card}
+                  disabled={readOnly}
+                  onChange={(e) =>
+                    patchSeo({
+                      twitter_card: e.target.value as ArticleSeoInput["twitter_card"],
+                    })
+                  }
+                  className={cmsInput}
+                >
+                  <option value="summary_large_image">Large image</option>
+                  <option value="summary">Summary</option>
+                </select>
+              </Field>
+              <Field label="Twitter title" hint="falls back to OG title">
+                <input
+                  value={seo.twitter_title ?? ""}
+                  disabled={readOnly}
+                  onChange={(e) => patchSeo({ twitter_title: e.target.value })}
+                  className={cmsInput}
+                />
+              </Field>
+              <Field label="Twitter description">
+                <textarea
+                  value={seo.twitter_description ?? ""}
+                  disabled={readOnly}
+                  rows={2}
+                  onChange={(e) => patchSeo({ twitter_description: e.target.value })}
+                  className={`${cmsInput} h-auto py-2`}
+                />
+              </Field>
+              <Field label="Twitter image URL">
+                <input
+                  value={seo.twitter_image_url ?? ""}
+                  disabled={readOnly}
+                  onChange={(e) => patchSeo({ twitter_image_url: e.target.value })}
+                  className={cmsInput}
+                />
+              </Field>
+              <SocialPreview
+                title={seo.og_title || seo.seo_title || form.title}
+                description={
+                  seo.og_description || seo.meta_description || form.deck
+                }
+                image={seo.og_image_url || form.hero_image_url}
+              />
             </div>
           </CmsPanel>
 
@@ -737,6 +1002,247 @@ function AuthorRow({
         {note && <div className="text-xs text-muted-foreground">{note}</div>}
       </div>
     </>
+  );
+}
+
+function LengthGuide({
+  length,
+  min,
+  max,
+}: {
+  length: number;
+  min: number;
+  max: number;
+}) {
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      <div className="h-1 flex-1 overflow-hidden bg-muted">
+        <div
+          className={`h-full transition-all ${
+            length >= min && length <= max ? "bg-cat-green" : "bg-crimson"
+          }`}
+          style={{ width: `${Math.min(100, (length / max) * 100)}%` }}
+        />
+      </div>
+      <span className={`text-[10px] ${seoLengthTone(length, min, max)}`}>
+        {length < min ? `${min - length} short` : length > max ? `${length - max} over` : "Good"}
+      </span>
+    </div>
+  );
+}
+
+function GoogleSerpPreview({
+  title,
+  description,
+  url,
+  keyword,
+}: {
+  title: string;
+  description: string;
+  url: string;
+  keyword: string;
+}) {
+  const emphasize = (text: string) => {
+    if (!keyword.trim()) return text;
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const parts = text.split(new RegExp(`(${escaped})`, "ig"));
+    return parts.map((part, index) =>
+      part.toLowerCase() === keyword.toLowerCase() ? (
+        <strong key={index}>{part}</strong>
+      ) : (
+        part
+      ),
+    );
+  };
+
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-xs font-semibold text-foreground">Google SERP preview</span>
+        <span className="text-[10px] text-muted-foreground">Desktop</span>
+      </div>
+      <div className="overflow-hidden border border-border bg-white p-4 text-[#202124] dark:bg-white">
+        <div className="flex items-center gap-2 text-xs">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f1f3f4] font-bold text-[#3c4043]">
+            D
+          </span>
+          <div className="min-w-0">
+            <div className="text-[#202124]">Diplomacy Lens</div>
+            <div className="max-w-full truncate text-[10px] text-[#4d5156]">
+              {url || siteUrl()}
+            </div>
+          </div>
+        </div>
+        <div className="mt-2 line-clamp-1 font-sans text-lg leading-6 text-[#1a0dab]">
+          {emphasize(title || "Headline appears here")}
+        </div>
+        <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#4d5156]">
+          {emphasize(
+            description ||
+              "Add a meta description to explain what readers will find on this page.",
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function BinaryChoice({
+  label,
+  value,
+  trueLabel,
+  falseLabel,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  trueLabel: string;
+  falseLabel: string;
+  disabled?: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-1 text-[10px] text-muted-foreground">{label}</div>
+      <div className="grid grid-cols-2 border border-input">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(true)}
+          className={`h-8 text-[10px] font-semibold ${
+            value ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"
+          }`}
+        >
+          {trueLabel}
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(false)}
+          className={`h-8 text-[10px] font-semibold ${
+            !value ? "bg-crimson text-white" : "bg-background text-muted-foreground"
+          }`}
+        >
+          {falseLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function HreflangEditor({
+  rows,
+  readOnly,
+  onChange,
+}: {
+  rows: Array<{ locale: string; url: string }>;
+  readOnly: boolean;
+  onChange: (rows: Array<{ locale: string; url: string }>) => void;
+}) {
+  return (
+    <div className="border-t border-border pt-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-xs font-semibold text-foreground">hreflang</div>
+          <div className="text-[11px] text-muted-foreground">
+            Alternate language or regional URLs
+          </div>
+        </div>
+        {!readOnly && (
+          <button
+            type="button"
+            onClick={() => onChange([...rows, { locale: "", url: "" }])}
+            className="border border-input px-2 py-1 text-[10px] font-semibold hover:bg-accent"
+          >
+            + Language
+          </button>
+        )}
+      </div>
+      {rows.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {rows.map((row, index) => (
+            <div key={index} className="grid grid-cols-[82px_1fr_24px] gap-1">
+              <input
+                value={row.locale}
+                disabled={readOnly}
+                pattern="(?:[a-zA-Z]{2,3}(?:-[a-zA-Z]{2,4})?|x-default)"
+                onChange={(e) =>
+                  onChange(
+                    rows.map((item, i) =>
+                      i === index ? { ...item, locale: e.target.value } : item,
+                    ),
+                  )
+                }
+                placeholder="en-US"
+                aria-label="Language code"
+                className={`${cmsInput} px-2 text-xs`}
+              />
+              <input
+                type="url"
+                value={row.url}
+                disabled={readOnly}
+                onChange={(e) =>
+                  onChange(
+                    rows.map((item, i) =>
+                      i === index ? { ...item, url: e.target.value } : item,
+                    ),
+                  )
+                }
+                placeholder="https://…"
+                aria-label="Alternate URL"
+                className={`${cmsInput} px-2 text-xs`}
+              />
+              <button
+                type="button"
+                disabled={readOnly}
+                title="Remove alternate"
+                onClick={() => onChange(rows.filter((_, i) => i !== index))}
+                className="text-muted-foreground hover:text-crimson"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SocialPreview({
+  title,
+  description,
+  image,
+}: {
+  title: string;
+  description: string;
+  image: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1.5 text-xs font-semibold text-foreground">Card preview</div>
+      <div className="overflow-hidden rounded-lg border border-border bg-background">
+        {image ? (
+          <img src={image} alt="" className="aspect-[1.91/1] w-full object-cover" />
+        ) : (
+          <div className="flex aspect-[1.91/1] items-center justify-center bg-muted text-xs text-muted-foreground">
+            Social image preview
+          </div>
+        )}
+        <div className="p-3">
+          <div className="text-[10px] uppercase text-muted-foreground">
+            diplomacylens.com
+          </div>
+          <div className="mt-1 line-clamp-1 text-sm font-semibold text-foreground">
+            {title || "Article title"}
+          </div>
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+            {description || "Article description"}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -165,51 +165,99 @@ export type Database = {
           author_id: string | null
           badge_type: Database["public"]["Enums"]["badge_type"]
           body: string | null
+          canonical_url: string | null
           created_at: string
           deck: string | null
+          focus_keyword: string | null
           hero_image_url: string | null
+          hreflang: Json
           id: string
+          meta_description: string | null
+          og_description: string | null
+          og_image_url: string | null
+          og_title: string | null
           published_at: string | null
           region: string | null
+          robots_follow: boolean
+          robots_index: boolean
+          rss_inclusion: boolean
           scheduled_at: string | null
+          schema_type: string
           section_id: string | null
+          seo_title: string | null
           slug: string
           status: Database["public"]["Enums"]["article_status"]
           title: string
+          twitter_card: string
+          twitter_description: string | null
+          twitter_image_url: string | null
+          twitter_title: string | null
           updated_at: string
         }
         Insert: {
           author_id?: string | null
           badge_type?: Database["public"]["Enums"]["badge_type"]
           body?: string | null
+          canonical_url?: string | null
           created_at?: string
           deck?: string | null
+          focus_keyword?: string | null
           hero_image_url?: string | null
+          hreflang?: Json
           id?: string
+          meta_description?: string | null
+          og_description?: string | null
+          og_image_url?: string | null
+          og_title?: string | null
           published_at?: string | null
           region?: string | null
+          robots_follow?: boolean
+          robots_index?: boolean
+          rss_inclusion?: boolean
           scheduled_at?: string | null
+          schema_type?: string
           section_id?: string | null
+          seo_title?: string | null
           slug: string
           status?: Database["public"]["Enums"]["article_status"]
           title: string
+          twitter_card?: string
+          twitter_description?: string | null
+          twitter_image_url?: string | null
+          twitter_title?: string | null
           updated_at?: string
         }
         Update: {
           author_id?: string | null
           badge_type?: Database["public"]["Enums"]["badge_type"]
           body?: string | null
+          canonical_url?: string | null
           created_at?: string
           deck?: string | null
+          focus_keyword?: string | null
           hero_image_url?: string | null
+          hreflang?: Json
           id?: string
+          meta_description?: string | null
+          og_description?: string | null
+          og_image_url?: string | null
+          og_title?: string | null
           published_at?: string | null
           region?: string | null
+          robots_follow?: boolean
+          robots_index?: boolean
+          rss_inclusion?: boolean
           scheduled_at?: string | null
+          schema_type?: string
           section_id?: string | null
+          seo_title?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["article_status"]
           title?: string
+          twitter_card?: string
+          twitter_description?: string | null
+          twitter_image_url?: string | null
+          twitter_title?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -633,6 +681,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_update_article_seo: {
+        Args: {
+          p_article_id: string
+          p_seo_title?: string | null
+          p_meta_description?: string | null
+          p_focus_keyword?: string | null
+          p_canonical_url?: string | null
+          p_robots_index?: boolean
+          p_robots_follow?: boolean
+          p_schema_type?: string
+          p_og_title?: string | null
+          p_og_description?: string | null
+          p_og_image_url?: string | null
+          p_twitter_card?: string
+          p_twitter_title?: string | null
+          p_twitter_description?: string | null
+          p_twitter_image_url?: string | null
+          p_rss_inclusion?: boolean
+          p_hreflang?: Json
+        }
+        Returns: Database["public"]["Tables"]["articles"]["Row"]
+      }
       admin_upsert_article: {
         Args: {
           p_title: string

@@ -4,11 +4,25 @@ import { SiteShell } from "@/components/site-shell";
 import { ArticleCard, BadgePill } from "@/components/article-card";
 import { getHomeData } from "@/lib/content.functions";
 import { timeAgo } from "@/lib/format";
+import { DEFAULT_DESCRIPTION, SITE_NAME, siteUrl } from "@/lib/seo";
 
 const qo = queryOptions({ queryKey: ["home"], queryFn: () => getHomeData() });
 
 export const Route = createFileRoute("/")({
   loader: ({ context }) => context.queryClient.ensureQueryData(qo),
+  head: () => ({
+    meta: [
+      { title: `${SITE_NAME} — Global diplomacy and international affairs` },
+      { name: "description", content: DEFAULT_DESCRIPTION },
+      { name: "robots", content: "index,follow" },
+      { property: "og:type", content: "website" },
+      { property: "og:title", content: SITE_NAME },
+      { property: "og:description", content: DEFAULT_DESCRIPTION },
+      { property: "og:url", content: siteUrl() },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+    links: [{ rel: "canonical", href: siteUrl() }],
+  }),
   component: Home,
 });
 
