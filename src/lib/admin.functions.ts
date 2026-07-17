@@ -87,6 +87,40 @@ export const listAdminArticles = async () => {
   return data ?? [];
 };
 
+export const listDashboardArticles = async () => {
+  await requirePermission("dashboard:view");
+  const { data, error } = await supabase
+    .from("articles")
+    .select("id,slug,title,status,badge_type,published_at,updated_at,section_id, sections(name,slug)")
+    .order("updated_at", { ascending: false })
+    .limit(100);
+  if (error) throw toAppError(error);
+  return data ?? [];
+};
+
+export const getDashboardMetrics = async () => {
+  await requirePermission("dashboard:view");
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const [publishedRes, reviewRes] = await Promise.all([
+    supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "published")
+      .gte("published_at", startOfToday.toISOString()),
+    supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "review"),
+  ]);
+  if (publishedRes.error) throw toAppError(publishedRes.error);
+  if (reviewRes.error) throw toAppError(reviewRes.error);
+  return {
+    publishedToday: publishedRes.count ?? 0,
+    pendingReview: reviewRes.count ?? 0,
+  };
+};
+
 export const getAdminArticle = async ({ data }: { data: { id: string } }) => {
   await requirePermission("articles:view");
   const { data: a, error } = await supabase.from("articles").select("*").eq("id", data.id).maybeSingle();

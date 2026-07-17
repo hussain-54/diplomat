@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient, queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
+import { useLiveVisitors } from "@/hooks/useLiveVisitors";
 import { getTicker, getSections } from "@/lib/content.functions";
 import type { ReactNode } from "react";
 
@@ -255,6 +256,8 @@ function Footer() {
 }
 
 export function SiteShell({ children }: { children: ReactNode }) {
+  useLiveVisitors(true);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <TopStrip />
