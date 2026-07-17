@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { scanCommentContent } from "@/lib/comment-moderation";
 import { toAppError } from "@/lib/db-errors";
 
 export const getHomeData = async () => {
@@ -179,15 +180,64 @@ export const submitArticleComment = async ({
 }: {
   data: { articleId: string; authorName: string; authorEmail: string; body: string };
 }) => {
-  const { error } = await supabase.from("comments").insert({
+  const author_name = data.authorName.trim();
+  const author_email = data.authorEmail.trim().toLowerCase();
+  const body = data.body.trim();
+  if (author_name.length < 2 || author_name.length > 80) {
+    throw new Error("Name must be between 2 and 80 characters.");
+  }
+  if (author_email.length < 5 || author_email.length > 254 || !author_email.includes("@")) {
+    throw new Error("Enter a valid email address.");
+  }
+  if (body.length < 2 || body.length > 4000) {
+    throw new Error("Comment must be between 2 and 4000 characters.");
+  }
+
+  const { data: blocked } = await supabase
+    .from("comment_blocks")
+    .select("id")
+    .eq("email", author_email)
+    .maybeSingle();
+  if (blocked) {
+    throw new Error("This email address is blocked from commenting.");
+  }
+
+  const scan = scanCommentContent({ body, authorName: author_name, authorEmail: author_email });
+  const payload = {
     article_id: data.articleId,
-    author_name: data.authorName.trim(),
-    author_email: data.authorEmail.trim().toLowerCase(),
-    body: data.body.trim(),
-    status: "pending",
-  });
-  if (error) throw toAppError(error);
-  return { ok: true };
+    author_name,
+    author_email,
+    body,
+    status: scan.status,
+    auto_flags: scan.flags,
+    moderation_note: scan.note,
+  };
+
+  const { error } = await supabase.from("comments").insert(payload);
+  if (error) {
+    if (/auto_flags|moderation_note|flagged|comment_blocks|schema cache|PGRST/i.test(error.message)) {
+      const fallbackStatus = scan.status === "flagged" ? "pending" : scan.status;
+      const { error: fallbackError } = await supabase.from("comments").insert({
+        article_id: data.articleId,
+        author_name,
+        author_email,
+        body,
+        status: fallbackStatus === "spam" ? "spam" : "pending",
+      });
+      if (fallbackError) {
+        if (/blocked from commenting/i.test(fallbackError.message)) {
+          throw new Error("This email address is blocked from commenting.");
+        }
+        throw toAppError(fallbackError);
+      }
+      return { ok: true, status: fallbackStatus === "spam" ? "spam" : "pending", auto: scan.flags };
+    }
+    if (/blocked from commenting/i.test(error.message)) {
+      throw new Error("This email address is blocked from commenting.");
+    }
+    throw toAppError(error);
+  }
+  return { ok: true, status: scan.status, auto: scan.flags };
 };
 
 export const getPublicNewsroomSettings = async () => {

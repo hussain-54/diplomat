@@ -282,33 +282,39 @@ export type Database = {
           article_id: string
           author_email: string
           author_name: string
+          auto_flags: string[]
           body: string
           created_at: string
           id: string
           moderated_at: string | null
           moderated_by: string | null
+          moderation_note: string | null
           status: Database["public"]["Enums"]["comment_status"]
         }
         Insert: {
           article_id: string
           author_email: string
           author_name: string
+          auto_flags?: string[]
           body: string
           created_at?: string
           id?: string
           moderated_at?: string | null
           moderated_by?: string | null
+          moderation_note?: string | null
           status?: Database["public"]["Enums"]["comment_status"]
         }
         Update: {
           article_id?: string
           author_email?: string
           author_name?: string
+          auto_flags?: string[]
           body?: string
           created_at?: string
           id?: string
           moderated_at?: string | null
           moderated_by?: string | null
+          moderation_note?: string | null
           status?: Database["public"]["Enums"]["comment_status"]
         }
         Relationships: [
@@ -322,6 +328,38 @@ export type Database = {
           {
             foreignKeyName: "comments_moderated_by_fkey"
             columns: ["moderated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comment_blocks: {
+        Row: {
+          blocked_by: string | null
+          created_at: string
+          email: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          blocked_by?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          blocked_by?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comment_blocks_blocked_by_fkey"
+            columns: ["blocked_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -912,7 +950,7 @@ export type Database = {
         | "opinion"
         | "premium"
         | "alert"
-      comment_status: "pending" | "approved" | "rejected" | "spam"
+      comment_status: "pending" | "approved" | "rejected" | "spam" | "flagged"
       embassy_status: "open" | "limited" | "closed" | "alert"
       war_status: "active" | "ceasefire" | "tension"
     }
@@ -1065,7 +1103,7 @@ export const Constants = {
         "premium",
         "alert",
       ],
-      comment_status: ["pending", "approved", "rejected", "spam"],
+      comment_status: ["pending", "approved", "rejected", "spam", "flagged"],
       embassy_status: ["open", "limited", "closed", "alert"],
       war_status: ["active", "ceasefire", "tension"],
     },

@@ -1476,7 +1476,7 @@ export const updateMediaAsset = async ({
   };
 }) => {
   await requirePermission("media:view");
-  const payload: Record<string, unknown> = {
+  const payload: Database["public"]["Tables"]["media_assets"]["Update"] = {
     updated_at: new Date().toISOString(),
   };
   if (data.alt_text !== undefined) payload.alt_text = data.alt_text?.trim() || null;
@@ -1692,17 +1692,22 @@ export const listComments = async () => {
 export const moderateComment = async ({
   data,
 }: {
-  data: { id: string; status: Database["public"]["Enums"]["comment_status"] };
+  data: {
+    id: string;
+    status: Database["public"]["Enums"]["comment_status"];
+    moderation_note?: string | null;
+  };
 }) => {
   const { user } = await requirePermission("comments:moderate");
-  const { error } = await supabase
-    .from("comments")
-    .update({
-      status: data.status,
-      moderated_by: user.id,
-      moderated_at: new Date().toISOString(),
-    })
-    .eq("id", data.id);
+  const payload: Database["public"]["Tables"]["comments"]["Update"] = {
+    status: data.status,
+    moderated_by: user.id,
+    moderated_at: new Date().toISOString(),
+  };
+  if (data.moderation_note !== undefined) {
+    payload.moderation_note = data.moderation_note?.trim() || null;
+  }
+  const { error } = await supabase.from("comments").update(payload).eq("id", data.id);
   if (error) throw toAppError(error);
   return { ok: true };
 };
@@ -1710,6 +1715,69 @@ export const moderateComment = async ({
 export const deleteComment = async ({ data }: { data: { id: string } }) => {
   await requirePermission("comments:moderate");
   const { error } = await supabase.from("comments").delete().eq("id", data.id);
+  if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+export const listCommentBlocks = async () => {
+  await requirePermission("comments:moderate");
+  const { data, error } = await supabase
+    .from("comment_blocks")
+    .select("*, profiles(name)")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) {
+    if (/comment_blocks|schema cache|PGRST/i.test(error.message)) return [];
+    throw toAppError(error);
+  }
+  return data ?? [];
+};
+
+export const blockCommenter = async ({
+  data,
+}: {
+  data: { email: string; reason?: string | null; comment_id?: string };
+}) => {
+  const { user } = await requirePermission("comments:moderate");
+  const email = data.email.trim().toLowerCase();
+  if (!email.includes("@")) throw new Error("A valid email is required to block a commenter.");
+
+  const { error } = await supabase.from("comment_blocks").upsert(
+    {
+      email,
+      reason: data.reason?.trim() || "Blocked by moderator",
+      blocked_by: user.id,
+    },
+    { onConflict: "email" },
+  );
+  if (error) {
+    if (/comment_blocks|schema cache|PGRST/i.test(error.message)) {
+      throw new Error(
+        "Comment blocklist is not installed. Apply supabase/migrations/20260718100000_comment_moderation_enum.sql then 20260718100001_comment_moderation.sql.",
+      );
+    }
+    throw toAppError(error);
+  }
+
+  if (data.comment_id) {
+    await supabase
+      .from("comments")
+      .update({
+        status: "spam",
+        moderated_by: user.id,
+        moderated_at: new Date().toISOString(),
+        moderation_note: data.reason?.trim() || "Commenter blocked",
+      })
+      .eq("id", data.comment_id);
+  }
+
+  return { ok: true };
+};
+
+export const unblockCommenter = async ({ data }: { data: { email: string } }) => {
+  await requirePermission("comments:moderate");
+  const email = data.email.trim().toLowerCase();
+  const { error } = await supabase.from("comment_blocks").delete().eq("email", email);
   if (error) throw toAppError(error);
   return { ok: true };
 };

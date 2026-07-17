@@ -50,6 +50,12 @@ EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
 
+DO $$ BEGIN
+  CREATE TYPE public.comment_status AS ENUM ('pending', 'approved', 'rejected', 'spam', 'flagged');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
+
 -- ============ TABLES ============
 
 -- Profiles
@@ -262,6 +268,30 @@ CREATE TABLE IF NOT EXISTS public.media_asset_usages (
   entity_path text,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT media_asset_usages_unique UNIQUE (asset_id, entity_type, entity_id, field)
+);
+
+CREATE TABLE IF NOT EXISTS public.comments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  article_id uuid NOT NULL REFERENCES public.articles(id) ON DELETE CASCADE,
+  author_name text NOT NULL CHECK (char_length(trim(author_name)) BETWEEN 2 AND 80),
+  author_email text NOT NULL CHECK (char_length(trim(author_email)) BETWEEN 5 AND 254),
+  body text NOT NULL CHECK (char_length(trim(body)) BETWEEN 2 AND 4000),
+  status public.comment_status NOT NULL DEFAULT 'pending',
+  auto_flags text[] NOT NULL DEFAULT '{}'::text[],
+  moderation_note text,
+  moderated_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  moderated_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.comment_blocks (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email text NOT NULL,
+  reason text,
+  blocked_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT comment_blocks_email_lower CHECK (email = lower(trim(email))),
+  CONSTRAINT comment_blocks_email_unique UNIQUE (email)
 );
 
 -- ============ SECURITY HELPER FUNCTIONS ============
