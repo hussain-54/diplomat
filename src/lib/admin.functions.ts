@@ -1,5 +1,14 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import {
+  collectUrlsFromBody,
+  detectAssetType,
+  isAllowedMime,
+  MAX_HERO_BYTES,
+  MAX_LIBRARY_BYTES,
+  type MediaAssetType,
+  type MediaBucket,
+} from "@/lib/dam";
 import { toAppError } from "@/lib/db-errors";
 import {
   hasAnyPermission,
@@ -325,7 +334,30 @@ export const upsertArticle = async ({
     p_scheduled_at: data.scheduled_at ?? null,
   });
 
-  if (!rpcError && viaRpc) return viaRpc;
+  const trackUsage = (article: {
+    id: string;
+    title: string;
+    slug?: string | null;
+    hero_image_url?: string | null;
+    body?: string | null;
+  }) => {
+    void recordArticleMediaUsages({
+      data: {
+        article_id: article.id,
+        title: article.title,
+        slug: article.slug,
+        urls: [
+          { field: "hero_image_url", url: article.hero_image_url },
+          ...collectUrlsFromBody(article.body).map((url) => ({ field: "body", url })),
+        ],
+      },
+    });
+  };
+
+  if (!rpcError && viaRpc) {
+    trackUsage(viaRpc);
+    return viaRpc;
+  }
 
   // Fallback direct write if RPC not deployed yet
   if (rpcError && !/could not find the function|schema cache|PGRST202/i.test(rpcError.message)) {
@@ -370,6 +402,7 @@ export const upsertArticle = async ({
     if (!r) {
       throw new Error("The article could not be updated with your current permissions.");
     }
+    trackUsage(r);
     return r;
   }
 
@@ -393,6 +426,7 @@ export const upsertArticle = async ({
   if (!r) {
     throw new Error("The article could not be created with your current permissions.");
   }
+  trackUsage(r);
   return r;
 };
 
@@ -963,10 +997,54 @@ export const setUserRole = async ({
   return { ok: true };
 };
 
+const indexMediaAsset = async (row: {
+  bucket: MediaBucket;
+  object_path: string;
+  public_url: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_by: string;
+  asset_type: MediaAssetType;
+  folder_id?: string | null;
+  alt_text?: string | null;
+  caption?: string | null;
+  copyright?: string | null;
+}) => {
+  const { data, error } = await supabase
+    .from("media_assets")
+    .insert({
+      bucket: row.bucket,
+      object_path: row.object_path,
+      public_url: row.public_url,
+      file_name: row.file_name,
+      mime_type: row.mime_type,
+      size_bytes: row.size_bytes,
+      uploaded_by: row.uploaded_by,
+      asset_type: row.asset_type,
+      folder_id: row.folder_id || null,
+      alt_text: row.alt_text?.trim() || null,
+      caption: row.caption?.trim() || null,
+      copyright: row.copyright?.trim() || null,
+    })
+    .select("id")
+    .maybeSingle();
+  if (error && !/media_assets|schema cache|PGRST|asset_type|folder_id|caption|copyright/i.test(error.message)) {
+    console.error("File uploaded but media indexing failed", error);
+  }
+  return data?.id ?? null;
+};
+
 export const uploadHeroImage = async ({
   data,
 }: {
-  data: { fileName: string; contentType: string; base64: string; bucket?: "article-hero" | "avatars" };
+  data: {
+    fileName: string;
+    contentType: string;
+    base64: string;
+    bucket?: "article-hero" | "avatars";
+    folder_id?: string | null;
+  };
 }) => {
   const { user } = await requirePermission("media:upload");
   const bucket = data.bucket ?? "article-hero";
@@ -974,7 +1052,7 @@ export const uploadHeroImage = async ({
     throw new Error("Only image files can be uploaded.");
   }
   const bytes = Uint8Array.from(atob(data.base64), (c) => c.charCodeAt(0));
-  if (bytes.byteLength > 5 * 1024 * 1024) {
+  if (bytes.byteLength > MAX_HERO_BYTES) {
     throw new Error("Images must be 5 MB or smaller.");
   }
   const safeName = data.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -988,7 +1066,7 @@ export const uploadHeroImage = async ({
   const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
   if (!pub?.publicUrl) throw new Error("Upload succeeded but public URL could not be created.");
 
-  const { error: assetError } = await supabase.from("media_assets").insert({
+  const assetId = await indexMediaAsset({
     bucket,
     object_path: path,
     public_url: pub.publicUrl,
@@ -996,12 +1074,113 @@ export const uploadHeroImage = async ({
     mime_type: data.contentType,
     size_bytes: bytes.byteLength,
     uploaded_by: user.id,
+    asset_type: "image",
+    folder_id: data.folder_id,
   });
-  if (assetError && !/media_assets|schema cache|PGRST/i.test(assetError.message)) {
-    console.error("Image uploaded but media indexing failed", assetError);
+
+  return { path, url: pub.publicUrl, id: assetId };
+};
+
+export const uploadMediaAsset = async ({
+  data,
+}: {
+  data: {
+    file: File;
+    folder_id?: string | null;
+    alt_text?: string | null;
+    caption?: string | null;
+    copyright?: string | null;
+    bucket?: MediaBucket;
+  };
+}) => {
+  const { user } = await requirePermission("media:upload");
+  const mime = data.file.type || "application/octet-stream";
+  if (!isAllowedMime(mime)) {
+    throw new Error(`Unsupported file type: ${mime || data.file.name}`);
+  }
+  const assetType = detectAssetType(mime);
+  const bucket: MediaBucket =
+    data.bucket ?? (assetType === "image" && data.file.size <= MAX_HERO_BYTES ? "article-hero" : "media-library");
+  const maxBytes = bucket === "media-library" ? MAX_LIBRARY_BYTES : MAX_HERO_BYTES;
+  if (data.file.size > maxBytes) {
+    throw new Error(
+      bucket === "media-library"
+        ? "Files must be 50 MB or smaller."
+        : "Images must be 5 MB or smaller.",
+    );
+  }
+  if (bucket !== "media-library" && assetType !== "image") {
+    throw new Error("Only images can be uploaded to the hero/avatar buckets.");
   }
 
-  return { path, url: pub.publicUrl };
+  const safeName = data.file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const fileName = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safeName}`;
+  const path =
+    bucket === "avatars"
+      ? `${user.id}/${fileName}`
+      : bucket === "media-library"
+        ? `${assetType}/${fileName}`
+        : fileName;
+
+  const { error } = await supabase.storage.from(bucket).upload(path, data.file, {
+    contentType: mime,
+    upsert: false,
+  });
+  if (error) throw toAppError(error);
+  const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
+  if (!pub?.publicUrl) throw new Error("Upload succeeded but public URL could not be created.");
+
+  const assetId = await indexMediaAsset({
+    bucket,
+    object_path: path,
+    public_url: pub.publicUrl,
+    file_name: data.file.name,
+    mime_type: mime,
+    size_bytes: data.file.size,
+    uploaded_by: user.id,
+    asset_type: assetType,
+    folder_id: data.folder_id,
+    alt_text: data.alt_text,
+    caption: data.caption,
+    copyright: data.copyright,
+  });
+
+  return {
+    id: assetId,
+    path,
+    url: pub.publicUrl,
+    asset_type: assetType,
+    bucket,
+  };
+};
+
+export const uploadMediaAssetsBulk = async ({
+  data,
+}: {
+  data: { files: File[]; folder_id?: string | null };
+}) => {
+  await requirePermission("media:upload");
+  if (!data.files.length) throw new Error("Select at least one file.");
+  const results: Array<{ fileName: string; ok: boolean; error?: string; url?: string }> = [];
+  for (const file of data.files) {
+    try {
+      const uploaded = await uploadMediaAsset({
+        data: { file, folder_id: data.folder_id, bucket: "media-library" },
+      });
+      results.push({ fileName: file.name, ok: true, url: uploaded.url });
+    } catch (error) {
+      results.push({
+        fileName: file.name,
+        ok: false,
+        error: error instanceof Error ? error.message : "Upload failed",
+      });
+    }
+  }
+  return {
+    uploaded: results.filter((r) => r.ok).length,
+    failed: results.filter((r) => !r.ok).length,
+    results,
+  };
 };
 
 // CATEGORIES / TAXONOMY
@@ -1135,28 +1314,192 @@ export const updateStaffProfile = async ({
   return { ok: true };
 };
 
-// MEDIA LIBRARY
-export const listMediaAssets = async () => {
+// MEDIA LIBRARY / DAM
+export type MediaAssetRow = {
+  id: string;
+  bucket: string;
+  object_path: string;
+  public_url: string;
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  alt_text: string | null;
+  caption: string | null;
+  copyright: string | null;
+  asset_type: MediaAssetType;
+  folder_id: string | null;
+  width: number | null;
+  height: number | null;
+  duration_seconds: number | null;
+  uploaded_by: string | null;
+  created_at: string;
+  updated_at: string;
+  profiles: { name: string | null } | null;
+  media_asset_usages?: Array<{ count: number }> | null;
+};
+
+export const listMediaFolders = async () => {
   await requirePermission("media:view");
   const { data, error } = await supabase
-    .from("media_assets")
-    .select("*, profiles(name)")
-    .order("created_at", { ascending: false })
-    .limit(300);
-  if (error) throw toAppError(error);
+    .from("media_folders")
+    .select("*")
+    .order("sort_order")
+    .order("name");
+  if (error) {
+    if (/media_folders|schema cache|PGRST/i.test(error.message)) return [];
+    throw toAppError(error);
+  }
   return data ?? [];
+};
+
+export const upsertMediaFolder = async ({
+  data,
+}: {
+  data: { id?: string; name: string; parent_id?: string | null; sort_order?: number };
+}) => {
+  const { user } = await requirePermission("media:upload");
+  if (data.id && data.parent_id === data.id) {
+    throw new Error("A folder cannot be its own parent.");
+  }
+  const payload = {
+    name: data.name.trim(),
+    parent_id: data.parent_id || null,
+    sort_order: data.sort_order ?? 0,
+    updated_at: new Date().toISOString(),
+  };
+  if (!payload.name) throw new Error("Folder name is required.");
+  if (data.id) {
+    const { error } = await supabase.from("media_folders").update(payload).eq("id", data.id);
+    if (error) throw toAppError(error);
+  } else {
+    const { error } = await supabase.from("media_folders").insert({
+      ...payload,
+      created_by: user.id,
+    });
+    if (error) throw toAppError(error);
+  }
+  return { ok: true };
+};
+
+export const deleteMediaFolder = async ({ data }: { data: { id: string } }) => {
+  await requirePermission("media:upload");
+  const { count: childCount, error: childError } = await supabase
+    .from("media_folders")
+    .select("id", { count: "exact", head: true })
+    .eq("parent_id", data.id);
+  if (childError) throw toAppError(childError);
+  if (childCount) throw new Error("Move or delete nested folders first.");
+
+  const { count: assetCount, error: assetError } = await supabase
+    .from("media_assets")
+    .select("id", { count: "exact", head: true })
+    .eq("folder_id", data.id);
+  if (assetError) throw toAppError(assetError);
+  if (assetCount) throw new Error("Move or delete assets in this folder first.");
+
+  const { error } = await supabase.from("media_folders").delete().eq("id", data.id);
+  if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+export const listMediaAssets = async (filters?: {
+  asset_type?: MediaAssetType | "all";
+  folder_id?: string | null | "unfiled";
+  search?: string;
+}) => {
+  await requirePermission("media:view");
+  let query = supabase
+    .from("media_assets")
+    .select("*, profiles(name), media_asset_usages(count)")
+    .order("created_at", { ascending: false })
+    .limit(500);
+
+  if (filters?.asset_type && filters.asset_type !== "all") {
+    query = query.eq("asset_type", filters.asset_type);
+  }
+  if (filters?.folder_id === "unfiled") {
+    query = query.is("folder_id", null);
+  } else if (filters?.folder_id) {
+    query = query.eq("folder_id", filters.folder_id);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    // Fallback when DAM migration columns/tables are not applied yet.
+    if (/asset_type|caption|copyright|folder_id|media_asset_usages|schema cache|PGRST/i.test(error.message)) {
+      const legacy = await supabase
+        .from("media_assets")
+        .select("*, profiles(name)")
+        .order("created_at", { ascending: false })
+        .limit(500);
+      if (legacy.error) throw toAppError(legacy.error);
+      return (legacy.data ?? []).map((row) => ({
+        ...row,
+        asset_type: detectAssetType(row.mime_type) as MediaAssetType,
+        caption: null,
+        copyright: null,
+        folder_id: null,
+        width: null,
+        height: null,
+        duration_seconds: null,
+        updated_at: row.created_at,
+        media_asset_usages: [],
+      })) as MediaAssetRow[];
+    }
+    throw toAppError(error);
+  }
+
+  let rows = (data ?? []) as MediaAssetRow[];
+  const search = filters?.search?.trim().toLowerCase();
+  if (search) {
+    rows = rows.filter(
+      (asset) =>
+        asset.file_name.toLowerCase().includes(search) ||
+        asset.alt_text?.toLowerCase().includes(search) ||
+        asset.caption?.toLowerCase().includes(search) ||
+        asset.copyright?.toLowerCase().includes(search) ||
+        asset.mime_type.toLowerCase().includes(search),
+    );
+  }
+  return rows;
 };
 
 export const updateMediaAsset = async ({
   data,
 }: {
-  data: { id: string; alt_text: string };
+  data: {
+    id: string;
+    alt_text?: string | null;
+    caption?: string | null;
+    copyright?: string | null;
+    folder_id?: string | null;
+  };
 }) => {
   await requirePermission("media:view");
+  const payload: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (data.alt_text !== undefined) payload.alt_text = data.alt_text?.trim() || null;
+  if (data.caption !== undefined) payload.caption = data.caption?.trim() || null;
+  if (data.copyright !== undefined) payload.copyright = data.copyright?.trim() || null;
+  if (data.folder_id !== undefined) payload.folder_id = data.folder_id || null;
+
+  const { error } = await supabase.from("media_assets").update(payload).eq("id", data.id);
+  if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+export const moveMediaAssets = async ({
+  data,
+}: {
+  data: { ids: string[]; folder_id: string | null };
+}) => {
+  await requirePermission("media:upload");
+  if (!data.ids.length) throw new Error("Select at least one asset.");
   const { error } = await supabase
     .from("media_assets")
-    .update({ alt_text: data.alt_text.trim() || null })
-    .eq("id", data.id);
+    .update({ folder_id: data.folder_id, updated_at: new Date().toISOString() })
+    .in("id", data.ids);
   if (error) throw toAppError(error);
   return { ok: true };
 };
@@ -1175,6 +1518,162 @@ export const deleteMediaAsset = async ({ data }: { data: { id: string } }) => {
   if (storageError) throw toAppError(storageError);
   const { error } = await supabase.from("media_assets").delete().eq("id", data.id);
   if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+export const listMediaAssetUsages = async ({ data }: { data: { asset_id: string } }) => {
+  await requirePermission("media:view");
+  const { data: rows, error } = await supabase
+    .from("media_asset_usages")
+    .select("*")
+    .eq("asset_id", data.asset_id)
+    .order("created_at", { ascending: false });
+  if (error) {
+    if (/media_asset_usages|schema cache|PGRST/i.test(error.message)) return [];
+    throw toAppError(error);
+  }
+  return rows ?? [];
+};
+
+export const syncMediaAssetUsages = async () => {
+  await requirePermission("media:view");
+  const { data: assets, error: assetsError } = await supabase
+    .from("media_assets")
+    .select("id, public_url");
+  if (assetsError) throw toAppError(assetsError);
+
+  const byUrl = new Map((assets ?? []).map((asset) => [asset.public_url, asset.id]));
+  if (!byUrl.size) return { synced: 0 };
+
+  const { data: articles, error: articlesError } = await supabase
+    .from("articles")
+    .select("id, title, slug, hero_image_url, og_image_url, twitter_image_url, body");
+  if (articlesError) throw toAppError(articlesError);
+
+  const rows: Array<{
+    asset_id: string;
+    entity_type: "article";
+    entity_id: string;
+    field: string;
+    entity_title: string;
+    entity_path: string;
+  }> = [];
+
+  for (const article of articles ?? []) {
+    const path = article.slug ? `/article/${article.slug}` : `/admin/articles/${article.id}`;
+    const title = article.title;
+    const fields: Array<[string, string | null | undefined]> = [
+      ["hero_image_url", article.hero_image_url],
+      ["og_image_url", article.og_image_url],
+      ["twitter_image_url", article.twitter_image_url],
+    ];
+    for (const [field, url] of fields) {
+      if (!url) continue;
+      const assetId = byUrl.get(url);
+      if (assetId) {
+        rows.push({
+          asset_id: assetId,
+          entity_type: "article",
+          entity_id: article.id,
+          field,
+          entity_title: title,
+          entity_path: path,
+        });
+      }
+    }
+    for (const url of collectUrlsFromBody(article.body)) {
+      const assetId = byUrl.get(url);
+      if (assetId) {
+        rows.push({
+          asset_id: assetId,
+          entity_type: "article",
+          entity_id: article.id,
+          field: "body",
+          entity_title: title,
+          entity_path: path,
+        });
+      }
+    }
+  }
+
+  const { error: clearError } = await supabase
+    .from("media_asset_usages")
+    .delete()
+    .eq("entity_type", "article");
+  if (clearError) {
+    if (/media_asset_usages|schema cache|PGRST/i.test(clearError.message)) {
+      throw new Error(
+        "Usage tracking is not installed. Apply supabase/migrations/20260718090000_digital_asset_management.sql.",
+      );
+    }
+    throw toAppError(clearError);
+  }
+
+  if (rows.length) {
+    const { error: insertError } = await supabase.from("media_asset_usages").insert(rows);
+    if (insertError) throw toAppError(insertError);
+  }
+
+  return { synced: rows.length };
+};
+
+export const recordArticleMediaUsages = async ({
+  data,
+}: {
+  data: {
+    article_id: string;
+    title: string;
+    slug?: string | null;
+    urls: Array<{ field: string; url: string | null | undefined }>;
+  };
+}) => {
+  try {
+    await requirePermission("media:view");
+  } catch {
+    return { ok: false };
+  }
+
+  const urls = data.urls.filter((item) => item.url);
+  const { error: clearError } = await supabase
+    .from("media_asset_usages")
+    .delete()
+    .eq("entity_type", "article")
+    .eq("entity_id", data.article_id);
+  if (clearError) {
+    if (/media_asset_usages|schema cache|PGRST/i.test(clearError.message)) return { ok: false };
+    return { ok: false };
+  }
+  if (!urls.length) return { ok: true };
+
+  const { data: assets } = await supabase
+    .from("media_assets")
+    .select("id, public_url")
+    .in(
+      "public_url",
+      urls.map((item) => item.url!).filter(Boolean),
+    );
+  if (!assets?.length) return { ok: true };
+
+  const byUrl = new Map(assets.map((asset) => [asset.public_url, asset.id]));
+  const path = data.slug ? `/article/${data.slug}` : `/admin/articles/${data.article_id}`;
+  const rows = urls
+    .map((item) => {
+      const assetId = item.url ? byUrl.get(item.url) : null;
+      if (!assetId) return null;
+      return {
+        asset_id: assetId,
+        entity_type: "article" as const,
+        entity_id: data.article_id,
+        field: item.field,
+        entity_title: data.title,
+        entity_path: path,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => !!row);
+
+  if (rows.length) {
+    await supabase.from("media_asset_usages").insert(rows);
+  }
   return { ok: true };
 };
 

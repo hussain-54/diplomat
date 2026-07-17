@@ -405,46 +405,163 @@ export type Database = {
       media_assets: {
         Row: {
           alt_text: string | null
+          asset_type: string
           bucket: string
+          caption: string | null
+          copyright: string | null
           created_at: string
+          duration_seconds: number | null
           file_name: string
+          folder_id: string | null
+          height: number | null
           id: string
           mime_type: string
           object_path: string
           public_url: string
           size_bytes: number
+          updated_at: string
           uploaded_by: string | null
+          width: number | null
         }
         Insert: {
           alt_text?: string | null
+          asset_type?: string
           bucket: string
+          caption?: string | null
+          copyright?: string | null
           created_at?: string
+          duration_seconds?: number | null
           file_name: string
+          folder_id?: string | null
+          height?: number | null
           id?: string
           mime_type: string
           object_path: string
           public_url: string
           size_bytes: number
+          updated_at?: string
           uploaded_by?: string | null
+          width?: number | null
         }
         Update: {
           alt_text?: string | null
+          asset_type?: string
           bucket?: string
+          caption?: string | null
+          copyright?: string | null
           created_at?: string
+          duration_seconds?: number | null
           file_name?: string
+          folder_id?: string | null
+          height?: number | null
           id?: string
           mime_type?: string
           object_path?: string
           public_url?: string
           size_bytes?: number
+          updated_at?: string
           uploaded_by?: string | null
+          width?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "media_assets_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "media_folders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "media_assets_uploaded_by_fkey"
             columns: ["uploaded_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      media_asset_usages: {
+        Row: {
+          asset_id: string
+          created_at: string
+          entity_id: string
+          entity_path: string | null
+          entity_title: string | null
+          entity_type: string
+          field: string
+          id: string
+        }
+        Insert: {
+          asset_id: string
+          created_at?: string
+          entity_id: string
+          entity_path?: string | null
+          entity_title?: string | null
+          entity_type: string
+          field: string
+          id?: string
+        }
+        Update: {
+          asset_id?: string
+          created_at?: string
+          entity_id?: string
+          entity_path?: string | null
+          entity_title?: string | null
+          entity_type?: string
+          field?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_asset_usages_asset_id_fkey"
+            columns: ["asset_id"]
+            isOneToOne: false
+            referencedRelation: "media_assets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      media_folders: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          parent_id: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          parent_id?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          parent_id?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_folders_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_folders_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "media_folders"
             referencedColumns: ["id"]
           },
         ]

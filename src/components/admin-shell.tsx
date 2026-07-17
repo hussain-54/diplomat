@@ -2,10 +2,10 @@ import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
-  BookOpenText,
   ChevronRight,
   FileText,
   FolderTree,
+  ImagePlus,
   LogOut,
   Menu,
   MessageSquareText,
@@ -36,7 +36,7 @@ const NAV: Array<{
   { to: "/admin/articles", label: "Articles", icon: FileText, permission: "articles:view" },
   { to: "/admin/categories", label: "Categories", icon: FolderTree, permission: "categories:manage" },
   { to: "/admin/staff", label: "Authors & Staff", icon: Users, permission: "staff:manage" },
-  { to: "/admin/media", label: "Media Library", icon: BookOpenText, permission: "media:view" },
+  { to: "/admin/media", label: "Media Library", icon: ImagePlus, permission: "media:view" },
   { to: "/admin/comments", label: "Comments", icon: MessageSquareText, permission: "comments:moderate" },
   { to: "/admin/analytics", label: "Analytics", icon: BarChart3, permission: "analytics:view" },
   { to: "/admin/settings", label: "Settings", icon: Settings, permission: "settings:manage" },

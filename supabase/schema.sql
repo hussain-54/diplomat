@@ -219,6 +219,51 @@ CREATE TABLE IF NOT EXISTS public.videos (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Digital asset management
+CREATE TABLE IF NOT EXISTS public.media_folders (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL CHECK (char_length(trim(name)) BETWEEN 1 AND 120),
+  parent_id uuid REFERENCES public.media_folders(id) ON DELETE CASCADE,
+  sort_order integer NOT NULL DEFAULT 0,
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT media_folders_no_self_parent CHECK (parent_id IS DISTINCT FROM id)
+);
+
+CREATE TABLE IF NOT EXISTS public.media_assets (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bucket text NOT NULL CHECK (bucket IN ('article-hero', 'avatars', 'media-library')),
+  object_path text NOT NULL UNIQUE,
+  public_url text NOT NULL,
+  file_name text NOT NULL,
+  mime_type text NOT NULL,
+  size_bytes bigint NOT NULL CHECK (size_bytes > 0 AND size_bytes <= 52428800),
+  asset_type text NOT NULL DEFAULT 'image' CHECK (asset_type IN ('image', 'video', 'audio', 'document')),
+  alt_text text,
+  caption text,
+  copyright text,
+  folder_id uuid REFERENCES public.media_folders(id) ON DELETE SET NULL,
+  width integer,
+  height integer,
+  duration_seconds numeric,
+  uploaded_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL DEFAULT auth.uid(),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.media_asset_usages (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  asset_id uuid NOT NULL REFERENCES public.media_assets(id) ON DELETE CASCADE,
+  entity_type text NOT NULL CHECK (entity_type IN ('article', 'ambassador', 'video', 'other')),
+  entity_id uuid NOT NULL,
+  field text NOT NULL CHECK (char_length(trim(field)) BETWEEN 1 AND 80),
+  entity_title text,
+  entity_path text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT media_asset_usages_unique UNIQUE (asset_id, entity_type, entity_id, field)
+);
+
 -- ============ SECURITY HELPER FUNCTIONS ============
 
 CREATE OR REPLACE FUNCTION app_hidden.has_role(_user_id uuid, _role public.app_role)
@@ -646,11 +691,29 @@ FOR EACH ROW EXECUTE FUNCTION public.prevent_last_super_admin_removal();
 -- Ensure storage buckets exist
 INSERT INTO storage.buckets (id, name, public) VALUES ('article-hero', 'article-hero', true) ON CONFLICT (id) DO NOTHING;
 INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true) ON CONFLICT (id) DO NOTHING;
+INSERT INTO storage.buckets (id, name, public) VALUES ('media-library', 'media-library', true) ON CONFLICT (id) DO NOTHING;
 UPDATE storage.buckets
 SET public = true,
     file_size_limit = 5242880,
     allowed_mime_types = ARRAY['image/jpeg','image/png','image/webp','image/gif']
 WHERE id IN ('article-hero', 'avatars');
+UPDATE storage.buckets
+SET public = true,
+    file_size_limit = 52428800,
+    allowed_mime_types = ARRAY[
+      'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/svg+xml',
+      'video/mp4', 'video/webm', 'video/quicktime',
+      'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/webm', 'audio/mp4', 'audio/x-wav',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-powerpoint',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'text/plain', 'text/csv', 'application/rtf'
+    ]
+WHERE id = 'media-library';
 
 -- Policies for objects in storage
 DROP POLICY IF EXISTS "public read hero" ON storage.objects;
@@ -658,6 +721,9 @@ CREATE POLICY "public read hero" ON storage.objects FOR SELECT USING (bucket_id 
 
 DROP POLICY IF EXISTS "public read avatars" ON storage.objects;
 CREATE POLICY "public read avatars" ON storage.objects FOR SELECT USING (bucket_id = 'avatars');
+
+DROP POLICY IF EXISTS "public read media library" ON storage.objects;
+CREATE POLICY "public read media library" ON storage.objects FOR SELECT USING (bucket_id = 'media-library');
 
 DROP POLICY IF EXISTS "authed upload hero" ON storage.objects;
 CREATE POLICY "authed upload hero" ON storage.objects FOR INSERT TO authenticated
@@ -703,6 +769,43 @@ DROP POLICY IF EXISTS "authed delete hero editorial" ON storage.objects;
 CREATE POLICY "authed delete hero editorial" ON storage.objects FOR DELETE TO authenticated
   USING (
     bucket_id = 'article-hero' AND (
+      owner = auth.uid()
+      OR app_hidden.has_role(auth.uid(),'super_admin')
+      OR app_hidden.has_role(auth.uid(),'section_editor')
+    )
+  );
+
+DROP POLICY IF EXISTS "permitted staff upload media library" ON storage.objects;
+CREATE POLICY "permitted staff upload media library" ON storage.objects FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'media-library' AND (
+      app_hidden.has_role(auth.uid(),'super_admin')
+      OR app_hidden.has_role(auth.uid(),'section_editor')
+      OR app_hidden.has_role(auth.uid(),'contributor')
+    )
+  );
+
+DROP POLICY IF EXISTS "owners and media managers update media library" ON storage.objects;
+CREATE POLICY "owners and media managers update media library" ON storage.objects FOR UPDATE TO authenticated
+  USING (
+    bucket_id = 'media-library' AND (
+      owner = auth.uid()
+      OR app_hidden.has_role(auth.uid(),'super_admin')
+      OR app_hidden.has_role(auth.uid(),'section_editor')
+    )
+  )
+  WITH CHECK (
+    bucket_id = 'media-library' AND (
+      owner = auth.uid()
+      OR app_hidden.has_role(auth.uid(),'super_admin')
+      OR app_hidden.has_role(auth.uid(),'section_editor')
+    )
+  );
+
+DROP POLICY IF EXISTS "owners and media managers delete media library" ON storage.objects;
+CREATE POLICY "owners and media managers delete media library" ON storage.objects FOR DELETE TO authenticated
+  USING (
+    bucket_id = 'media-library' AND (
       owner = auth.uid()
       OR app_hidden.has_role(auth.uid(),'super_admin')
       OR app_hidden.has_role(auth.uid(),'section_editor')
