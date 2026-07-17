@@ -56,10 +56,18 @@ END $$;
 CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT,
+  email TEXT,
+  byline_name TEXT,
   avatar_url TEXT,
   bio TEXT,
+  social_links JSONB NOT NULL DEFAULT '{}'::jsonb
+    CHECK (jsonb_typeof(social_links) = 'object'),
+  status TEXT NOT NULL DEFAULT 'active'
+    CHECK (status IN ('active', 'suspended', 'invited')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS profiles_email_idx ON public.profiles (lower(email));
+CREATE INDEX IF NOT EXISTS profiles_status_idx ON public.profiles (status);
 
 -- User Roles
 CREATE TABLE IF NOT EXISTS public.user_roles (
@@ -571,13 +579,25 @@ CREATE TRIGGER war_touch BEFORE UPDATE ON public.war_monitor_items FOR EACH ROW 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
-  INSERT INTO public.profiles(id, name, avatar_url)
-  VALUES (NEW.id, COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)), NEW.raw_user_meta_data->>'avatar_url')
-  ON CONFLICT (id) DO NOTHING;
-  
-  INSERT INTO public.user_roles(user_id, role) VALUES (NEW.id, 'contributor')
-  ON CONFLICT (user_id, role) DO NOTHING;
-  
+  INSERT INTO public.profiles(id, name, email, avatar_url, status)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'name', NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
+    NEW.email,
+    NEW.raw_user_meta_data->>'avatar_url',
+    CASE WHEN COALESCE(NEW.raw_user_meta_data->>'invited', '') = 'true' THEN 'invited' ELSE 'active' END
+  )
+  ON CONFLICT (id) DO UPDATE
+  SET
+    email = COALESCE(EXCLUDED.email, public.profiles.email),
+    name = COALESCE(public.profiles.name, EXCLUDED.name),
+    avatar_url = COALESCE(public.profiles.avatar_url, EXCLUDED.avatar_url);
+
+  IF COALESCE(NEW.raw_user_meta_data->>'invited', '') <> 'true' THEN
+    INSERT INTO public.user_roles(user_id, role) VALUES (NEW.id, 'contributor')
+    ON CONFLICT (user_id, role) DO NOTHING;
+  END IF;
+
   RETURN NEW;
 END;
 $$;

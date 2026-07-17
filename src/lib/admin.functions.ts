@@ -4,6 +4,7 @@ import { toAppError } from "@/lib/db-errors";
 import {
   hasAnyPermission,
   hasPermission,
+  isAppRole,
   type AppRole,
   type Permission,
 } from "@/lib/permissions";
@@ -725,8 +726,93 @@ const requireSuperAdmin = async () => {
 };
 
 // ACCESS MANAGEMENT (super admin only)
+export type StaffMember = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  byline_name: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  social_links: Record<string, string>;
+  status: "active" | "suspended" | "invited";
+  created_at: string;
+  mfa_enabled: boolean;
+  auth_banned: boolean;
+  last_sign_in_at: string | null;
+  email_confirmed_at: string | null;
+  roles: AppRole[];
+  section_ids: string[];
+};
+
+export type StaffSocialLinks = {
+  twitter?: string;
+  linkedin?: string;
+  website?: string;
+  bluesky?: string;
+};
+
+const parseStaffList = (raw: unknown): StaffMember[] => {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => {
+    const row = item as Record<string, unknown>;
+    const social =
+      row.social_links && typeof row.social_links === "object" && !Array.isArray(row.social_links)
+        ? (row.social_links as Record<string, string>)
+        : {};
+    const roles = Array.isArray(row.roles)
+      ? row.roles.filter((role): role is AppRole => typeof role === "string" && isAppRole(role))
+      : [];
+    const sectionIds = Array.isArray(row.section_ids)
+      ? row.section_ids.filter((id): id is string => typeof id === "string")
+      : [];
+    const status =
+      row.status === "suspended" || row.status === "invited" ? row.status : "active";
+    return {
+      id: String(row.id),
+      name: (row.name as string | null) ?? null,
+      email: (row.email as string | null) ?? null,
+      byline_name: (row.byline_name as string | null) ?? null,
+      bio: (row.bio as string | null) ?? null,
+      avatar_url: (row.avatar_url as string | null) ?? null,
+      social_links: social,
+      status,
+      created_at: String(row.created_at ?? ""),
+      mfa_enabled: Boolean(row.mfa_enabled),
+      auth_banned: Boolean(row.auth_banned),
+      last_sign_in_at: (row.last_sign_in_at as string | null) ?? null,
+      email_confirmed_at: (row.email_confirmed_at as string | null) ?? null,
+      roles,
+      section_ids: sectionIds,
+    };
+  });
+};
+
 export const listEditors = async () => {
   await requireSuperAdmin();
+  const { data, error } = await supabase.rpc("admin_list_staff");
+  if (!error && data != null) {
+    const staff = parseStaffList(data);
+    return {
+      staff,
+      // Backward-compatible shape for any residual callers.
+      profiles: staff,
+      roles: staff.flatMap((member) =>
+        member.roles.map((role) => ({ user_id: member.id, role })),
+      ),
+      access: staff.flatMap((member) =>
+        member.section_ids.map((section_id) => ({
+          profile_id: member.id,
+          section_id,
+        })),
+      ),
+    };
+  }
+
+  if (error && !/admin_list_staff|schema cache|PGRST202/i.test(error.message)) {
+    throw toAppError(error);
+  }
+
+  // Fallback before the staff migration is applied.
   const [profilesRes, rolesRes, accessRes] = await Promise.all([
     supabase.from("profiles").select("*").order("name"),
     supabase.from("user_roles").select("*"),
@@ -735,11 +821,104 @@ export const listEditors = async () => {
   if (profilesRes.error) throw toAppError(profilesRes.error);
   if (rolesRes.error) throw toAppError(rolesRes.error);
   if (accessRes.error) throw toAppError(accessRes.error);
-  return {
-    profiles: profilesRes.data ?? [],
-    roles: rolesRes.data ?? [],
-    access: accessRes.data ?? [],
+  const roles = rolesRes.data ?? [];
+  const access = accessRes.data ?? [];
+  const staff: StaffMember[] = (profilesRes.data ?? []).map((profile) => ({
+    id: profile.id,
+    name: profile.name,
+    email: profile.email ?? null,
+    byline_name: profile.byline_name ?? null,
+    bio: profile.bio,
+    avatar_url: profile.avatar_url,
+    social_links:
+      profile.social_links &&
+      typeof profile.social_links === "object" &&
+      !Array.isArray(profile.social_links)
+        ? (profile.social_links as Record<string, string>)
+        : {},
+    status:
+      profile.status === "suspended" || profile.status === "invited"
+        ? profile.status
+        : "active",
+    created_at: profile.created_at,
+    mfa_enabled: false,
+    auth_banned: false,
+    last_sign_in_at: null,
+    email_confirmed_at: null,
+    roles: roles.filter((r) => r.user_id === profile.id).map((r) => r.role),
+    section_ids: access
+      .filter((a) => a.profile_id === profile.id)
+      .map((a) => a.section_id),
+  }));
+  return { staff, profiles: staff, roles, access };
+};
+
+const staffApi = async (payload: Record<string, unknown>) => {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) throw new Error("Sign in required.");
+  const response = await fetch("/api/staff", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const body = (await response.json().catch(() => ({}))) as { error?: string; ok?: boolean };
+  if (!response.ok) {
+    throw new Error(body.error || "Staff administration request failed.");
+  }
+  return body;
+};
+
+export const inviteStaffMember = async ({
+  data,
+}: {
+  data: {
+    email: string;
+    name: string;
+    byline_name?: string;
+    role: AppRole;
+    section_ids: string[];
   };
+}) => {
+  await requireSuperAdmin();
+  return staffApi({ action: "invite", ...data });
+};
+
+export const setStaffSuspended = async ({
+  data,
+}: {
+  data: { user_id: string; suspended: boolean };
+}) => {
+  await requireSuperAdmin();
+  return staffApi({
+    action: data.suspended ? "suspend" : "unsuspend",
+    user_id: data.user_id,
+  });
+};
+
+export const sendStaffPasswordReset = async ({
+  data,
+}: {
+  data: { email: string };
+}) => {
+  await requireSuperAdmin();
+  return staffApi({ action: "reset_password", email: data.email });
+};
+
+export const refreshStaffMfaStatus = async ({
+  data,
+}: {
+  data: { user_id: string };
+}) => {
+  await requireSuperAdmin();
+  return staffApi({ action: "mfa_status", user_id: data.user_id }) as Promise<{
+    ok: boolean;
+    mfa_enabled?: boolean;
+  }>;
 };
 
 export const toggleSectionAccess = async ({
@@ -926,12 +1105,31 @@ export const deleteCategory = async ({ data }: { data: { id: string } }) => {
 export const updateStaffProfile = async ({
   data,
 }: {
-  data: { id: string; name: string; bio?: string | null };
+  data: {
+    id: string;
+    name: string;
+    byline_name?: string | null;
+    bio?: string | null;
+    email?: string | null;
+    social_links?: StaffSocialLinks;
+  };
 }) => {
   await requireSuperAdmin();
+  const social = data.social_links ?? {};
+  const cleanedSocial = Object.fromEntries(
+    Object.entries(social)
+      .map(([key, value]) => [key, value?.trim() || ""])
+      .filter(([, value]) => value),
+  );
   const { error } = await supabase
     .from("profiles")
-    .update({ name: data.name.trim() || null, bio: data.bio?.trim() || null })
+    .update({
+      name: data.name.trim() || null,
+      byline_name: data.byline_name?.trim() || null,
+      bio: data.bio?.trim() || null,
+      email: data.email?.trim().toLowerCase() || null,
+      social_links: cleanedSocial,
+    })
     .eq("id", data.id);
   if (error) throw toAppError(error);
   return { ok: true };

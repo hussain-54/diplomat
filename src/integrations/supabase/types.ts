@@ -500,23 +500,35 @@ export type Database = {
         Row: {
           avatar_url: string | null
           bio: string | null
+          byline_name: string | null
           created_at: string
+          email: string | null
           id: string
           name: string | null
+          social_links: Json
+          status: string
         }
         Insert: {
           avatar_url?: string | null
           bio?: string | null
+          byline_name?: string | null
           created_at?: string
+          email?: string | null
           id: string
           name?: string | null
+          social_links?: Json
+          status?: string
         }
         Update: {
           avatar_url?: string | null
           bio?: string | null
+          byline_name?: string | null
           created_at?: string
+          email?: string | null
           id?: string
           name?: string | null
+          social_links?: Json
+          status?: string
         }
         Relationships: []
       }
@@ -749,6 +761,10 @@ export type Database = {
           p_items: Json
         }
         Returns: number
+      }
+      admin_list_staff: {
+        Args: Record<string, never>
+        Returns: Json
       }
       increment_article_view: {
         Args: {
