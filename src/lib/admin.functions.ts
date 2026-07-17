@@ -123,9 +123,78 @@ export const getDashboardMetrics = async () => {
 
 export const getAdminArticle = async ({ data }: { data: { id: string } }) => {
   await requirePermission("articles:view");
-  const { data: a, error } = await supabase.from("articles").select("*").eq("id", data.id).maybeSingle();
+  const { data: a, error } = await supabase
+    .from("articles")
+    .select("*, author:profiles!articles_author_id_fkey(id,name,avatar_url)")
+    .eq("id", data.id)
+    .maybeSingle();
   if (error) throw toAppError(error);
   return a;
+};
+
+// TAGS
+export const listTags = async () => {
+  await requirePermission("articles:view");
+  const { data, error } = await supabase.from("tags").select("*").order("name");
+  if (error) throw toAppError(error);
+  return data ?? [];
+};
+
+export const getArticleTags = async ({ data }: { data: { article_id: string } }) => {
+  await requirePermission("articles:view");
+  const { data: rows, error } = await supabase
+    .from("article_tags")
+    .select("tag_id, tags(id,name,slug)")
+    .eq("article_id", data.article_id);
+  if (error) throw toAppError(error);
+  return (rows ?? [])
+    .map((row) => (Array.isArray(row.tags) ? row.tags[0] : row.tags))
+    .filter((t): t is { id: string; name: string; slug: string } => !!t);
+};
+
+export const setArticleTags = async ({
+  data,
+}: {
+  data: { article_id: string; tag_names: string[] };
+}) => {
+  await requirePermission("articles:create");
+  const names = [...new Set(data.tag_names.map((n) => n.trim()).filter(Boolean))].slice(0, 20);
+
+  const tagIds: string[] = [];
+  for (const name of names) {
+    const slug = slugify(name);
+    const { data: existing, error: findError } = await supabase
+      .from("tags")
+      .select("id")
+      .eq("slug", slug)
+      .maybeSingle();
+    if (findError) throw toAppError(findError);
+    if (existing) {
+      tagIds.push(existing.id);
+    } else {
+      const { data: created, error: createError } = await supabase
+        .from("tags")
+        .insert({ name, slug })
+        .select("id")
+        .single();
+      if (createError) throw toAppError(createError);
+      tagIds.push(created.id);
+    }
+  }
+
+  const { error: clearError } = await supabase
+    .from("article_tags")
+    .delete()
+    .eq("article_id", data.article_id);
+  if (clearError) throw toAppError(clearError);
+
+  if (tagIds.length) {
+    const { error: insertError } = await supabase
+      .from("article_tags")
+      .insert(tagIds.map((tag_id) => ({ article_id: data.article_id, tag_id })));
+    if (insertError) throw toAppError(insertError);
+  }
+  return { ok: true };
 };
 
 export const upsertArticle = async ({

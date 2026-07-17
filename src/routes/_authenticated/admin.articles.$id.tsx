@@ -1,20 +1,25 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { History, RotateCcw } from "lucide-react";
+import { CheckCircle2, History, Loader2, RotateCcw, X } from "lucide-react";
 import {
   getAdminArticle,
   getArticleRevisions,
+  getArticleTags,
   getMe,
+  listTags,
   restoreArticleRevision,
+  setArticleTags,
   upsertArticle,
   uploadHeroImage,
 } from "@/lib/admin.functions";
 import { getSections } from "@/lib/content.functions";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { Database } from "@/integrations/supabase/types";
 import { CmsPageHeader, CmsPanel, CmsStatus, cmsButton, cmsInput } from "@/components/cms-ui";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermissionRoute } from "@/lib/route-guards";
+import { BlockEditor } from "@/components/block-editor";
+import { parseBody, serializeBlocks, type Block } from "@/lib/blocks";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
 
@@ -26,6 +31,8 @@ export const Route = createFileRoute("/_authenticated/admin/articles/$id")({
     ),
   component: EditArticle,
 });
+
+const AUTOSAVE_DELAY_MS = 3000;
 
 function EditArticle() {
   const { id } = Route.useParams();
@@ -41,6 +48,7 @@ function EditArticle() {
   );
   const isFactChecker = editorRoles.includes("fact_checker");
   const mayUploadMedia = hasPermission(editorRoles, "media:upload");
+  const mayManageTags = hasPermission(editorRoles, "articles:create");
 
   const sectionsQ = useQuery({ queryKey: ["sections"], queryFn: () => getSections() });
   const articleQ = useQuery({
@@ -53,11 +61,16 @@ function EditArticle() {
     queryFn: () => getArticleRevisions({ data: { article_id: id } }),
     enabled: !isNew,
   });
+  const articleTagsQ = useQuery({
+    queryKey: ["article-tags", id],
+    queryFn: () => getArticleTags({ data: { article_id: id } }),
+    enabled: !isNew,
+  });
+  const allTagsQ = useQuery({ queryKey: ["all-tags"], queryFn: () => listTags() });
 
   const [form, setForm] = useState({
     title: "",
     deck: "",
-    body: "",
     section_id: "",
     region: "",
     badge_type: "none",
@@ -66,15 +79,28 @@ function EditArticle() {
     slug: "",
     scheduled_at: "",
   });
+  const [blocks, setBlocks] = useState<Block[]>(() => parseBody(null));
+  const [tagNames, setTagNames] = useState<string[]>([]);
+  const [tagDraft, setTagDraft] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  const patchForm = (patch: Partial<typeof form>) => {
+    setForm((f) => ({ ...f, ...patch }));
+    setDirty(true);
+  };
+  const changeBlocks = useCallback((next: Block[]) => {
+    setBlocks(next);
+    setDirty(true);
+  }, []);
+
   useEffect(() => {
-    if (articleQ.data) {
+    if (articleQ.data && !dirty) {
       setForm({
         title: articleQ.data.title,
         deck: articleQ.data.deck ?? "",
-        body: articleQ.data.body ?? "",
         section_id: articleQ.data.section_id ?? "",
         region: articleQ.data.region ?? "",
         badge_type: articleQ.data.badge_type ?? "none",
@@ -83,11 +109,20 @@ function EditArticle() {
         slug: articleQ.data.slug,
         scheduled_at: toDateTimeLocal(articleQ.data.scheduled_at),
       });
+      setBlocks(parseBody(articleQ.data.body));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articleQ.data]);
 
+  useEffect(() => {
+    if (articleTagsQ.data && !dirty) {
+      setTagNames(articleTagsQ.data.map((t) => t.name));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [articleTagsQ.data]);
+
   const hasSectionAccess =
-    (!!form.section_id && (meQ.data?.sectionAccess ?? []).includes(form.section_id));
+    !!form.section_id && (meQ.data?.sectionAccess ?? []).includes(form.section_id);
   const canPublish =
     isEditorialLeader ||
     (hasPermission(editorRoles, "articles:publish") && hasSectionAccess);
@@ -107,15 +142,16 @@ function EditArticle() {
       ["draft", "review"].includes(articleQ.data.status)
     ) &&
     articleQ.data?.author_id !== meQ.data?.userId;
+  const readOnly = protectedReadOnly || articleReadOnly;
 
   const save = useMutation({
-    mutationFn: () =>
-      upsertArticle({
+    mutationFn: async ({ auto: _auto }: { auto?: boolean } = {}) => {
+      const article = await upsertArticle({
         data: {
           id: isNew ? undefined : id,
           title: form.title,
           deck: form.deck,
-          body: form.body,
+          body: serializeBlocks(blocks),
           section_id: form.section_id,
           region: form.region,
           badge_type: form.badge_type,
@@ -127,54 +163,120 @@ function EditArticle() {
               ? new Date(form.scheduled_at).toISOString()
               : null,
         },
-      }),
-    onSuccess: (article) => {
+      });
+      if (article?.id && mayManageTags) {
+        await setArticleTags({ data: { article_id: article.id, tag_names: tagNames } });
+      }
+      return article;
+    },
+    onSuccess: (article, variables) => {
+      setDirty(false);
+      setLastSavedAt(new Date());
       qc.invalidateQueries({ queryKey: ["admin-articles"] });
-      qc.invalidateQueries({ queryKey: ["admin-article"] });
       qc.invalidateQueries({ queryKey: ["article-revisions", id] });
+      qc.invalidateQueries({ queryKey: ["all-tags"] });
       qc.invalidateQueries({ queryKey: ["home"] });
       qc.invalidateQueries({ queryKey: ["latest"] });
       if (article?.slug) {
         qc.invalidateQueries({ queryKey: ["article", article.slug] });
       }
-      navigate({ to: "/admin/articles" });
+      if (isNew && article?.id && !variables?.auto) {
+        navigate({ to: "/admin/articles/$id", params: { id: article.id }, replace: true });
+      }
     },
   });
+
   const restore = useMutation({
     mutationFn: (revisionId: string) =>
       restoreArticleRevision({
         data: { article_id: id, revision_id: revisionId },
       }),
     onSuccess: () => {
+      setDirty(false);
       void qc.invalidateQueries({ queryKey: ["admin-article", id] });
       void qc.invalidateQueries({ queryKey: ["article-revisions", id] });
       void qc.invalidateQueries({ queryKey: ["admin-articles"] });
     },
   });
 
-  const upload = async (file: File) => {
+  const canSubmit =
+    !readOnly &&
+    !save.isPending &&
+    !!form.section_id &&
+    !!form.title.trim() &&
+    !(form.status === "scheduled" && !form.scheduled_at);
+
+  // Autosave drafts and reviews while editing an existing article.
+  const autosaveEligible =
+    dirty &&
+    !isNew &&
+    !readOnly &&
+    !save.isPending &&
+    ["draft", "review"].includes(form.status) &&
+    !!form.title.trim() &&
+    !!form.section_id;
+  useEffect(() => {
+    if (!autosaveEligible) return;
+    const timer = setTimeout(() => save.mutate({ auto: true }), AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autosaveEligible, form, blocks, tagNames]);
+
+  // Ctrl+S / Cmd+S saves from anywhere on the page.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        if (canSubmit) save.mutate({});
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [canSubmit, save]);
+
+  const uploadImage = async (file: File): Promise<string> => {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+    const base64 = btoa(bin);
+    const res = await uploadHeroImage({
+      data: {
+        fileName: file.name,
+        contentType: file.type || "image/jpeg",
+        base64,
+        bucket: "article-hero",
+      },
+    });
+    if (!res.url) throw new Error("Upload failed — no public URL returned.");
+    return res.url;
+  };
+
+  const uploadHero = async (file: File) => {
     setUploadBusy(true);
     setUploadError(null);
     try {
-      const buf = new Uint8Array(await file.arrayBuffer());
-      let bin = "";
-      for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
-      const base64 = btoa(bin);
-      const res = await uploadHeroImage({
-        data: {
-          fileName: file.name,
-          contentType: file.type || "image/jpeg",
-          base64,
-          bucket: "article-hero",
-        },
-      });
-      if (res.url) setForm((f) => ({ ...f, hero_image_url: res.url! }));
+      const url = await uploadImage(file);
+      patchForm({ hero_image_url: url });
     } catch (err) {
       setUploadError((err as Error).message);
     } finally {
       setUploadBusy(false);
     }
   };
+
+  const addTag = (raw: string) => {
+    const name = raw.trim().replace(/,+$/, "");
+    if (!name) return;
+    if (!tagNames.some((t) => t.toLowerCase() === name.toLowerCase())) {
+      setTagNames((prev) => [...prev, name]);
+      setDirty(true);
+    }
+    setTagDraft("");
+  };
+
+  const author = articleQ.data
+    ? (Array.isArray(articleQ.data.author) ? articleQ.data.author[0] : articleQ.data.author)
+    : null;
 
   if (!isNew && articleQ.isLoading) {
     return <div className="text-sm text-muted-foreground">Loading article…</div>;
@@ -194,9 +296,12 @@ function EditArticle() {
         title={isNew ? "Create article" : "Edit article"}
         description={isNew ? "Draft a new story for the newsroom." : `Editing ${articleQ.data?.slug ?? "article"}`}
         actions={
-          <Link to="/admin/articles" className="text-xs font-semibold text-muted-foreground hover:text-foreground">
-            ← Back to articles
-          </Link>
+          <div className="flex items-center gap-3">
+            <SaveIndicator saving={save.isPending} dirty={dirty} lastSavedAt={lastSavedAt} autosave={autosaveEligible || (!isNew && ["draft", "review"].includes(form.status))} />
+            <Link to="/admin/articles" className="text-xs font-semibold text-muted-foreground hover:text-foreground">
+              ← Back to articles
+            </Link>
+          </div>
         }
       />
       {!canPublish && (
@@ -214,195 +319,293 @@ function EditArticle() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!protectedReadOnly && !articleReadOnly) save.mutate();
+          if (canSubmit) save.mutate({});
         }}
-        className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]"
+        onKeyDown={(e) => {
+          // Prevent implicit form submission when pressing Enter in text inputs.
+          if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
+            e.preventDefault();
+          }
+        }}
+        className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]"
       >
-        <CmsPanel title="Story content" description="Headline, summary, body, and permanent URL">
-          <div className="space-y-5 p-5">
-          <Field label="Headline">
-            <input
-              required
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="h-12 w-full border border-input bg-background px-3 font-serif text-xl text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+        {/* LEFT — content editor */}
+        <div className="min-w-0 space-y-4">
+          <CmsPanel>
+            <div className="space-y-4 p-5">
+              <input
+                required
+                disabled={readOnly}
+                value={form.title}
+                onChange={(e) => patchForm({ title: e.target.value })}
+                placeholder="Headline"
+                className="w-full border-0 border-b border-input bg-transparent pb-2 font-serif text-3xl text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-ring"
+              />
+              <textarea
+                disabled={readOnly}
+                value={form.deck}
+                onChange={(e) => patchForm({ deck: e.target.value })}
+                rows={2}
+                placeholder="Summary / deck — one or two sentences shown under the headline"
+                className="w-full resize-none border-0 bg-transparent font-serif text-lg leading-relaxed text-muted-foreground outline-none placeholder:text-muted-foreground/50"
+              />
+            </div>
+          </CmsPanel>
+          <CmsPanel title="Story content" description="Compose with blocks — drag to reorder, Ctrl+Enter for a new paragraph">
+            <BlockEditor
+              value={blocks}
+              onChange={changeBlocks}
+              readOnly={readOnly}
+              onUploadImage={mayUploadMedia ? uploadImage : undefined}
             />
-          </Field>
-          <Field label="Summary / deck">
-            <textarea
-              value={form.deck}
-              onChange={(e) => setForm({ ...form, deck: e.target.value })}
-              rows={2}
-              className="w-full border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-1 focus:ring-ring"
-            />
-          </Field>
-          <Field label="Article body" hint="Separate paragraphs with a blank line">
-            <textarea
-              value={form.body}
-              onChange={(e) => setForm({ ...form, body: e.target.value })}
-              rows={16}
-              className="w-full border border-input bg-background px-4 py-3 font-serif text-base leading-7 outline-none focus:border-ring focus:ring-1 focus:ring-ring"
-            />
-          </Field>
-          <Field label="Slug (auto if blank)">
-            <input
-              value={form.slug}
-              onChange={(e) => setForm({ ...form, slug: e.target.value })}
-              className={cmsInput}
-            />
-          </Field>
-          </div>
-        </CmsPanel>
+          </CmsPanel>
+        </div>
+
+        {/* RIGHT — sidebar */}
         <aside className="space-y-4">
           <CmsPanel title="Publishing" description="Workflow status and distribution">
             <div className="space-y-4 p-5">
-          <Field label="Category">
-            <select
-              required
-              value={form.section_id}
-              onChange={(e) => setForm({ ...form, section_id: e.target.value })}
-              className={cmsInput}
-            >
-              <option value="">—</option>
-              {(sectionsQ.data ?? []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Status">
-            <select
-              value={form.status}
-              onChange={(e) => setForm({ ...form, status: e.target.value as ArticleStatus })}
-              disabled={protectedReadOnly || articleReadOnly}
-              className={cmsInput}
-            >
-              <option value="draft">Draft</option>
-              <option value="review">In review</option>
-              {canPublish && (
-                <>
-                  <option value="scheduled">Scheduled</option>
-                  <option value="published">Published</option>
-                  <option value="archived">Archived</option>
-                </>
+              <Field label="Status">
+                <select
+                  value={form.status}
+                  onChange={(e) => patchForm({ status: e.target.value as ArticleStatus })}
+                  disabled={readOnly}
+                  className={cmsInput}
+                >
+                  <option value="draft">Draft</option>
+                  <option value="review">In review</option>
+                  {canPublish && (
+                    <>
+                      <option value="scheduled">Scheduled</option>
+                      <option value="published">Published</option>
+                      <option value="archived">Archived</option>
+                    </>
+                  )}
+                </select>
+              </Field>
+              {form.status === "scheduled" && (
+                <Field label="Publication date and time">
+                  <input
+                    type="datetime-local"
+                    required
+                    min={toDateTimeLocal(new Date().toISOString())}
+                    value={form.scheduled_at}
+                    onChange={(event) => patchForm({ scheduled_at: event.target.value })}
+                    className={cmsInput}
+                  />
+                </Field>
               )}
-            </select>
-          </Field>
-          {form.status === "scheduled" && (
-            <Field label="Publication date and time">
-              <input
-                type="datetime-local"
-                required
-                min={toDateTimeLocal(new Date().toISOString())}
-                value={form.scheduled_at}
-                onChange={(event) => setForm({ ...form, scheduled_at: event.target.value })}
-                className={cmsInput}
-              />
-            </Field>
-          )}
-          <Field label="Badge">
-            <select
-              value={form.badge_type}
-              onChange={(e) => setForm({ ...form, badge_type: e.target.value })}
-              className={cmsInput}
-            >
-              {["none", "breaking", "live", "exclusive", "opinion", "premium", "alert"].map((b) => (
-                <option key={b} value={b}>
-                  {b}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Region">
-            <input
-              value={form.region}
-              onChange={(e) => setForm({ ...form, region: e.target.value })}
-              className={cmsInput}
-            />
-          </Field>
+              <Field label="Badge">
+                <select
+                  value={form.badge_type}
+                  disabled={readOnly}
+                  onChange={(e) => patchForm({ badge_type: e.target.value })}
+                  className={cmsInput}
+                >
+                  {["none", "breaking", "live", "exclusive", "opinion", "premium", "alert"].map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Region">
+                <input
+                  value={form.region}
+                  disabled={readOnly}
+                  onChange={(e) => patchForm({ region: e.target.value })}
+                  className={cmsInput}
+                />
+              </Field>
+              <div className="flex items-center justify-between border-t border-border pt-4">
+                <span className="text-xs font-semibold text-foreground">Current state</span>
+                <CmsStatus tone={statusTone(form.status)}>{form.status}</CmsStatus>
+              </div>
+              <button type="submit" disabled={!canSubmit} className={`${cmsButton} w-full`}>
+                {save.isPending
+                  ? "Saving…"
+                  : form.status === "published"
+                    ? "Publish article"
+                    : form.status === "scheduled"
+                      ? "Schedule article"
+                      : form.status === "archived"
+                        ? "Archive article"
+                        : isNew
+                          ? "Create article"
+                          : "Save changes"}
+              </button>
+              {save.isError && (
+                <div className="border border-crimson/30 bg-crimson/10 p-3 text-xs text-crimson">
+                  {(save.error as Error).message}
+                </div>
+              )}
             </div>
           </CmsPanel>
-          {mayUploadMedia && <CmsPanel title="Lead image" description="JPEG, PNG, WebP, or GIF · maximum 5 MB">
+
+          <CmsPanel title="SEO" description="How this story appears in search and shares">
+            <div className="space-y-4 p-5">
+              <Field label="URL slug" hint="auto-generated if blank">
+                <input
+                  value={form.slug}
+                  disabled={readOnly}
+                  onChange={(e) => patchForm({ slug: e.target.value })}
+                  className={cmsInput}
+                />
+              </Field>
+              <div>
+                <span className="text-xs font-semibold text-foreground">Search preview</span>
+                <div className="mt-1.5 border border-border bg-background p-3">
+                  <div className="truncate text-sm font-medium text-cat-blue">
+                    {form.title || "Headline appears here"}
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] text-cat-green">
+                    /article/{form.slug || slugPreview(form.title)}
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                    {form.deck || "The summary / deck is used as the meta description."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CmsPanel>
+
+          <CmsPanel title="Categories" description="Section placement for this story">
+            <div className="p-5">
+              <Field label="Category">
+                <select
+                  required
+                  disabled={readOnly}
+                  value={form.section_id}
+                  onChange={(e) => patchForm({ section_id: e.target.value })}
+                  className={cmsInput}
+                >
+                  <option value="">—</option>
+                  {(sectionsQ.data ?? []).map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </CmsPanel>
+
+          <CmsPanel title="Tags" description="Topics for discovery and related coverage">
             <div className="space-y-3 p-5">
-          <Field label="Hero image">
-            {form.hero_image_url && (
-              <img src={form.hero_image_url} alt={form.title || "Article hero"} className="mb-2 aspect-video w-full object-cover" />
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) upload(f);
-              }}
-            />
-            {uploadBusy && <div className="mt-1 text-xs text-muted-foreground">Uploading…</div>}
-            {uploadError && <div className="mt-1 text-xs text-crimson">{uploadError}</div>}
-            <input
-              value={form.hero_image_url}
-              onChange={(e) => setForm({ ...form, hero_image_url: e.target.value })}
-              placeholder="Or paste image URL"
-              className={`${cmsInput} mt-2 text-xs`}
-            />
-          </Field>
+              {tagNames.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {tagNames.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-1 border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground"
+                    >
+                      {tag}
+                      {!readOnly && mayManageTags && (
+                        <button
+                          type="button"
+                          title={`Remove ${tag}`}
+                          onClick={() => {
+                            setTagNames((prev) => prev.filter((t) => t !== tag));
+                            setDirty(true);
+                          }}
+                          className="text-muted-foreground hover:text-crimson"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {!readOnly && mayManageTags && (
+                <>
+                  <input
+                    value={tagDraft}
+                    onChange={(e) => setTagDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === ",") {
+                        e.preventDefault();
+                        addTag(tagDraft);
+                      }
+                    }}
+                    placeholder="Add tag and press Enter"
+                    className={cmsInput}
+                    list="all-tags-list"
+                  />
+                  <datalist id="all-tags-list">
+                    {(allTagsQ.data ?? [])
+                      .filter((t) => !tagNames.some((n) => n.toLowerCase() === t.name.toLowerCase()))
+                      .map((t) => (
+                        <option key={t.id} value={t.name} />
+                      ))}
+                  </datalist>
+                </>
+              )}
+              {!mayManageTags && (
+                <p className="text-xs text-muted-foreground">Your role cannot modify tags.</p>
+              )}
             </div>
-          </CmsPanel>}
-          <div className="border border-border bg-card p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <span className="text-xs font-semibold text-foreground">Current state</span>
-              <CmsStatus
-                tone={
-                  form.status === "published"
-                    ? "success"
-                    : form.status === "review"
-                      ? "warning"
-                      : form.status === "scheduled"
-                        ? "info"
-                        : form.status === "archived"
-                          ? "danger"
-                          : "neutral"
-                }
-              >
-                {form.status}
-              </CmsStatus>
+          </CmsPanel>
+
+          <CmsPanel title="Media" description="Lead image · JPEG, PNG, WebP, or GIF · max 5 MB">
+            <div className="space-y-3 p-5">
+              {form.hero_image_url && (
+                <img
+                  src={form.hero_image_url}
+                  alt={form.title || "Article hero"}
+                  className="aspect-video w-full border border-border object-cover"
+                />
+              )}
+              {mayUploadMedia && !readOnly && (
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) uploadHero(f);
+                  }}
+                  className="w-full text-xs text-muted-foreground"
+                />
+              )}
+              {uploadBusy && <div className="text-xs text-muted-foreground">Uploading…</div>}
+              {uploadError && <div className="text-xs text-crimson">{uploadError}</div>}
+              <input
+                value={form.hero_image_url}
+                disabled={readOnly}
+                onChange={(e) => patchForm({ hero_image_url: e.target.value })}
+                placeholder="Or paste image URL"
+                className={`${cmsInput} text-xs`}
+              />
             </div>
-          <button
-            type="submit"
-            disabled={
-              protectedReadOnly ||
-              articleReadOnly ||
-              save.isPending ||
-              !form.section_id ||
-              !form.title.trim() ||
-              (form.status === "scheduled" && !form.scheduled_at)
-            }
-            className={`${cmsButton} w-full`}
-          >
-            {save.isPending
-              ? "Saving…"
-              : form.status === "published"
-                ? "Publish article"
-                : form.status === "scheduled"
-                  ? "Schedule article"
-                  : form.status === "archived"
-                    ? "Archive article"
-                : isNew
-                  ? "Create article"
-                  : "Save changes"}
-          </button>
-          {save.isError && (
-            <div className="mt-3 border border-crimson/30 bg-crimson/10 p-3 text-xs text-crimson">
-              {(save.error as Error).message}
+          </CmsPanel>
+
+          <CmsPanel title="Author" description="Byline for this story">
+            <div className="flex items-center gap-3 p-5">
+              {isNew ? (
+                <AuthorRow
+                  name={meQ.data?.profile?.name ?? "You"}
+                  avatarUrl={meQ.data?.profile?.avatar_url}
+                  note="You will be credited as the author."
+                />
+              ) : (
+                <AuthorRow
+                  name={author?.name ?? "Unknown author"}
+                  avatarUrl={author?.avatar_url}
+                  note={
+                    articleQ.data?.created_at
+                      ? `Created ${new Date(articleQ.data.created_at).toLocaleDateString()}`
+                      : undefined
+                  }
+                />
+              )}
             </div>
-          )}
-          </div>
+          </CmsPanel>
         </aside>
       </form>
 
       {!isNew && (
         <CmsPanel
-          title="Revision History"
+          title="Version History"
           description="Every saved change creates a restorable snapshot."
           action={
             <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -442,22 +645,10 @@ function EditArticle() {
                         {new Date(revision.changed_at).toLocaleString()} · {changer ?? "System"}
                       </div>
                     </div>
-                    <CmsStatus
-                      tone={
-                        snapshot.status === "published"
-                          ? "success"
-                          : snapshot.status === "review"
-                            ? "warning"
-                            : snapshot.status === "scheduled"
-                              ? "info"
-                              : snapshot.status === "archived"
-                                ? "danger"
-                                : "neutral"
-                      }
-                    >
+                    <CmsStatus tone={statusTone(snapshot.status ?? "draft")}>
                       {snapshot.status ?? "draft"}
                     </CmsStatus>
-                    {!protectedReadOnly && !articleReadOnly && (
+                    {!readOnly && (
                       <button
                         type="button"
                         className="inline-flex h-8 items-center gap-1 border border-input px-2 text-xs font-semibold hover:bg-accent"
@@ -484,6 +675,90 @@ function EditArticle() {
         </CmsPanel>
       )}
     </div>
+  );
+}
+
+function SaveIndicator({
+  saving,
+  dirty,
+  lastSavedAt,
+  autosave,
+}: {
+  saving: boolean;
+  dirty: boolean;
+  lastSavedAt: Date | null;
+  autosave: boolean;
+}) {
+  if (saving) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+      </span>
+    );
+  }
+  if (dirty) {
+    return (
+      <span className="text-xs text-gold">
+        Unsaved changes{autosave ? " · autosave on" : ""}
+      </span>
+    );
+  }
+  if (lastSavedAt) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-cat-green">
+        <CheckCircle2 className="h-3.5 w-3.5" /> Saved{" "}
+        {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+      </span>
+    );
+  }
+  return null;
+}
+
+function AuthorRow({
+  name,
+  avatarUrl,
+  note,
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  note?: string;
+}) {
+  return (
+    <>
+      {avatarUrl ? (
+        <img src={avatarUrl} alt={name} className="h-10 w-10 rounded-full border border-border object-cover" />
+      ) : (
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
+          {name.slice(0, 1).toUpperCase()}
+        </div>
+      )}
+      <div className="min-w-0">
+        <div className="truncate text-sm font-semibold text-foreground">{name}</div>
+        {note && <div className="text-xs text-muted-foreground">{note}</div>}
+      </div>
+    </>
+  );
+}
+
+function statusTone(status: ArticleStatus) {
+  return status === "published"
+    ? ("success" as const)
+    : status === "review"
+      ? ("warning" as const)
+      : status === "scheduled"
+        ? ("info" as const)
+        : status === "archived"
+          ? ("danger" as const)
+          : ("neutral" as const);
+}
+
+function slugPreview(title: string) {
+  return (
+    title
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+      .slice(0, 80) || "article-slug"
   );
 }
 

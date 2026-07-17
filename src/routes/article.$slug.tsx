@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient, useSuspenseQuery, queryOptions }
 import { useEffect, useState } from "react";
 import { SiteShell } from "@/components/site-shell";
 import { ArticleCard, BadgePill } from "@/components/article-card";
+import { ArticleBody } from "@/components/article-body";
 import {
   getArticle,
   getArticleComments,
@@ -95,11 +96,7 @@ function ArticlePage() {
             className="mt-6 aspect-[16/9] w-full object-cover"
           />
         )}
-        <div className="article-body mt-8">
-          {(a.body ?? "").split("\n\n").map((p, i) => (
-            <p key={i}>{p}</p>
-          ))}
-        </div>
+        <ArticleBody body={a.body} />
       </article>
 
       {data.related.length > 0 && (
