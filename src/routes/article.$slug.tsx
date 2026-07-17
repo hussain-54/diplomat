@@ -1,8 +1,15 @@
 import { createFileRoute, notFound, Link } from "@tanstack/react-router";
-import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { SiteShell } from "@/components/site-shell";
 import { ArticleCard, BadgePill } from "@/components/article-card";
-import { getArticle } from "@/lib/content.functions";
+import {
+  getArticle,
+  getArticleComments,
+  getPublicNewsroomSettings,
+  submitArticleComment,
+  trackArticleView,
+} from "@/lib/content.functions";
 import { formatDate } from "@/lib/format";
 
 const qo = (slug: string) =>
@@ -15,12 +22,24 @@ export const Route = createFileRoute("/article/$slug")({
   loader: async ({ context, params }) => {
     const data = await context.queryClient.ensureQueryData(qo(params.slug));
     if (!data.article) throw notFound();
+    return data;
   },
-  head: ({ loaderData: _ld, params }) => ({
-    meta: [
-      { title: `${params.slug} — Diplomacy Lens` },
-    ],
-  }),
+  head: ({ loaderData }) => {
+    const article = loaderData?.article;
+    const title = article ? `${article.title} — Diplomacy Lens` : "Article — Diplomacy Lens";
+    const description = article?.deck ?? "Diplomacy Lens reporting and analysis.";
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+        ...(article?.hero_image_url
+          ? [{ property: "og:image", content: article.hero_image_url }]
+          : []),
+      ],
+    };
+  },
   component: ArticlePage,
   notFoundComponent: () => (
     <SiteShell>
@@ -37,6 +56,13 @@ function ArticlePage() {
   const { slug } = Route.useParams();
   const { data } = useSuspenseQuery(qo(slug));
   const a = data.article!;
+  useEffect(() => {
+    const key = `viewed:${a.id}`;
+    if (window.sessionStorage.getItem(key)) return;
+    window.sessionStorage.setItem(key, "1");
+    void trackArticleView({ data: { articleId: a.id } });
+  }, [a.id]);
+
   return (
     <SiteShell>
       <article className="mx-auto max-w-3xl px-4 py-10">
@@ -63,7 +89,7 @@ function ArticlePage() {
         {a.hero_image_url && (
           <img
             src={a.hero_image_url}
-            alt=""
+            alt={a.title}
             width={1600}
             height={900}
             className="mt-6 aspect-[16/9] w-full object-cover"
@@ -88,6 +114,109 @@ function ArticlePage() {
           </div>
         </section>
       )}
+      <CommentsSection articleId={a.id} />
     </SiteShell>
+  );
+}
+
+function CommentsSection({ articleId }: { articleId: string }) {
+  const queryClient = useQueryClient();
+  const settings = useQuery({ queryKey: ["public-newsroom-settings"], queryFn: getPublicNewsroomSettings });
+  const comments = useQuery({
+    queryKey: ["article-comments", articleId],
+    queryFn: () => getArticleComments({ data: { articleId } }),
+  });
+  const [form, setForm] = useState({ authorName: "", authorEmail: "", body: "" });
+  const [submitted, setSubmitted] = useState(false);
+  const submit = useMutation({
+    mutationFn: () => submitArticleComment({ data: { articleId, ...form } }),
+    onSuccess: async () => {
+      setSubmitted(true);
+      setForm({ authorName: "", authorEmail: "", body: "" });
+      await queryClient.invalidateQueries({ queryKey: ["article-comments", articleId] });
+    },
+  });
+
+  if (settings.data?.comments_enabled === false) return null;
+
+  return (
+    <section className="border-t border-border bg-background">
+      <div className="mx-auto grid max-w-5xl gap-10 px-4 py-12 lg:grid-cols-[1fr_360px]">
+        <div>
+          <div className="eyebrow text-crimson">Reader discussion</div>
+          <h2 className="mt-2 font-serif text-3xl text-ink">Comments</h2>
+          <div className="mt-6 divide-y divide-border">
+            {comments.isLoading ? (
+              <p className="py-6 text-sm text-muted-foreground">Loading comments…</p>
+            ) : !comments.data?.length ? (
+              <p className="py-6 text-sm text-muted-foreground">No published comments yet.</p>
+            ) : (
+              comments.data.map((comment) => (
+                <article key={comment.id} className="py-5">
+                  <div className="flex items-baseline justify-between gap-4">
+                    <div className="text-sm font-semibold text-ink">{comment.author_name}</div>
+                    <time className="text-xs text-muted-foreground">
+                      {new Date(comment.created_at).toLocaleDateString()}
+                    </time>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">{comment.body}</p>
+                </article>
+              ))
+            )}
+          </div>
+        </div>
+        <div className="border border-border bg-card p-5">
+          <h3 className="font-sans text-sm font-semibold text-foreground">Join the discussion</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Comments are reviewed before publication.</p>
+          <form
+            className="mt-5 space-y-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              setSubmitted(false);
+              submit.mutate();
+            }}
+          >
+            <input
+              required
+              minLength={2}
+              maxLength={80}
+              value={form.authorName}
+              onChange={(event) => setForm({ ...form, authorName: event.target.value })}
+              placeholder="Name"
+              className="h-10 w-full border border-input bg-background px-3 text-sm outline-none focus:border-ring"
+            />
+            <input
+              required
+              type="email"
+              value={form.authorEmail}
+              onChange={(event) => setForm({ ...form, authorEmail: event.target.value })}
+              placeholder="Email (not published)"
+              className="h-10 w-full border border-input bg-background px-3 text-sm outline-none focus:border-ring"
+            />
+            <textarea
+              required
+              minLength={2}
+              maxLength={4000}
+              rows={5}
+              value={form.body}
+              onChange={(event) => setForm({ ...form, body: event.target.value })}
+              placeholder="Write a thoughtful comment"
+              className="w-full border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+            />
+            <button
+              type="submit"
+              disabled={submit.isPending}
+              className="h-10 w-full bg-navy text-xs font-semibold uppercase tracking-widest text-navy-foreground disabled:opacity-50"
+            >
+              {submit.isPending ? "Submitting…" : "Submit comment"}
+            </button>
+            {submitted && (
+              <p className="text-xs text-cat-green">Comment submitted for editorial review.</p>
+            )}
+            {submit.error && <p className="text-xs text-crimson">{submit.error.message}</p>}
+          </form>
+        </div>
+      </div>
+    </section>
   );
 }

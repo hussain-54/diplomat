@@ -4,6 +4,7 @@ import { getAdminArticle, getMe, upsertArticle, uploadHeroImage } from "@/lib/ad
 import { getSections } from "@/lib/content.functions";
 import { useState, useEffect } from "react";
 import type { Database } from "@/integrations/supabase/types";
+import { CmsPageHeader, CmsPanel, CmsStatus, cmsButton, cmsInput } from "@/components/cms-ui";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
 
@@ -62,12 +63,8 @@ function EditArticle() {
   const canPublish =
     isEditor ||
     (!!form.section_id && (meQ.data?.sectionAccess ?? []).includes(form.section_id));
-
-  useEffect(() => {
-    if (rolesReady && !canPublish && form.status === "published") {
-      setForm((f) => ({ ...f, status: "review" }));
-    }
-  }, [rolesReady, canPublish, form.status]);
+  const publishedReadOnly =
+    !isNew && rolesReady && !canPublish && articleQ.data?.status === "published";
 
   const save = useMutation({
     mutationFn: () =>
@@ -133,67 +130,80 @@ function EditArticle() {
   }
 
   return (
-    <div>
-      <Link
-        to="/admin/articles"
-        className="text-xs uppercase tracking-widest text-muted-foreground hover:text-foreground"
-      >
-        ← Back to articles
-      </Link>
-      <h1 className="mt-2 font-serif text-3xl text-ink">{isNew ? "New article" : "Edit article"}</h1>
+    <div className="space-y-6">
+      <CmsPageHeader
+        eyebrow="Editorial workspace"
+        title={isNew ? "Create article" : "Edit article"}
+        description={isNew ? "Draft a new story for the newsroom." : `Editing ${articleQ.data?.slug ?? "article"}`}
+        actions={
+          <Link to="/admin/articles" className="text-xs font-semibold text-muted-foreground hover:text-foreground">
+            ← Back to articles
+          </Link>
+        }
+      />
       {!canPublish && (
-        <p className="mt-2 rounded-sm border border-border bg-secondary px-3 py-2 text-sm text-muted-foreground">
-          Your role can save <strong>draft</strong> or <strong>in review</strong> only. A section editor or
-          super admin must publish.
-        </p>
+        <div className="border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-muted-foreground">
+          {publishedReadOnly ? (
+            <>This published article is read-only for your role. An editor must make changes.</>
+          ) : (
+            <>
+              Your role can save <strong>draft</strong> or <strong>in review</strong> only. A section
+              editor or super admin must publish.
+            </>
+          )}
+        </div>
       )}
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          save.mutate();
+          if (!publishedReadOnly) save.mutate();
         }}
-        className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]"
+        className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]"
       >
-        <div className="space-y-4 rounded-sm border border-border bg-card p-5">
-          <Field label="Title">
+        <CmsPanel title="Story content" description="Headline, summary, body, and permanent URL">
+          <div className="space-y-5 p-5">
+          <Field label="Headline">
             <input
               required
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="w-full rounded-sm border border-input px-3 py-2 font-serif text-lg"
+              className="h-12 w-full border border-input bg-background px-3 font-serif text-xl text-foreground outline-none focus:border-ring focus:ring-1 focus:ring-ring"
             />
           </Field>
-          <Field label="Deck">
+          <Field label="Summary / deck">
             <textarea
               value={form.deck}
               onChange={(e) => setForm({ ...form, deck: e.target.value })}
               rows={2}
-              className="w-full rounded-sm border border-input px-3 py-2"
+              className="w-full border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring focus:ring-1 focus:ring-ring"
             />
           </Field>
-          <Field label="Body (paragraphs separated by blank line)">
+          <Field label="Article body" hint="Separate paragraphs with a blank line">
             <textarea
               value={form.body}
               onChange={(e) => setForm({ ...form, body: e.target.value })}
               rows={16}
-              className="w-full rounded-sm border border-input px-3 py-2 font-serif"
+              className="w-full border border-input bg-background px-4 py-3 font-serif text-base leading-7 outline-none focus:border-ring focus:ring-1 focus:ring-ring"
             />
           </Field>
           <Field label="Slug (auto if blank)">
             <input
               value={form.slug}
               onChange={(e) => setForm({ ...form, slug: e.target.value })}
-              className="w-full rounded-sm border border-input px-3 py-2 text-sm"
+              className={cmsInput}
             />
           </Field>
-        </div>
-        <aside className="space-y-4 rounded-sm border border-border bg-card p-5">
-          <Field label="Section">
+          </div>
+        </CmsPanel>
+        <aside className="space-y-4">
+          <CmsPanel title="Publishing" description="Workflow status and distribution">
+            <div className="space-y-4 p-5">
+          <Field label="Category">
             <select
               required
               value={form.section_id}
               onChange={(e) => setForm({ ...form, section_id: e.target.value })}
-              className="w-full rounded-sm border border-input px-3 py-2"
+              className={cmsInput}
             >
               <option value="">—</option>
               {(sectionsQ.data ?? []).map((s) => (
@@ -207,7 +217,8 @@ function EditArticle() {
             <select
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value as ArticleStatus })}
-              className="w-full rounded-sm border border-input px-3 py-2"
+              disabled={publishedReadOnly}
+              className={cmsInput}
             >
               <option value="draft">Draft</option>
               <option value="review">In review</option>
@@ -218,7 +229,7 @@ function EditArticle() {
             <select
               value={form.badge_type}
               onChange={(e) => setForm({ ...form, badge_type: e.target.value })}
-              className="w-full rounded-sm border border-input px-3 py-2"
+              className={cmsInput}
             >
               {["none", "breaking", "live", "exclusive", "opinion", "premium", "alert"].map((b) => (
                 <option key={b} value={b}>
@@ -231,12 +242,16 @@ function EditArticle() {
             <input
               value={form.region}
               onChange={(e) => setForm({ ...form, region: e.target.value })}
-              className="w-full rounded-sm border border-input px-3 py-2 text-sm"
+              className={cmsInput}
             />
           </Field>
+            </div>
+          </CmsPanel>
+          <CmsPanel title="Lead image" description="JPEG, PNG, WebP, or GIF · maximum 5 MB">
+            <div className="space-y-3 p-5">
           <Field label="Hero image">
             {form.hero_image_url && (
-              <img src={form.hero_image_url} alt="" className="mb-2 aspect-video w-full rounded-sm object-cover" />
+              <img src={form.hero_image_url} alt={form.title || "Article hero"} className="mb-2 aspect-video w-full object-cover" />
             )}
             <input
               type="file"
@@ -252,13 +267,26 @@ function EditArticle() {
               value={form.hero_image_url}
               onChange={(e) => setForm({ ...form, hero_image_url: e.target.value })}
               placeholder="Or paste image URL"
-              className="mt-2 w-full rounded-sm border border-input px-3 py-2 text-xs"
+              className={`${cmsInput} mt-2 text-xs`}
             />
           </Field>
+            </div>
+          </CmsPanel>
+          <div className="border border-border bg-card p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-xs font-semibold text-foreground">Current state</span>
+              <CmsStatus
+                tone={form.status === "published" ? "success" : form.status === "review" ? "warning" : "neutral"}
+              >
+                {form.status}
+              </CmsStatus>
+            </div>
           <button
             type="submit"
-            disabled={save.isPending || !form.section_id || !form.title.trim()}
-            className="w-full rounded-sm bg-navy px-4 py-2.5 text-sm font-semibold uppercase tracking-widest text-navy-foreground disabled:opacity-50"
+            disabled={
+              publishedReadOnly || save.isPending || !form.section_id || !form.title.trim()
+            }
+            className={`${cmsButton} w-full`}
           >
             {save.isPending
               ? "Saving…"
@@ -269,21 +297,23 @@ function EditArticle() {
                   : "Save changes"}
           </button>
           {save.isError && (
-            <div className="rounded-sm border border-crimson bg-crimson/10 p-2 text-xs text-crimson">
+            <div className="mt-3 border border-crimson/30 bg-crimson/10 p-3 text-xs text-crimson">
               {(save.error as Error).message}
             </div>
           )}
+          </div>
         </aside>
       </form>
     </div>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="eyebrow text-muted-foreground">{label}</span>
-      <div className="mt-1">{children}</div>
+      <span className="text-xs font-semibold text-foreground">{label}</span>
+      {hint && <span className="ml-2 text-[11px] font-normal text-muted-foreground">{hint}</span>}
+      <div className="mt-1.5">{children}</div>
     </label>
   );
 }

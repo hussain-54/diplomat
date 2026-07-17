@@ -6,8 +6,8 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 
 export default defineConfig({
-  plugins: [TanStackRouterVite(), react(), tailwindcss(), tsconfigPaths()],
-  envPrefix: ["VITE_", "SUPABASE_"],
+  plugins: [TanStackRouterVite({ autoCodeSplitting: true }), react(), tailwindcss(), tsconfigPaths()],
+  envPrefix: "VITE_",
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

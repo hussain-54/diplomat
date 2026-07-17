@@ -1,4 +1,4 @@
-# Manual Supabase & Vercel Integration Guide
+# Supabase & Vercel Integration Guide
 
 Step-by-step setup for the Diplomacy Lens database, local env, article publishing permissions, and Vercel deploy.
 
@@ -12,20 +12,23 @@ Step-by-step setup for the Diplomacy Lens database, local env, article publishin
 3. Enter a **Project Name**, set a secure **Database Password**, and choose a region.
 4. Wait for provisioning to finish.
 
-### Step 2: Initialize Schema and Seed Data
-1. Open **SQL Editor** → **New Query**.
-2. Paste the full contents of `supabase/schema.sql` from this repository.
-3. Click **Run** and confirm it succeeds.
+### Step 2: Apply Database Migrations
 
-### Step 3: Apply the Article Publish Fix (required for existing projects)
-If you already ran an older schema that could not INSERT/UPDATE articles:
+The files in `supabase/migrations/` are the production source of truth.
 
-1. Open **SQL Editor** again.
-2. Paste and run `supabase/migrations/20260715000000_fix_article_publish_grants.sql`.
+With the Supabase CLI linked to the project:
 
-This grants `authenticated` write access on `articles` and lets `section_editor` / `super_admin` publish.
+```bash
+supabase link --project-ref your-project-ref
+supabase db push
+```
 
-### Step 4: Promote Your First Super Admin
+For a new local database, use `supabase db reset`.
+
+`supabase/schema.sql` is a readable snapshot/reference, not a second deployment path. Do not
+run old emergency fix scripts after the migration chain.
+
+### Step 3: Promote Your First Super Admin
 New signups receive the **contributor** role (drafts only). To publish and manage access, promote yourself once:
 
 ```sql
@@ -45,7 +48,9 @@ WHERE email = 'you@example.com'
 ON CONFLICT (user_id, role) DO NOTHING;
 ```
 
-### Step 5: API Credentials
+This is an explicit one-time operator action. Never commit a real email or user ID to a migration.
+
+### Step 4: API Credentials
 In **Project Settings → API**, copy:
 - **Project URL**
 - **anon / public** (or publishable) key
@@ -82,12 +87,14 @@ Open `http://localhost:5173`. Newsroom: `http://localhost:5173/admin`.
 ## Part 3: Deploying to Vercel
 
 1. Import the GitHub repository into Vercel.
-2. Set environment variables (either style works):
+2. Set these explicitly public environment variables:
 
 | Key | Value |
 | :--- | :--- |
 | `VITE_SUPABASE_URL` | Project URL |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Anon / publishable key |
+
+Never create a `VITE_` variable containing a Supabase secret/service-role key.
 
 3. Framework: **Vite** · Build: `npm run build` · Output: `dist`
 4. Deploy, then in Supabase Auth set Site URL / redirect URLs to your Vercel domain.

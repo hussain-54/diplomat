@@ -20,14 +20,13 @@ export const Route = createFileRoute("/_authenticated")({
       .eq("user_id", data.user.id);
 
     if (rolesError) {
-      throw new Error(rolesError.message || "Failed to load newsroom roles");
+      console.error("Failed to load newsroom roles", rolesError);
+      throw new Error("Unable to verify newsroom access. Please try again.");
     }
 
     const roleList = (roles ?? []).map((r) => r.role).filter(Boolean);
     if (!roleList.length) {
-      throw new Error(
-        "Your account has no newsroom role yet. Run supabase/fix-has-role-now.sql (promotes your email to super_admin), then sign out and sign in again.",
-      );
+      throw new Error("Your account does not have newsroom access. Contact an administrator.");
     }
 
     return { userId: data.user.id, roles: roleList };

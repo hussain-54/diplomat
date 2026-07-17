@@ -29,7 +29,13 @@ import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminWarMonitorRouteImport } from './routes/_authenticated/admin.war-monitor'
 import { Route as AuthenticatedAdminVideosRouteImport } from './routes/_authenticated/admin.videos'
 import { Route as AuthenticatedAdminTickerRouteImport } from './routes/_authenticated/admin.ticker'
+import { Route as AuthenticatedAdminStaffRouteImport } from './routes/_authenticated/admin.staff'
+import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin.settings'
+import { Route as AuthenticatedAdminMediaRouteImport } from './routes/_authenticated/admin.media'
 import { Route as AuthenticatedAdminEmbassiesRouteImport } from './routes/_authenticated/admin.embassies'
+import { Route as AuthenticatedAdminCommentsRouteImport } from './routes/_authenticated/admin.comments'
+import { Route as AuthenticatedAdminCategoriesRouteImport } from './routes/_authenticated/admin.categories'
+import { Route as AuthenticatedAdminAnalyticsRouteImport } from './routes/_authenticated/admin.analytics'
 import { Route as AuthenticatedAdminAmbassadorsRouteImport } from './routes/_authenticated/admin.ambassadors'
 import { Route as AuthenticatedAdminAccessRouteImport } from './routes/_authenticated/admin.access'
 import { Route as AuthenticatedAdminArticlesIndexRouteImport } from './routes/_authenticated/admin.articles.index'
@@ -137,10 +143,44 @@ const AuthenticatedAdminTickerRoute =
     path: '/ticker',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminStaffRoute = AuthenticatedAdminStaffRouteImport.update({
+  id: '/staff',
+  path: '/staff',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
+const AuthenticatedAdminSettingsRoute =
+  AuthenticatedAdminSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminMediaRoute = AuthenticatedAdminMediaRouteImport.update({
+  id: '/media',
+  path: '/media',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
 const AuthenticatedAdminEmbassiesRoute =
   AuthenticatedAdminEmbassiesRouteImport.update({
     id: '/embassies',
     path: '/embassies',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminCommentsRoute =
+  AuthenticatedAdminCommentsRouteImport.update({
+    id: '/comments',
+    path: '/comments',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminCategoriesRoute =
+  AuthenticatedAdminCategoriesRouteImport.update({
+    id: '/categories',
+    path: '/categories',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
+const AuthenticatedAdminAnalyticsRoute =
+  AuthenticatedAdminAnalyticsRouteImport.update({
+    id: '/analytics',
+    path: '/analytics',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
 const AuthenticatedAdminAmbassadorsRoute =
@@ -186,7 +226,13 @@ export interface FileRoutesByFullPath {
   '/section/$slug': typeof SectionSlugRoute
   '/admin/access': typeof AuthenticatedAdminAccessRoute
   '/admin/ambassadors': typeof AuthenticatedAdminAmbassadorsRoute
+  '/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
+  '/admin/categories': typeof AuthenticatedAdminCategoriesRoute
+  '/admin/comments': typeof AuthenticatedAdminCommentsRoute
   '/admin/embassies': typeof AuthenticatedAdminEmbassiesRoute
+  '/admin/media': typeof AuthenticatedAdminMediaRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/staff': typeof AuthenticatedAdminStaffRoute
   '/admin/ticker': typeof AuthenticatedAdminTickerRoute
   '/admin/videos': typeof AuthenticatedAdminVideosRoute
   '/admin/war-monitor': typeof AuthenticatedAdminWarMonitorRoute
@@ -211,7 +257,13 @@ export interface FileRoutesByTo {
   '/section/$slug': typeof SectionSlugRoute
   '/admin/access': typeof AuthenticatedAdminAccessRoute
   '/admin/ambassadors': typeof AuthenticatedAdminAmbassadorsRoute
+  '/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
+  '/admin/categories': typeof AuthenticatedAdminCategoriesRoute
+  '/admin/comments': typeof AuthenticatedAdminCommentsRoute
   '/admin/embassies': typeof AuthenticatedAdminEmbassiesRoute
+  '/admin/media': typeof AuthenticatedAdminMediaRoute
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/staff': typeof AuthenticatedAdminStaffRoute
   '/admin/ticker': typeof AuthenticatedAdminTickerRoute
   '/admin/videos': typeof AuthenticatedAdminVideosRoute
   '/admin/war-monitor': typeof AuthenticatedAdminWarMonitorRoute
@@ -239,7 +291,13 @@ export interface FileRoutesById {
   '/section/$slug': typeof SectionSlugRoute
   '/_authenticated/admin/access': typeof AuthenticatedAdminAccessRoute
   '/_authenticated/admin/ambassadors': typeof AuthenticatedAdminAmbassadorsRoute
+  '/_authenticated/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
+  '/_authenticated/admin/categories': typeof AuthenticatedAdminCategoriesRoute
+  '/_authenticated/admin/comments': typeof AuthenticatedAdminCommentsRoute
   '/_authenticated/admin/embassies': typeof AuthenticatedAdminEmbassiesRoute
+  '/_authenticated/admin/media': typeof AuthenticatedAdminMediaRoute
+  '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/_authenticated/admin/staff': typeof AuthenticatedAdminStaffRoute
   '/_authenticated/admin/ticker': typeof AuthenticatedAdminTickerRoute
   '/_authenticated/admin/videos': typeof AuthenticatedAdminVideosRoute
   '/_authenticated/admin/war-monitor': typeof AuthenticatedAdminWarMonitorRoute
@@ -267,7 +325,13 @@ export interface FileRouteTypes {
     | '/section/$slug'
     | '/admin/access'
     | '/admin/ambassadors'
+    | '/admin/analytics'
+    | '/admin/categories'
+    | '/admin/comments'
     | '/admin/embassies'
+    | '/admin/media'
+    | '/admin/settings'
+    | '/admin/staff'
     | '/admin/ticker'
     | '/admin/videos'
     | '/admin/war-monitor'
@@ -292,7 +356,13 @@ export interface FileRouteTypes {
     | '/section/$slug'
     | '/admin/access'
     | '/admin/ambassadors'
+    | '/admin/analytics'
+    | '/admin/categories'
+    | '/admin/comments'
     | '/admin/embassies'
+    | '/admin/media'
+    | '/admin/settings'
+    | '/admin/staff'
     | '/admin/ticker'
     | '/admin/videos'
     | '/admin/war-monitor'
@@ -319,7 +389,13 @@ export interface FileRouteTypes {
     | '/section/$slug'
     | '/_authenticated/admin/access'
     | '/_authenticated/admin/ambassadors'
+    | '/_authenticated/admin/analytics'
+    | '/_authenticated/admin/categories'
+    | '/_authenticated/admin/comments'
     | '/_authenticated/admin/embassies'
+    | '/_authenticated/admin/media'
+    | '/_authenticated/admin/settings'
+    | '/_authenticated/admin/staff'
     | '/_authenticated/admin/ticker'
     | '/_authenticated/admin/videos'
     | '/_authenticated/admin/war-monitor'
@@ -488,11 +564,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminTickerRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/staff': {
+      id: '/_authenticated/admin/staff'
+      path: '/staff'
+      fullPath: '/admin/staff'
+      preLoaderRoute: typeof AuthenticatedAdminStaffRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/settings': {
+      id: '/_authenticated/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/media': {
+      id: '/_authenticated/admin/media'
+      path: '/media'
+      fullPath: '/admin/media'
+      preLoaderRoute: typeof AuthenticatedAdminMediaRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/embassies': {
       id: '/_authenticated/admin/embassies'
       path: '/embassies'
       fullPath: '/admin/embassies'
       preLoaderRoute: typeof AuthenticatedAdminEmbassiesRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/comments': {
+      id: '/_authenticated/admin/comments'
+      path: '/comments'
+      fullPath: '/admin/comments'
+      preLoaderRoute: typeof AuthenticatedAdminCommentsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/categories': {
+      id: '/_authenticated/admin/categories'
+      path: '/categories'
+      fullPath: '/admin/categories'
+      preLoaderRoute: typeof AuthenticatedAdminCategoriesRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
+    '/_authenticated/admin/analytics': {
+      id: '/_authenticated/admin/analytics'
+      path: '/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AuthenticatedAdminAnalyticsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
     '/_authenticated/admin/ambassadors': {
@@ -529,7 +647,13 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAccessRoute: typeof AuthenticatedAdminAccessRoute
   AuthenticatedAdminAmbassadorsRoute: typeof AuthenticatedAdminAmbassadorsRoute
+  AuthenticatedAdminAnalyticsRoute: typeof AuthenticatedAdminAnalyticsRoute
+  AuthenticatedAdminCategoriesRoute: typeof AuthenticatedAdminCategoriesRoute
+  AuthenticatedAdminCommentsRoute: typeof AuthenticatedAdminCommentsRoute
   AuthenticatedAdminEmbassiesRoute: typeof AuthenticatedAdminEmbassiesRoute
+  AuthenticatedAdminMediaRoute: typeof AuthenticatedAdminMediaRoute
+  AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
+  AuthenticatedAdminStaffRoute: typeof AuthenticatedAdminStaffRoute
   AuthenticatedAdminTickerRoute: typeof AuthenticatedAdminTickerRoute
   AuthenticatedAdminVideosRoute: typeof AuthenticatedAdminVideosRoute
   AuthenticatedAdminWarMonitorRoute: typeof AuthenticatedAdminWarMonitorRoute
@@ -541,7 +665,13 @@ interface AuthenticatedAdminRouteChildren {
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAccessRoute: AuthenticatedAdminAccessRoute,
   AuthenticatedAdminAmbassadorsRoute: AuthenticatedAdminAmbassadorsRoute,
+  AuthenticatedAdminAnalyticsRoute: AuthenticatedAdminAnalyticsRoute,
+  AuthenticatedAdminCategoriesRoute: AuthenticatedAdminCategoriesRoute,
+  AuthenticatedAdminCommentsRoute: AuthenticatedAdminCommentsRoute,
   AuthenticatedAdminEmbassiesRoute: AuthenticatedAdminEmbassiesRoute,
+  AuthenticatedAdminMediaRoute: AuthenticatedAdminMediaRoute,
+  AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
+  AuthenticatedAdminStaffRoute: AuthenticatedAdminStaffRoute,
   AuthenticatedAdminTickerRoute: AuthenticatedAdminTickerRoute,
   AuthenticatedAdminVideosRoute: AuthenticatedAdminVideosRoute,
   AuthenticatedAdminWarMonitorRoute: AuthenticatedAdminWarMonitorRoute,

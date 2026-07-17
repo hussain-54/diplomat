@@ -1,6 +1,7 @@
--- Quick fix for: permission denied for function has_role
--- Run this entire script in Supabase SQL Editor.
+-- Production hardening after the emergency publishing fixes.
+-- This migration is environment-neutral: it never promotes a named user.
 
+-- Keep role helpers out of the public API surface.
 REVOKE ALL ON SCHEMA app_hidden FROM PUBLIC;
 GRANT USAGE ON SCHEMA app_hidden TO authenticated, service_role;
 
@@ -9,7 +10,51 @@ REVOKE ALL ON FUNCTION app_hidden.can_edit_section(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app_hidden.has_role(uuid, public.app_role) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION app_hidden.can_edit_section(uuid, uuid) TO authenticated, service_role;
 
--- Recreate publish RPC without calling has_role (uses direct table checks)
+-- Public visitors should only evaluate the simple active-ticker policy.
+DROP POLICY IF EXISTS "ticker public read active" ON public.ticker_items;
+CREATE POLICY "ticker public read active"
+ON public.ticker_items
+FOR SELECT
+USING (active);
+
+DROP POLICY IF EXISTS "editors read all ticker" ON public.ticker_items;
+CREATE POLICY "editors read all ticker"
+ON public.ticker_items
+FOR SELECT
+TO authenticated
+USING (
+  app_hidden.has_role(auth.uid(), 'super_admin')
+  OR app_hidden.has_role(auth.uid(), 'section_editor')
+);
+
+DROP POLICY IF EXISTS "authors view own drafts" ON public.articles;
+CREATE POLICY "authors view own drafts"
+ON public.articles
+FOR SELECT
+TO authenticated
+USING (
+  author_id = auth.uid()
+  OR app_hidden.has_role(auth.uid(), 'super_admin')
+  OR (
+    section_id IS NOT NULL
+    AND app_hidden.can_edit_section(auth.uid(), section_id)
+  )
+);
+
+-- Make storage setup reproducible from migrations and enforce upload limits.
+INSERT INTO storage.buckets (id, name, public)
+VALUES
+  ('article-hero', 'article-hero', true),
+  ('avatars', 'avatars', true)
+ON CONFLICT (id) DO NOTHING;
+
+UPDATE storage.buckets
+SET public = true,
+    file_size_limit = 5242880,
+    allowed_mime_types = ARRAY['image/jpeg','image/png','image/webp','image/gif']
+WHERE id IN ('article-hero', 'avatars');
+
+-- Final canonical publishing RPC, independent of hidden helper execution.
 CREATE OR REPLACE FUNCTION public.admin_upsert_article(
   p_title text,
   p_section_id uuid,
@@ -31,7 +76,6 @@ DECLARE
   uid uuid := auth.uid();
   result public.articles;
   v_slug text;
-  v_published_at timestamptz;
   existing public.articles;
   can_publish boolean;
   can_edit boolean;
@@ -39,11 +83,16 @@ DECLARE
   is_section_editor boolean;
 BEGIN
   IF uid IS NULL THEN
-    RAISE EXCEPTION 'Unauthorized';
+    RAISE EXCEPTION 'Unauthorized' USING ERRCODE = '42501';
   END IF;
-
+  IF NULLIF(trim(COALESCE(p_title, '')), '') IS NULL THEN
+    RAISE EXCEPTION 'Title is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_section_id IS NULL THEN
+    RAISE EXCEPTION 'Section is required' USING ERRCODE = '22023';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = uid) THEN
-    RAISE EXCEPTION 'No newsroom role assigned';
+    RAISE EXCEPTION 'No newsroom role assigned' USING ERRCODE = '42501';
   END IF;
 
   INSERT INTO public.profiles (id, name)
@@ -56,7 +105,6 @@ BEGIN
   is_section_editor := EXISTS (
     SELECT 1 FROM public.user_roles WHERE user_id = uid AND role = 'section_editor'
   );
-
   can_publish :=
     is_super
     OR is_section_editor
@@ -66,7 +114,7 @@ BEGIN
     );
 
   IF p_status = 'published' AND NOT can_publish THEN
-    RAISE EXCEPTION 'Contributors cannot publish. Need super_admin or section_editor.';
+    RAISE EXCEPTION 'Publishing permission required' USING ERRCODE = '42501';
   END IF;
 
   v_slug := NULLIF(trim(COALESCE(p_slug, '')), '');
@@ -81,7 +129,7 @@ BEGIN
   IF p_id IS NOT NULL THEN
     SELECT * INTO existing FROM public.articles WHERE id = p_id;
     IF NOT FOUND THEN
-      RAISE EXCEPTION 'Article not found';
+      RAISE EXCEPTION 'Article not found' USING ERRCODE = 'P0002';
     END IF;
 
     can_edit :=
@@ -91,16 +139,14 @@ BEGIN
         SELECT 1 FROM public.editor_section_access
         WHERE profile_id = uid AND section_id = COALESCE(p_section_id, existing.section_id)
       )
-      OR (existing.author_id = uid AND existing.status <> 'published' AND p_status <> 'published');
-
+      OR (
+        existing.author_id = uid
+        AND existing.status <> 'published'
+        AND p_status <> 'published'
+      );
     IF NOT can_edit THEN
-      RAISE EXCEPTION 'You cannot edit this article';
+      RAISE EXCEPTION 'Editing permission required' USING ERRCODE = '42501';
     END IF;
-
-    v_published_at := CASE
-      WHEN p_status = 'published' THEN COALESCE(existing.published_at, now())
-      ELSE NULL
-    END;
 
     UPDATE public.articles SET
       title = trim(p_title),
@@ -112,7 +158,10 @@ BEGIN
       hero_image_url = p_hero_image_url,
       status = p_status,
       slug = v_slug,
-      published_at = v_published_at,
+      published_at = CASE
+        WHEN p_status = 'published' THEN COALESCE(existing.published_at, now())
+        ELSE NULL
+      END,
       updated_at = now()
     WHERE id = p_id
     RETURNING * INTO result;
@@ -133,13 +182,46 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.admin_upsert_article(
+REVOKE ALL ON FUNCTION public.admin_upsert_article(
   text, uuid, public.article_status, uuid, text, text, text, public.badge_type, text, text
-) OWNER TO postgres;
-
+) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.admin_upsert_article(
   text, uuid, public.article_status, uuid, text, text, text, public.badge_type, text, text
 ) TO authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.prevent_last_super_admin_removal()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  removing_super_admin boolean;
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    removing_super_admin := OLD.role = 'super_admin';
+  ELSE
+    removing_super_admin := OLD.role = 'super_admin' AND NEW.role <> 'super_admin';
+  END IF;
+
+  IF removing_super_admin AND NOT EXISTS (
+       SELECT 1
+       FROM public.user_roles
+       WHERE role = 'super_admin' AND id <> OLD.id
+     )
+  THEN
+    RAISE EXCEPTION 'At least one super admin is required' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS protect_last_super_admin ON public.user_roles;
+CREATE TRIGGER protect_last_super_admin
+BEFORE DELETE OR UPDATE OF role ON public.user_roles
+FOR EACH ROW EXECUTE FUNCTION public.prevent_last_super_admin_removal();
+
 NOTIFY pgrst, 'reload schema';
-NOTIFY pgrst, 'reload config';

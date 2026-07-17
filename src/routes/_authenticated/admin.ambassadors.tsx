@@ -2,8 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteAmbassador, listAmbassadors, upsertAmbassador, uploadHeroImage } from "@/lib/admin.functions";
 import { useState } from "react";
+import { requireEditorRoute } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/admin/ambassadors")({
+  beforeLoad: ({ context }) => requireEditorRoute(context.roles),
   component: Page,
 });
 
@@ -88,7 +90,7 @@ function Page() {
               </div>
               <div className="md:col-span-2">
                 <label className="eyebrow text-muted-foreground">Avatar</label>
-                {editing.avatar_url && <img src={editing.avatar_url} alt="" className="my-2 h-24 w-24 rounded-sm object-cover" />}
+                {editing.avatar_url && <img src={editing.avatar_url} alt={editing.name || "Ambassador"} className="my-2 h-24 w-24 rounded-sm object-cover" />}
                 <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAvatar(f); }} />
               </div>
               <label className="md:col-span-2 flex items-center gap-2 text-sm">

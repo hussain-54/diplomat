@@ -63,7 +63,7 @@ export function ArticleCard({
         <div className="mb-3 aspect-[16/9] overflow-hidden bg-muted">
           <img
             src={article.hero_image_url}
-            alt=""
+            alt={article.title}
             loading="lazy"
             className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />

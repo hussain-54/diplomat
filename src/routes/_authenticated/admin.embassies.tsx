@@ -2,8 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteEmbassy, listEmbassies, upsertEmbassy } from "@/lib/admin.functions";
 import { useState } from "react";
+import { requireEditorRoute } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/admin/embassies")({
+  beforeLoad: ({ context }) => requireEditorRoute(context.roles),
   component: Page,
 });
 

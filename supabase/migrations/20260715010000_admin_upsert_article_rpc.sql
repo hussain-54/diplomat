@@ -1,4 +1,4 @@
--- Deploy admin_upsert_article RPC (same body as fix-publish-now.sql section 3)
+-- Deploy the initial admin_upsert_article RPC.
 CREATE OR REPLACE FUNCTION public.admin_upsert_article(
   p_title text,
   p_section_id uuid,

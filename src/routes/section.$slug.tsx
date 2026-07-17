@@ -14,13 +14,21 @@ export const Route = createFileRoute("/section/$slug")({
   loader: async ({ context, params }) => {
     const data = await context.queryClient.ensureQueryData(qo(params.slug));
     if (!data.section) throw notFound();
+    return data;
   },
-  head: ({ params }) => ({
-    meta: [
-      { title: `${params.slug} — Diplomacy Lens` },
-      { name: "description", content: `${params.slug} coverage on Diplomacy Lens.` },
-    ],
-  }),
+  head: ({ loaderData }) => {
+    const name = loaderData?.section?.name ?? "Section";
+    const title = `${name} — Diplomacy Lens`;
+    const description = `Latest ${name} coverage from Diplomacy Lens.`;
+    return {
+      meta: [
+        { title },
+        { name: "description", content: description },
+        { property: "og:title", content: title },
+        { property: "og:description", content: description },
+      ],
+    };
+  },
   component: SectionPage,
 });
 

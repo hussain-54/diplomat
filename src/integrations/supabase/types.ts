@@ -14,6 +14,32 @@ export type Database = {
   }
   public: {
     Tables: {
+      article_daily_metrics: {
+        Row: {
+          article_id: string
+          metric_date: string
+          views: number
+        }
+        Insert: {
+          article_id: string
+          metric_date?: string
+          views?: number
+        }
+        Update: {
+          article_id?: string
+          metric_date?: string
+          views?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_daily_metrics_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ambassadors: {
         Row: {
           avatar_url: string | null
@@ -161,6 +187,57 @@ export type Database = {
           },
         ]
       }
+      comments: {
+        Row: {
+          article_id: string
+          author_email: string
+          author_name: string
+          body: string
+          created_at: string
+          id: string
+          moderated_at: string | null
+          moderated_by: string | null
+          status: Database["public"]["Enums"]["comment_status"]
+        }
+        Insert: {
+          article_id: string
+          author_email: string
+          author_name: string
+          body: string
+          created_at?: string
+          id?: string
+          moderated_at?: string | null
+          moderated_by?: string | null
+          status?: Database["public"]["Enums"]["comment_status"]
+        }
+        Update: {
+          article_id?: string
+          author_email?: string
+          author_name?: string
+          body?: string
+          created_at?: string
+          id?: string
+          moderated_at?: string | null
+          moderated_by?: string | null
+          status?: Database["public"]["Enums"]["comment_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_moderated_by_fkey"
+            columns: ["moderated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       editor_section_access: {
         Row: {
           created_at: string
@@ -231,6 +308,100 @@ export type Database = {
             columns: ["ambassador_id"]
             isOneToOne: false
             referencedRelation: "ambassadors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      media_assets: {
+        Row: {
+          alt_text: string | null
+          bucket: string
+          created_at: string
+          file_name: string
+          id: string
+          mime_type: string
+          object_path: string
+          public_url: string
+          size_bytes: number
+          uploaded_by: string | null
+        }
+        Insert: {
+          alt_text?: string | null
+          bucket: string
+          created_at?: string
+          file_name: string
+          id?: string
+          mime_type: string
+          object_path: string
+          public_url: string
+          size_bytes: number
+          uploaded_by?: string | null
+        }
+        Update: {
+          alt_text?: string | null
+          bucket?: string
+          created_at?: string
+          file_name?: string
+          id?: string
+          mime_type?: string
+          object_path?: string
+          public_url?: string
+          size_bytes?: number
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_assets_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      newsroom_settings: {
+        Row: {
+          comments_enabled: boolean
+          contact_email: string | null
+          default_article_status: Database["public"]["Enums"]["article_status"]
+          id: boolean
+          publication_name: string
+          short_name: string
+          tagline: string
+          timezone: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          comments_enabled?: boolean
+          contact_email?: string | null
+          default_article_status?: Database["public"]["Enums"]["article_status"]
+          id?: boolean
+          publication_name?: string
+          short_name?: string
+          tagline?: string
+          timezone?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          comments_enabled?: boolean
+          contact_email?: string | null
+          default_article_status?: Database["public"]["Enums"]["article_status"]
+          id?: boolean
+          publication_name?: string
+          short_name?: string
+          tagline?: string
+          timezone?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "newsroom_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -435,6 +606,12 @@ export type Database = {
         }
         Returns: Database["public"]["Tables"]["articles"]["Row"]
       }
+      increment_article_view: {
+        Args: {
+          p_article_id: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       ambassador_status: "active" | "recalled" | "vacant"
@@ -448,6 +625,7 @@ export type Database = {
         | "opinion"
         | "premium"
         | "alert"
+      comment_status: "pending" | "approved" | "rejected" | "spam"
       embassy_status: "open" | "limited" | "closed" | "alert"
       war_status: "active" | "ceasefire" | "tension"
     }
@@ -589,6 +767,7 @@ export const Constants = {
         "premium",
         "alert",
       ],
+      comment_status: ["pending", "approved", "rejected", "spam"],
       embassy_status: ["open", "limited", "closed", "alert"],
       war_status: ["active", "ceasefire", "tension"],
     },

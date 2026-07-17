@@ -138,3 +138,51 @@ export const getLatestArticles = async () => {
   if (error) throw toAppError(error);
   return data ?? [];
 };
+
+export const trackArticleView = async ({ data }: { data: { articleId: string } }) => {
+  const { error } = await supabase.rpc("increment_article_view", {
+    p_article_id: data.articleId,
+  });
+  if (error && !/increment_article_view|schema cache|PGRST/i.test(error.message)) {
+    console.error("Article view tracking failed", error);
+  }
+  return { ok: !error };
+};
+
+export const getArticleComments = async ({ data }: { data: { articleId: string } }) => {
+  const { data: comments, error } = await supabase
+    .from("comments")
+    .select("id,author_name,body,created_at")
+    .eq("article_id", data.articleId)
+    .eq("status", "approved")
+    .order("created_at", { ascending: true })
+    .limit(200);
+  if (error) throw toAppError(error);
+  return comments ?? [];
+};
+
+export const submitArticleComment = async ({
+  data,
+}: {
+  data: { articleId: string; authorName: string; authorEmail: string; body: string };
+}) => {
+  const { error } = await supabase.from("comments").insert({
+    article_id: data.articleId,
+    author_name: data.authorName.trim(),
+    author_email: data.authorEmail.trim().toLowerCase(),
+    body: data.body.trim(),
+    status: "pending",
+  });
+  if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+export const getPublicNewsroomSettings = async () => {
+  const { data, error } = await supabase
+    .from("newsroom_settings")
+    .select("publication_name,short_name,tagline,comments_enabled")
+    .eq("id", true)
+    .maybeSingle();
+  if (error && !/newsroom_settings|schema cache|PGRST/i.test(error.message)) throw toAppError(error);
+  return data;
+};

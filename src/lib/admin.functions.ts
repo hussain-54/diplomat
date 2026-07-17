@@ -36,6 +36,14 @@ const requireNewsroomRole = async () => {
 
 const hasEditorRole = (roles: string[]) => roles.some((r) => (EDITOR_ROLES as readonly string[]).includes(r));
 
+const requireEditorRole = async () => {
+  const newsroom = await requireNewsroomRole();
+  if (!hasEditorRole(newsroom.roles)) {
+    throw new Error("This newsroom section requires an editor or super-admin role.");
+  }
+  return newsroom;
+};
+
 export const getMe = async () => {
   const user = await checkAuth();
   const userId = user.id;
@@ -170,9 +178,7 @@ export const upsertArticle = async ({
       .maybeSingle();
     if (error) throw toAppError(error);
     if (!r) {
-      throw new Error(
-        "Update blocked by permissions. Run supabase/fix-publish-now.sql, then sign out/in.",
-      );
+      throw new Error("The article could not be updated with your current permissions.");
     }
     return r;
   }
@@ -194,9 +200,7 @@ export const upsertArticle = async ({
   const { data: r, error } = await supabase.from("articles").insert(payload).select().maybeSingle();
   if (error) throw toAppError(error);
   if (!r) {
-    throw new Error(
-      "Create blocked by permissions. Run supabase/fix-publish-now.sql, then sign out/in.",
-    );
+    throw new Error("The article could not be created with your current permissions.");
   }
   return r;
 };
@@ -210,7 +214,7 @@ export const deleteArticle = async ({ data }: { data: { id: string } }) => {
 
 // AMBASSADORS
 export const listAmbassadors = async () => {
-  await checkAuth();
+  await requireEditorRole();
   const { data, error } = await supabase.from("ambassadors").select("*").order("name");
   if (error) throw toAppError(error);
   return data ?? [];
@@ -232,7 +236,7 @@ export const upsertAmbassador = async ({
     featured?: boolean;
   };
 }) => {
-  await checkAuth();
+  await requireEditorRole();
   const { id, ...payload } = data;
   if (id) {
     const { error } = await supabase.from("ambassadors").update(payload).eq("id", id);
@@ -245,7 +249,7 @@ export const upsertAmbassador = async ({
 };
 
 export const deleteAmbassador = async ({ data }: { data: { id: string } }) => {
-  await checkAuth();
+  await requireEditorRole();
   const { error } = await supabase.from("ambassadors").delete().eq("id", data.id);
   if (error) throw toAppError(error);
   return { ok: true };
@@ -253,7 +257,7 @@ export const deleteAmbassador = async ({ data }: { data: { id: string } }) => {
 
 // EMBASSIES
 export const listEmbassies = async () => {
-  await checkAuth();
+  await requireEditorRole();
   const { data, error } = await supabase.from("embassies").select("*").order("country");
   if (error) throw toAppError(error);
   return data ?? [];
@@ -270,7 +274,7 @@ export const upsertEmbassy = async ({
     ambassador_id?: string | null;
   };
 }) => {
-  await checkAuth();
+  await requireEditorRole();
   const { id, ...payload } = data;
   if (id) {
     const { error } = await supabase.from("embassies").update(payload).eq("id", id);
@@ -283,7 +287,7 @@ export const upsertEmbassy = async ({
 };
 
 export const deleteEmbassy = async ({ data }: { data: { id: string } }) => {
-  await checkAuth();
+  await requireEditorRole();
   const { error } = await supabase.from("embassies").delete().eq("id", data.id);
   if (error) throw toAppError(error);
   return { ok: true };
@@ -291,7 +295,7 @@ export const deleteEmbassy = async ({ data }: { data: { id: string } }) => {
 
 // WAR MONITOR
 export const listWar = async () => {
-  await checkAuth();
+  await requireEditorRole();
   const { data, error } = await supabase
     .from("war_monitor_items")
     .select("*")
@@ -311,7 +315,7 @@ export const upsertWar = async ({
     status: "active" | "ceasefire" | "tension";
   };
 }) => {
-  await checkAuth();
+  await requireEditorRole();
   const { id, ...payload } = data;
   if (id) {
     const { error } = await supabase.from("war_monitor_items").update(payload).eq("id", id);
@@ -324,7 +328,7 @@ export const upsertWar = async ({
 };
 
 export const deleteWar = async ({ data }: { data: { id: string } }) => {
-  await checkAuth();
+  await requireEditorRole();
   const { error } = await supabase.from("war_monitor_items").delete().eq("id", data.id);
   if (error) throw toAppError(error);
   return { ok: true };
@@ -332,7 +336,7 @@ export const deleteWar = async ({ data }: { data: { id: string } }) => {
 
 // TICKER
 export const listTicker = async () => {
-  await checkAuth();
+  await requireEditorRole();
   const { data, error } = await supabase.from("ticker_items").select("*").order("sort_order");
   if (error) throw toAppError(error);
   return data ?? [];
@@ -343,7 +347,7 @@ export const upsertTicker = async ({
 }: {
   data: { id?: string; text: string; tag?: string; active: boolean; sort_order: number };
 }) => {
-  await checkAuth();
+  await requireEditorRole();
   const { id, ...payload } = data;
   if (id) {
     const { error } = await supabase.from("ticker_items").update(payload).eq("id", id);
@@ -356,7 +360,7 @@ export const upsertTicker = async ({
 };
 
 export const deleteTicker = async ({ data }: { data: { id: string } }) => {
-  await checkAuth();
+  await requireEditorRole();
   const { error } = await supabase.from("ticker_items").delete().eq("id", data.id);
   if (error) throw toAppError(error);
   return { ok: true };
@@ -364,7 +368,7 @@ export const deleteTicker = async ({ data }: { data: { id: string } }) => {
 
 // VIDEOS
 export const listVideos = async () => {
-  await checkAuth();
+  await requireEditorRole();
   const { data, error } = await supabase.from("videos").select("*").order("published_at", { ascending: false });
   if (error) throw toAppError(error);
   return data ?? [];
@@ -382,7 +386,7 @@ export const upsertVideo = async ({
     video_url?: string;
   };
 }) => {
-  await checkAuth();
+  await requireEditorRole();
   const { id, ...payload } = data;
   if (id) {
     const { error } = await supabase.from("videos").update(payload).eq("id", id);
@@ -395,7 +399,7 @@ export const upsertVideo = async ({
 };
 
 export const deleteVideo = async ({ data }: { data: { id: string } }) => {
-  await checkAuth();
+  await requireEditorRole();
   const { error } = await supabase.from("videos").delete().eq("id", data.id);
   if (error) throw toAppError(error);
   return { ok: true };
@@ -479,10 +483,18 @@ export const uploadHeroImage = async ({
 }: {
   data: { fileName: string; contentType: string; base64: string; bucket?: "article-hero" | "avatars" };
 }) => {
-  await checkAuth();
+  const user = await checkAuth();
   const bucket = data.bucket ?? "article-hero";
+  if (!data.contentType.startsWith("image/")) {
+    throw new Error("Only image files can be uploaded.");
+  }
   const bytes = Uint8Array.from(atob(data.base64), (c) => c.charCodeAt(0));
-  const path = `${Date.now()}-${data.fileName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+  if (bytes.byteLength > 5 * 1024 * 1024) {
+    throw new Error("Images must be 5 MB or smaller.");
+  }
+  const safeName = data.fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const fileName = `${Date.now()}-${safeName}`;
+  const path = bucket === "avatars" ? `${user.id}/${fileName}` : fileName;
   const { error } = await supabase.storage.from(bucket).upload(path, bytes, {
     contentType: data.contentType,
     upsert: false,
@@ -490,5 +502,211 @@ export const uploadHeroImage = async ({
   if (error) throw toAppError(error);
   const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
   if (!pub?.publicUrl) throw new Error("Upload succeeded but public URL could not be created.");
+
+  const { error: assetError } = await supabase.from("media_assets").insert({
+    bucket,
+    object_path: path,
+    public_url: pub.publicUrl,
+    file_name: data.fileName,
+    mime_type: data.contentType,
+    size_bytes: bytes.byteLength,
+    uploaded_by: user.id,
+  });
+  if (assetError && !/media_assets|schema cache|PGRST/i.test(assetError.message)) {
+    console.error("Image uploaded but media indexing failed", assetError);
+  }
+
   return { path, url: pub.publicUrl };
+};
+
+// CATEGORIES
+export const listCategories = async () => {
+  await requireNewsroomRole();
+  const { data, error } = await supabase
+    .from("sections")
+    .select("*, articles(count)")
+    .order("sort_order")
+    .order("name");
+  if (error) throw toAppError(error);
+  return data ?? [];
+};
+
+export const upsertCategory = async ({
+  data,
+}: {
+  data: { id?: string; name: string; slug?: string; color?: string | null; sort_order?: number };
+}) => {
+  await requireSuperAdmin();
+  const payload = {
+    name: data.name.trim(),
+    slug: data.slug?.trim() || slugify(data.name),
+    color: data.color || null,
+    sort_order: data.sort_order ?? 0,
+  };
+  if (!payload.name) throw new Error("Category name is required.");
+  const result = data.id
+    ? await supabase.from("sections").update(payload).eq("id", data.id)
+    : await supabase.from("sections").insert(payload);
+  if (result.error) throw toAppError(result.error);
+  return { ok: true };
+};
+
+export const deleteCategory = async ({ data }: { data: { id: string } }) => {
+  await requireSuperAdmin();
+  const { count, error: countError } = await supabase
+    .from("articles")
+    .select("id", { count: "exact", head: true })
+    .eq("section_id", data.id);
+  if (countError) throw toAppError(countError);
+  if (count) throw new Error("Move or delete articles in this category before deleting it.");
+  const { error } = await supabase.from("sections").delete().eq("id", data.id);
+  if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+// STAFF
+export const updateStaffProfile = async ({
+  data,
+}: {
+  data: { id: string; name: string; bio?: string | null };
+}) => {
+  await requireSuperAdmin();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ name: data.name.trim() || null, bio: data.bio?.trim() || null })
+    .eq("id", data.id);
+  if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+// MEDIA LIBRARY
+export const listMediaAssets = async () => {
+  await requireNewsroomRole();
+  const { data, error } = await supabase
+    .from("media_assets")
+    .select("*, profiles(name)")
+    .order("created_at", { ascending: false })
+    .limit(300);
+  if (error) throw toAppError(error);
+  return data ?? [];
+};
+
+export const updateMediaAsset = async ({
+  data,
+}: {
+  data: { id: string; alt_text: string };
+}) => {
+  await requireNewsroomRole();
+  const { error } = await supabase
+    .from("media_assets")
+    .update({ alt_text: data.alt_text.trim() || null })
+    .eq("id", data.id);
+  if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+export const deleteMediaAsset = async ({ data }: { data: { id: string } }) => {
+  await requireNewsroomRole();
+  const { data: asset, error: readError } = await supabase
+    .from("media_assets")
+    .select("bucket, object_path")
+    .eq("id", data.id)
+    .single();
+  if (readError) throw toAppError(readError);
+  const { error: storageError } = await supabase.storage
+    .from(asset.bucket)
+    .remove([asset.object_path]);
+  if (storageError) throw toAppError(storageError);
+  const { error } = await supabase.from("media_assets").delete().eq("id", data.id);
+  if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+// COMMENTS
+export const listComments = async () => {
+  await requireEditorRole();
+  const { data, error } = await supabase
+    .from("comments")
+    .select("*, articles(id,title,slug)")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) throw toAppError(error);
+  return data ?? [];
+};
+
+export const moderateComment = async ({
+  data,
+}: {
+  data: { id: string; status: Database["public"]["Enums"]["comment_status"] };
+}) => {
+  const { user } = await requireEditorRole();
+  const { error } = await supabase
+    .from("comments")
+    .update({
+      status: data.status,
+      moderated_by: user.id,
+      moderated_at: new Date().toISOString(),
+    })
+    .eq("id", data.id);
+  if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+export const deleteComment = async ({ data }: { data: { id: string } }) => {
+  await requireEditorRole();
+  const { error } = await supabase.from("comments").delete().eq("id", data.id);
+  if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+// ANALYTICS
+export const getAnalyticsOverview = async () => {
+  await requireEditorRole();
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - 29);
+  const date = since.toISOString().slice(0, 10);
+  const [metricsRes, articlesRes, commentsRes] = await Promise.all([
+    supabase
+      .from("article_daily_metrics")
+      .select("article_id,metric_date,views,articles(id,title,slug,sections(name))")
+      .gte("metric_date", date)
+      .order("metric_date"),
+    supabase
+      .from("articles")
+      .select("id,status,created_at,published_at,section_id,sections(name)")
+      .gte("created_at", since.toISOString()),
+    supabase.from("comments").select("id,status,created_at").gte("created_at", since.toISOString()),
+  ]);
+  if (metricsRes.error) throw toAppError(metricsRes.error);
+  if (articlesRes.error) throw toAppError(articlesRes.error);
+  if (commentsRes.error) throw toAppError(commentsRes.error);
+  return {
+    metrics: metricsRes.data ?? [],
+    articles: articlesRes.data ?? [],
+    comments: commentsRes.data ?? [],
+  };
+};
+
+// SETTINGS
+export const getNewsroomSettings = async () => {
+  await requireNewsroomRole();
+  const { data, error } = await supabase
+    .from("newsroom_settings")
+    .select("*")
+    .eq("id", true)
+    .single();
+  if (error) throw toAppError(error);
+  return data;
+};
+
+export const updateNewsroomSettings = async ({
+  data,
+}: {
+  data: Database["public"]["Tables"]["newsroom_settings"]["Update"];
+}) => {
+  await requireSuperAdmin();
+  const { id: _id, updated_at: _updatedAt, updated_by: _updatedBy, ...payload } = data;
+  const { error } = await supabase.from("newsroom_settings").update(payload).eq("id", true);
+  if (error) throw toAppError(error);
+  return { ok: true };
 };
