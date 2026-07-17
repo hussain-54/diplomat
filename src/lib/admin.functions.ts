@@ -80,7 +80,7 @@ export const listAdminArticles = async () => {
   await requirePermission("articles:view");
   const { data, error } = await supabase
     .from("articles")
-    .select("id,slug,title,status,badge_type,published_at,updated_at,section_id, sections(name,slug)")
+    .select("id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,created_at,section_id,author_id, sections(name,slug), author:profiles!articles_author_id_fkey(id,name)")
     .order("updated_at", { ascending: false })
     .limit(200);
   if (error) throw toAppError(error);
@@ -142,6 +142,7 @@ export const upsertArticle = async ({
     hero_image_url?: string;
     status: ArticleStatus;
     slug?: string;
+    scheduled_at?: string | null;
   };
 }) => {
   const { user, roles } = await requireNewsroomRole();
@@ -163,16 +164,23 @@ export const upsertArticle = async ({
   if (accessError) throw toAppError(accessError);
 
   const wantsPublish = data.status === "published";
+  const wantsRestrictedStatus = ["scheduled", "published", "archived"].includes(data.status);
   const isEditorialLeader = roles.some((role) =>
     ["super_admin", "editor_in_chief", "managing_editor"].includes(role),
   );
   const mayPublish =
     isEditorialLeader ||
     (hasPermission(roles, "articles:publish") && !!accessRows);
-  if (wantsPublish && !mayPublish) {
+  if (wantsRestrictedStatus && !mayPublish) {
     throw new Error(
-      "Contributors cannot publish. Save as Draft or In review, or ask a super admin to grant section_editor / super_admin.",
+      "Publishing, scheduling, or archiving requires publishing permission for this category.",
     );
+  }
+  if (
+    data.status === "scheduled" &&
+    (!data.scheduled_at || new Date(data.scheduled_at).getTime() <= Date.now())
+  ) {
+    throw new Error("Choose a future publication date and time.");
   }
 
   const slug = data.slug?.trim() || slugify(data.title);
@@ -190,6 +198,7 @@ export const upsertArticle = async ({
     p_hero_image_url: data.hero_image_url || null,
     p_status: data.status,
     p_slug: slug,
+    p_scheduled_at: data.scheduled_at ?? null,
   });
 
   if (!rpcError && viaRpc) return viaRpc;
@@ -208,9 +217,10 @@ export const upsertArticle = async ({
     if (existingError) throw toAppError(existingError);
     if (!existing) throw new Error("Article not found or you cannot edit it.");
 
-    const published_at = wantsPublish
-      ? (existing.published_at ?? new Date().toISOString())
-      : null;
+    const published_at =
+      wantsPublish || data.status === "archived"
+        ? (existing.published_at ?? (wantsPublish ? new Date().toISOString() : null))
+        : null;
 
     const payload = {
       title: data.title.trim(),
@@ -222,6 +232,7 @@ export const upsertArticle = async ({
       hero_image_url: data.hero_image_url || null,
       status: data.status,
       slug,
+      scheduled_at: data.status === "scheduled" ? (data.scheduled_at ?? null) : null,
       published_at,
     };
 
@@ -248,6 +259,7 @@ export const upsertArticle = async ({
     hero_image_url: data.hero_image_url || null,
     status: data.status,
     slug,
+    scheduled_at: data.status === "scheduled" ? (data.scheduled_at ?? null) : null,
     author_id: user.id,
     published_at: wantsPublish ? new Date().toISOString() : null,
   };
@@ -265,6 +277,95 @@ export const deleteArticle = async ({ data }: { data: { id: string } }) => {
   const { error } = await supabase.from("articles").delete().eq("id", data.id);
   if (error) throw toAppError(error);
   return { ok: true };
+};
+
+export const duplicateArticle = async ({ data }: { data: { id: string } }) => {
+  await requirePermission("articles:create");
+  const source = await getAdminArticle({ data });
+  if (!source) throw new Error("Article not found.");
+  return upsertArticle({
+    data: {
+      title: `${source.title} (Copy)`,
+      deck: source.deck ?? undefined,
+      body: source.body ?? undefined,
+      section_id: source.section_id ?? "",
+      region: source.region ?? undefined,
+      badge_type: source.badge_type,
+      hero_image_url: source.hero_image_url ?? undefined,
+      status: "draft",
+    },
+  });
+};
+
+export const bulkManageArticles = async ({
+  data,
+}: {
+  data: {
+    ids: string[];
+    action: "publish" | "archive" | "delete" | "reassign_category";
+    section_id?: string | null;
+  };
+}) => {
+  if (!data.ids.length) throw new Error("Select at least one article.");
+  const permission =
+    data.action === "delete"
+      ? "articles:delete"
+      : data.action === "reassign_category"
+        ? "articles:edit_all"
+        : "articles:publish";
+  await requirePermission(permission);
+  const { data: affected, error } = await supabase.rpc("admin_bulk_manage_articles", {
+    p_ids: data.ids,
+    p_action: data.action,
+    p_section_id: data.section_id ?? null,
+  });
+  if (error) throw toAppError(error);
+  return { affected: affected ?? 0 };
+};
+
+export const getArticleRevisions = async ({ data }: { data: { article_id: string } }) => {
+  await requirePermission("articles:view");
+  const { data: revisions, error } = await supabase
+    .from("article_revisions")
+    .select("*, changer:profiles!article_revisions_changed_by_fkey(name)")
+    .eq("article_id", data.article_id)
+    .order("version", { ascending: false })
+    .limit(50);
+  if (error) throw toAppError(error);
+  return revisions ?? [];
+};
+
+export const restoreArticleRevision = async ({
+  data,
+}: {
+  data: { article_id: string; revision_id: string };
+}) => {
+  const { data: revision, error } = await supabase
+    .from("article_revisions")
+    .select("snapshot")
+    .eq("id", data.revision_id)
+    .eq("article_id", data.article_id)
+    .single();
+  if (error) throw toAppError(error);
+  const snapshot = revision.snapshot as unknown as Database["public"]["Tables"]["articles"]["Row"];
+  if (!snapshot?.title || !snapshot.section_id) {
+    throw new Error("This revision cannot be restored.");
+  }
+  return upsertArticle({
+    data: {
+      id: data.article_id,
+      title: snapshot.title,
+      deck: snapshot.deck ?? undefined,
+      body: snapshot.body ?? undefined,
+      section_id: snapshot.section_id,
+      region: snapshot.region ?? undefined,
+      badge_type: snapshot.badge_type,
+      hero_image_url: snapshot.hero_image_url ?? undefined,
+      status: snapshot.status,
+      slug: snapshot.slug,
+      scheduled_at: snapshot.scheduled_at,
+    },
+  });
 };
 
 // AMBASSADORS

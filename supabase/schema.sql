@@ -21,7 +21,7 @@ EXCEPTION
 END $$;
 
 DO $$ BEGIN
-  CREATE TYPE public.article_status AS ENUM ('draft', 'review', 'published');
+  CREATE TYPE public.article_status AS ENUM ('draft', 'review', 'scheduled', 'published', 'archived');
 EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;

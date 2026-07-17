@@ -118,6 +118,48 @@ export type Database = {
           },
         ]
       }
+      article_revisions: {
+        Row: {
+          article_id: string
+          changed_at: string
+          changed_by: string | null
+          id: string
+          snapshot: Json
+          version: number
+        }
+        Insert: {
+          article_id: string
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          snapshot: Json
+          version: number
+        }
+        Update: {
+          article_id?: string
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          snapshot?: Json
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_revisions_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_revisions_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       articles: {
         Row: {
           author_id: string | null
@@ -603,8 +645,17 @@ export type Database = {
           p_badge_type?: Database["public"]["Enums"]["badge_type"]
           p_hero_image_url?: string | null
           p_slug?: string | null
+          p_scheduled_at?: string | null
         }
         Returns: Database["public"]["Tables"]["articles"]["Row"]
+      }
+      admin_bulk_manage_articles: {
+        Args: {
+          p_action: string
+          p_ids: string[]
+          p_section_id?: string | null
+        }
+        Returns: number
       }
       increment_article_view: {
         Args: {
@@ -626,7 +677,7 @@ export type Database = {
         | "videographer"
         | "fact_checker"
         | "translator"
-      article_status: "draft" | "review" | "published"
+      article_status: "draft" | "review" | "scheduled" | "published" | "archived"
       badge_type:
         | "none"
         | "breaking"
@@ -778,7 +829,7 @@ export const Constants = {
         "fact_checker",
         "translator",
       ],
-      article_status: ["draft", "review", "published"],
+      article_status: ["draft", "review", "scheduled", "published", "archived"],
       badge_type: [
         "none",
         "breaking",

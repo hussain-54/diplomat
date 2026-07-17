@@ -11,6 +11,7 @@ export function useNewsroomRealtime() {
       void queryClient.invalidateQueries({ queryKey: ["dashboard-articles"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
       void queryClient.invalidateQueries({ queryKey: ["admin-articles"] });
+      void queryClient.invalidateQueries({ queryKey: ["article-revisions"] });
       void queryClient.invalidateQueries({ queryKey: ["cms-analytics"] });
     };
     const refreshComments = () => {

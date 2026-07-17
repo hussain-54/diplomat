@@ -1,6 +1,14 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getAdminArticle, getMe, upsertArticle, uploadHeroImage } from "@/lib/admin.functions";
+import { History, RotateCcw } from "lucide-react";
+import {
+  getAdminArticle,
+  getArticleRevisions,
+  getMe,
+  restoreArticleRevision,
+  upsertArticle,
+  uploadHeroImage,
+} from "@/lib/admin.functions";
 import { getSections } from "@/lib/content.functions";
 import { useState, useEffect } from "react";
 import type { Database } from "@/integrations/supabase/types";
@@ -40,6 +48,11 @@ function EditArticle() {
     queryFn: () => getAdminArticle({ data: { id } }),
     enabled: !isNew,
   });
+  const revisionsQ = useQuery({
+    queryKey: ["article-revisions", id],
+    queryFn: () => getArticleRevisions({ data: { article_id: id } }),
+    enabled: !isNew,
+  });
 
   const [form, setForm] = useState({
     title: "",
@@ -51,6 +64,7 @@ function EditArticle() {
     hero_image_url: "",
     status: "draft" as ArticleStatus,
     slug: "",
+    scheduled_at: "",
   });
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -67,6 +81,7 @@ function EditArticle() {
         hero_image_url: articleQ.data.hero_image_url ?? "",
         status: articleQ.data.status,
         slug: articleQ.data.slug,
+        scheduled_at: toDateTimeLocal(articleQ.data.scheduled_at),
       });
     }
   }, [articleQ.data]);
@@ -77,13 +92,20 @@ function EditArticle() {
     isEditorialLeader ||
     (hasPermission(editorRoles, "articles:publish") && hasSectionAccess);
   const canEditAssigned = isEditorialLeader || hasSectionAccess;
-  const publishedReadOnly =
-    !isNew && rolesReady && !canPublish && articleQ.data?.status === "published";
+  const protectedReadOnly =
+    !isNew &&
+    rolesReady &&
+    !canPublish &&
+    ["scheduled", "published", "archived"].includes(articleQ.data?.status ?? "");
   const articleReadOnly =
     !isNew &&
     rolesReady &&
     !canEditAssigned &&
-    !(isFactChecker && articleQ.data?.status !== "published") &&
+    !(
+      isFactChecker &&
+      articleQ.data &&
+      ["draft", "review"].includes(articleQ.data.status)
+    ) &&
     articleQ.data?.author_id !== meQ.data?.userId;
 
   const save = useMutation({
@@ -100,17 +122,33 @@ function EditArticle() {
           hero_image_url: form.hero_image_url,
           status: form.status,
           slug: form.slug || undefined,
+          scheduled_at:
+            form.status === "scheduled" && form.scheduled_at
+              ? new Date(form.scheduled_at).toISOString()
+              : null,
         },
       }),
     onSuccess: (article) => {
       qc.invalidateQueries({ queryKey: ["admin-articles"] });
       qc.invalidateQueries({ queryKey: ["admin-article"] });
+      qc.invalidateQueries({ queryKey: ["article-revisions", id] });
       qc.invalidateQueries({ queryKey: ["home"] });
       qc.invalidateQueries({ queryKey: ["latest"] });
       if (article?.slug) {
         qc.invalidateQueries({ queryKey: ["article", article.slug] });
       }
       navigate({ to: "/admin/articles" });
+    },
+  });
+  const restore = useMutation({
+    mutationFn: (revisionId: string) =>
+      restoreArticleRevision({
+        data: { article_id: id, revision_id: revisionId },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin-article", id] });
+      void qc.invalidateQueries({ queryKey: ["article-revisions", id] });
+      void qc.invalidateQueries({ queryKey: ["admin-articles"] });
     },
   });
 
@@ -163,8 +201,8 @@ function EditArticle() {
       />
       {!canPublish && (
         <div className="border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-muted-foreground">
-          {publishedReadOnly ? (
-            <>This published article is read-only for your role. An editor must make changes.</>
+          {protectedReadOnly ? (
+            <>This article is read-only in its current workflow state. An editor must make changes.</>
           ) : (
             <>
               Your role can save <strong>draft</strong> or <strong>in review</strong> only. A section
@@ -176,7 +214,7 @@ function EditArticle() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!publishedReadOnly && !articleReadOnly) save.mutate();
+          if (!protectedReadOnly && !articleReadOnly) save.mutate();
         }}
         className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]"
       >
@@ -237,14 +275,32 @@ function EditArticle() {
             <select
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value as ArticleStatus })}
-              disabled={publishedReadOnly}
+              disabled={protectedReadOnly || articleReadOnly}
               className={cmsInput}
             >
               <option value="draft">Draft</option>
               <option value="review">In review</option>
-              {canPublish && <option value="published">Published</option>}
+              {canPublish && (
+                <>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="published">Published</option>
+                  <option value="archived">Archived</option>
+                </>
+              )}
             </select>
           </Field>
+          {form.status === "scheduled" && (
+            <Field label="Publication date and time">
+              <input
+                type="datetime-local"
+                required
+                min={toDateTimeLocal(new Date().toISOString())}
+                value={form.scheduled_at}
+                onChange={(event) => setForm({ ...form, scheduled_at: event.target.value })}
+                className={cmsInput}
+              />
+            </Field>
+          )}
           <Field label="Badge">
             <select
               value={form.badge_type}
@@ -296,7 +352,17 @@ function EditArticle() {
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-semibold text-foreground">Current state</span>
               <CmsStatus
-                tone={form.status === "published" ? "success" : form.status === "review" ? "warning" : "neutral"}
+                tone={
+                  form.status === "published"
+                    ? "success"
+                    : form.status === "review"
+                      ? "warning"
+                      : form.status === "scheduled"
+                        ? "info"
+                        : form.status === "archived"
+                          ? "danger"
+                          : "neutral"
+                }
               >
                 {form.status}
               </CmsStatus>
@@ -304,7 +370,12 @@ function EditArticle() {
           <button
             type="submit"
             disabled={
-              publishedReadOnly || articleReadOnly || save.isPending || !form.section_id || !form.title.trim()
+              protectedReadOnly ||
+              articleReadOnly ||
+              save.isPending ||
+              !form.section_id ||
+              !form.title.trim() ||
+              (form.status === "scheduled" && !form.scheduled_at)
             }
             className={`${cmsButton} w-full`}
           >
@@ -312,6 +383,10 @@ function EditArticle() {
               ? "Saving…"
               : form.status === "published"
                 ? "Publish article"
+                : form.status === "scheduled"
+                  ? "Schedule article"
+                  : form.status === "archived"
+                    ? "Archive article"
                 : isNew
                   ? "Create article"
                   : "Save changes"}
@@ -324,8 +399,100 @@ function EditArticle() {
           </div>
         </aside>
       </form>
+
+      {!isNew && (
+        <CmsPanel
+          title="Revision History"
+          description="Every saved change creates a restorable snapshot."
+          action={
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <History className="h-3.5 w-3.5" />
+              {revisionsQ.data?.length ?? 0} revisions
+            </span>
+          }
+        >
+          {revisionsQ.isLoading ? (
+            <div className="p-5 text-sm text-muted-foreground">Loading revision history…</div>
+          ) : revisionsQ.isError ? (
+            <div className="p-5 text-sm text-crimson">{revisionsQ.error.message}</div>
+          ) : !revisionsQ.data?.length ? (
+            <div className="p-8 text-center text-sm text-muted-foreground">
+              Revision history begins after the first update.
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {revisionsQ.data.map((revision) => {
+                const snapshot = revision.snapshot as unknown as {
+                  status?: ArticleStatus;
+                  title?: string;
+                };
+                const changer = Array.isArray(revision.changer)
+                  ? revision.changer[0]?.name
+                  : revision.changer?.name;
+                return (
+                  <div key={revision.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center">
+                    <div className="flex h-8 w-8 items-center justify-center bg-muted text-xs font-bold">
+                      v{revision.version}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">
+                        {snapshot.title ?? "Untitled revision"}
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {new Date(revision.changed_at).toLocaleString()} · {changer ?? "System"}
+                      </div>
+                    </div>
+                    <CmsStatus
+                      tone={
+                        snapshot.status === "published"
+                          ? "success"
+                          : snapshot.status === "review"
+                            ? "warning"
+                            : snapshot.status === "scheduled"
+                              ? "info"
+                              : snapshot.status === "archived"
+                                ? "danger"
+                                : "neutral"
+                      }
+                    >
+                      {snapshot.status ?? "draft"}
+                    </CmsStatus>
+                    {!protectedReadOnly && !articleReadOnly && (
+                      <button
+                        type="button"
+                        className="inline-flex h-8 items-center gap-1 border border-input px-2 text-xs font-semibold hover:bg-accent"
+                        disabled={restore.isPending}
+                        onClick={() => {
+                          if (window.confirm(`Restore revision v${revision.version}?`)) {
+                            restore.mutate(revision.id);
+                          }
+                        }}
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" /> Restore
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {restore.isError && (
+            <div className="border-t border-border bg-crimson/10 px-5 py-3 text-xs text-crimson">
+              {restore.error.message}
+            </div>
+          )}
+        </CmsPanel>
+      )}
     </div>
   );
+}
+
+function toDateTimeLocal(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
