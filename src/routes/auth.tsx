@@ -71,7 +71,7 @@ function AuthPage() {
         });
         if (error) throw error;
         setMsg(
-          "Account created as contributor (drafts only). A super admin must grant section_editor or super_admin before you can publish. If email confirmation is enabled, check your inbox.",
+          "Account created as Contributor (drafts only). A Super Admin can assign another newsroom role. If email confirmation is enabled, check your inbox.",
         );
       } else if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });

@@ -3,10 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Eye, FileText } from "lucide-react";
 import { CmsPageHeader, CmsPanel, CmsStat } from "@/components/cms-ui";
 import { getAnalyticsOverview } from "@/lib/admin.functions";
-import { requireEditorRoute } from "@/lib/route-guards";
+import { requirePermissionRoute } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/admin/analytics")({
-  beforeLoad: ({ context }) => requireEditorRoute(context.roles),
+  beforeLoad: ({ context }) => requirePermissionRoute(context.roles, "analytics:view"),
   component: AnalyticsPage,
 });
 

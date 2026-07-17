@@ -615,7 +615,17 @@ export type Database = {
     }
     Enums: {
       ambassador_status: "active" | "recalled" | "vacant"
-      app_role: "super_admin" | "section_editor" | "contributor"
+      app_role:
+        | "super_admin"
+        | "editor_in_chief"
+        | "managing_editor"
+        | "section_editor"
+        | "reporter"
+        | "contributor"
+        | "photographer"
+        | "videographer"
+        | "fact_checker"
+        | "translator"
       article_status: "draft" | "review" | "published"
       badge_type:
         | "none"
@@ -756,7 +766,18 @@ export const Constants = {
   public: {
     Enums: {
       ambassador_status: ["active", "recalled", "vacant"],
-      app_role: ["super_admin", "section_editor", "contributor"],
+      app_role: [
+        "super_admin",
+        "editor_in_chief",
+        "managing_editor",
+        "section_editor",
+        "reporter",
+        "contributor",
+        "photographer",
+        "videographer",
+        "fact_checker",
+        "translator",
+      ],
       article_status: ["draft", "review", "published"],
       badge_type: [
         "none",

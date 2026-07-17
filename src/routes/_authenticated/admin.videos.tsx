@@ -2,10 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteVideo, listVideos, upsertVideo } from "@/lib/admin.functions";
 import { useState } from "react";
-import { requireEditorRoute } from "@/lib/route-guards";
+import { requirePermissionRoute } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/admin/videos")({
-  beforeLoad: ({ context }) => requireEditorRoute(context.roles),
+  beforeLoad: ({ context }) => requirePermissionRoute(context.roles, "videos:manage"),
   component: Page,
 });
 

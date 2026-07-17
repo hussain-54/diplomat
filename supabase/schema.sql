@@ -4,7 +4,18 @@ GRANT USAGE ON SCHEMA app_hidden TO authenticated, service_role;
 
 -- ============ ENUMS ============
 DO $$ BEGIN
-  CREATE TYPE public.app_role AS ENUM ('super_admin', 'section_editor', 'contributor');
+  CREATE TYPE public.app_role AS ENUM (
+    'super_admin',
+    'editor_in_chief',
+    'managing_editor',
+    'section_editor',
+    'reporter',
+    'contributor',
+    'photographer',
+    'videographer',
+    'fact_checker',
+    'translator'
+  );
 EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
@@ -358,13 +369,14 @@ GRANT SELECT ON public.profiles TO anon;
 GRANT SELECT, INSERT, UPDATE ON public.profiles TO authenticated;
 GRANT ALL ON public.profiles TO service_role;
 
-GRANT SELECT ON public.user_roles TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.user_roles TO authenticated;
 GRANT ALL ON public.user_roles TO service_role;
 
-GRANT SELECT ON public.sections TO anon, authenticated;
+GRANT SELECT ON public.sections TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.sections TO authenticated;
 GRANT ALL ON public.sections TO service_role;
 
-GRANT SELECT ON public.editor_section_access TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.editor_section_access TO authenticated;
 GRANT ALL ON public.editor_section_access TO service_role;
 
 GRANT SELECT ON public.tags TO anon, authenticated;

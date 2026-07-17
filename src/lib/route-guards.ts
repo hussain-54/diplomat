@@ -1,15 +1,19 @@
 import { redirect } from "@tanstack/react-router";
+import { hasPermission, type Permission } from "@/lib/permissions";
 
-const EDITOR_ROLES = new Set(["super_admin", "section_editor"]);
-
-export function requireEditorRoute(roles: readonly string[] | undefined) {
-  if (!roles?.some((role) => EDITOR_ROLES.has(role))) {
+export function requirePermissionRoute(
+  roles: readonly string[] | undefined,
+  permission: Permission,
+) {
+  if (!hasPermission(roles, permission)) {
     throw redirect({ to: "/admin" });
   }
 }
 
+export function requireEditorRoute(roles: readonly string[] | undefined) {
+  requirePermissionRoute(roles, "newsroom:manage");
+}
+
 export function requireSuperAdminRoute(roles: readonly string[] | undefined) {
-  if (!roles?.includes("super_admin")) {
-    throw redirect({ to: "/admin" });
-  }
+  requirePermissionRoute(roles, "staff:manage");
 }

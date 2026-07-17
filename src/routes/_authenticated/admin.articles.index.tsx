@@ -11,8 +11,11 @@ import {
   cmsButton,
   cmsInput,
 } from "@/components/cms-ui";
+import { hasPermission } from "@/lib/permissions";
+import { requirePermissionRoute } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/admin/articles/")({
+  beforeLoad: ({ context }) => requirePermissionRoute(context.roles, "articles:view"),
   component: Page,
 });
 
@@ -32,6 +35,8 @@ function Page() {
       (!search.trim() || article.title.toLowerCase().includes(search.trim().toLowerCase())),
   );
   const navigate = useNavigate();
+  const canCreate = hasPermission(me.data?.roles, "articles:create");
+  const canDelete = hasPermission(me.data?.roles, "articles:delete");
 
   return (
     <div className="space-y-6">
@@ -40,12 +45,12 @@ function Page() {
         title="Articles"
         description="Create, review, schedule, and publish newsroom reporting."
         actions={
-          <button
-          onClick={() => navigate({ to: "/admin/articles/$id", params: { id: "new" } })}
+          canCreate ? <button
+            onClick={() => navigate({ to: "/admin/articles/$id", params: { id: "new" } })}
             className={cmsButton}
-        >
+          >
             <Plus className="h-4 w-4" /> New article
-          </button>
+          </button> : null
         }
       />
 
@@ -143,7 +148,7 @@ function Page() {
                       {new Date(article.updated_at).toLocaleString()}
                     </td>
                     <td className="px-5 py-4 text-right">
-                      {me.data?.canPublish && (
+                      {canDelete && (
                   <button
                           type="button"
                           onClick={() => window.confirm("Permanently delete this article?") && del.mutate(article.id)}

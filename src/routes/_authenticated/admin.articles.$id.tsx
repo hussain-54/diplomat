@@ -5,10 +5,17 @@ import { getSections } from "@/lib/content.functions";
 import { useState, useEffect } from "react";
 import type { Database } from "@/integrations/supabase/types";
 import { CmsPageHeader, CmsPanel, CmsStatus, cmsButton, cmsInput } from "@/components/cms-ui";
+import { hasPermission } from "@/lib/permissions";
+import { requirePermissionRoute } from "@/lib/route-guards";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
 
 export const Route = createFileRoute("/_authenticated/admin/articles/$id")({
+  beforeLoad: ({ context, params }) =>
+    requirePermissionRoute(
+      context.roles,
+      params.id === "new" ? "articles:create" : "articles:view",
+    ),
   component: EditArticle,
 });
 
@@ -21,7 +28,11 @@ function EditArticle() {
   const meQ = useQuery({ queryKey: ["me"], queryFn: () => getMe() });
   const rolesReady = meQ.isSuccess;
   const editorRoles = meQ.data?.roles ?? [];
-  const isEditor = editorRoles.includes("super_admin") || editorRoles.includes("section_editor");
+  const isEditorialLeader = editorRoles.some((role) =>
+    ["super_admin", "editor_in_chief", "managing_editor"].includes(role),
+  );
+  const isFactChecker = editorRoles.includes("fact_checker");
+  const mayUploadMedia = hasPermission(editorRoles, "media:upload");
 
   const sectionsQ = useQuery({ queryKey: ["sections"], queryFn: () => getSections() });
   const articleQ = useQuery({
@@ -60,11 +71,20 @@ function EditArticle() {
     }
   }, [articleQ.data]);
 
-  const canPublish =
-    isEditor ||
+  const hasSectionAccess =
     (!!form.section_id && (meQ.data?.sectionAccess ?? []).includes(form.section_id));
+  const canPublish =
+    isEditorialLeader ||
+    (hasPermission(editorRoles, "articles:publish") && hasSectionAccess);
+  const canEditAssigned = isEditorialLeader || hasSectionAccess;
   const publishedReadOnly =
     !isNew && rolesReady && !canPublish && articleQ.data?.status === "published";
+  const articleReadOnly =
+    !isNew &&
+    rolesReady &&
+    !canEditAssigned &&
+    !(isFactChecker && articleQ.data?.status !== "published") &&
+    articleQ.data?.author_id !== meQ.data?.userId;
 
   const save = useMutation({
     mutationFn: () =>
@@ -156,7 +176,7 @@ function EditArticle() {
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (!publishedReadOnly) save.mutate();
+          if (!publishedReadOnly && !articleReadOnly) save.mutate();
         }}
         className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]"
       >
@@ -247,7 +267,7 @@ function EditArticle() {
           </Field>
             </div>
           </CmsPanel>
-          <CmsPanel title="Lead image" description="JPEG, PNG, WebP, or GIF · maximum 5 MB">
+          {mayUploadMedia && <CmsPanel title="Lead image" description="JPEG, PNG, WebP, or GIF · maximum 5 MB">
             <div className="space-y-3 p-5">
           <Field label="Hero image">
             {form.hero_image_url && (
@@ -271,7 +291,7 @@ function EditArticle() {
             />
           </Field>
             </div>
-          </CmsPanel>
+          </CmsPanel>}
           <div className="border border-border bg-card p-4">
             <div className="mb-3 flex items-center justify-between">
               <span className="text-xs font-semibold text-foreground">Current state</span>
@@ -284,7 +304,7 @@ function EditArticle() {
           <button
             type="submit"
             disabled={
-              publishedReadOnly || save.isPending || !form.section_id || !form.title.trim()
+              publishedReadOnly || articleReadOnly || save.isPending || !form.section_id || !form.title.trim()
             }
             className={`${cmsButton} w-full`}
           >

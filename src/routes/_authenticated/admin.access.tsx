@@ -1,14 +1,13 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { listEditors, setUserRole, toggleSectionAccess } from "@/lib/admin.functions";
 import { getSections } from "@/lib/content.functions";
+import { APP_ROLES, ROLE_LABELS, type AppRole } from "@/lib/permissions";
+import { requirePermissionRoute } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/admin/access")({
   beforeLoad: ({ context }) => {
-    const roles = (context as { roles?: string[] }).roles ?? [];
-    if (!roles.includes("super_admin")) {
-      throw redirect({ to: "/admin" });
-    }
+    requirePermissionRoute(context.roles, "staff:manage");
   },
   component: Page,
 });
@@ -22,7 +21,7 @@ function Page() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["editors"] }),
   });
   const roleMut = useMutation({
-    mutationFn: (v: { user_id: string; role: any; grant: boolean }) => setUserRole({ data: v }),
+    mutationFn: (v: { user_id: string; role: AppRole; grant: boolean }) => setUserRole({ data: v }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["editors"] }),
   });
 
@@ -50,11 +49,11 @@ function Page() {
                 <div className="text-xs text-muted-foreground">{p.id}</div>
               </div>
               <div className="flex gap-2 text-xs">
-                {(["super_admin","section_editor","contributor"] as const).map((r) => (
+                {APP_ROLES.map((r) => (
                   <label key={r} className="flex items-center gap-1 rounded-sm border border-input px-2 py-1 uppercase tracking-widest">
                     <input type="checkbox" checked={hasRole(p.id, r)}
                       onChange={(e) => roleMut.mutate({ user_id: p.id, role: r, grant: e.target.checked })} />
-                    {r.replace("_", " ")}
+                    {ROLE_LABELS[r]}
                   </label>
                 ))}
               </div>

@@ -11,10 +11,10 @@ import {
   cmsSecondaryButton,
 } from "@/components/cms-ui";
 import { deleteCategory, listCategories, upsertCategory } from "@/lib/admin.functions";
-import { requireSuperAdminRoute } from "@/lib/route-guards";
+import { requirePermissionRoute } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/admin/categories")({
-  beforeLoad: ({ context }) => requireSuperAdminRoute(context.roles),
+  beforeLoad: ({ context }) => requirePermissionRoute(context.roles, "categories:manage"),
   component: CategoriesPage,
 });
 

@@ -3,19 +3,28 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Clock3, FileText } from "lucide-react";
 import { getAnalyticsOverview, getMe, listAdminArticles } from "@/lib/admin.functions";
 import { CmsPageHeader, CmsPanel, CmsStat, CmsStatus } from "@/components/cms-ui";
+import { hasPermission } from "@/lib/permissions";
+import { requirePermissionRoute } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
+  beforeLoad: ({ context }) => requirePermissionRoute(context.roles, "dashboard:view"),
   component: Overview,
 });
 
 function Overview() {
   const me = useQuery({ queryKey: ["me"], queryFn: () => getMe() });
-  const articles = useQuery({ queryKey: ["admin-articles"], queryFn: () => listAdminArticles() });
-  const isEditor = me.data?.roles.some((role) => role === "super_admin" || role === "section_editor");
+  const canViewArticles = hasPermission(me.data?.roles, "articles:view");
+  const canCreateArticles = hasPermission(me.data?.roles, "articles:create");
+  const canViewAnalytics = hasPermission(me.data?.roles, "analytics:view");
+  const articles = useQuery({
+    queryKey: ["admin-articles"],
+    queryFn: () => listAdminArticles(),
+    enabled: canViewArticles,
+  });
   const analytics = useQuery({
     queryKey: ["cms-analytics"],
     queryFn: getAnalyticsOverview,
-    enabled: Boolean(isEditor),
+    enabled: canViewAnalytics,
   });
   const list = articles.data ?? [];
   const published = list.filter((a) => a.status === "published").length;
@@ -45,7 +54,7 @@ function Overview() {
         eyebrow={dateLabel}
         title={`Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${me.data?.profile?.name?.split(" ")[0] ?? "editor"}`}
         description="Your newsroom at a glance. Monitor the publishing queue, audience activity, and editorial output."
-        actions={
+        actions={canCreateArticles ?
           <Link
             to="/admin/articles/$id"
             params={{ id: "new" }}
@@ -53,7 +62,7 @@ function Overview() {
           >
             <FileText className="h-4 w-4" /> New article
           </Link>
-        }
+        : null}
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -61,10 +70,10 @@ function Overview() {
         <CmsStat label="In review" value={review.length} detail="Awaiting editorial decision" trend={review.length ? "down" : "neutral"} />
         <CmsStat label="Drafts" value={drafts} detail="Work currently in progress" />
         <CmsStat
-          label={isEditor ? "30-day views" : "Your total stories"}
-          value={isEditor ? views.toLocaleString() : list.length}
-          detail={isEditor ? `${pendingComments} comments require review` : "Visible under your role"}
-          trend={isEditor && views > 0 ? "up" : "neutral"}
+          label={canViewAnalytics ? "30-day views" : "Your total stories"}
+          value={canViewAnalytics ? views.toLocaleString() : list.length}
+          detail={canViewAnalytics ? `${pendingComments} comments require review` : "Visible under your role"}
+          trend={canViewAnalytics && views > 0 ? "up" : "neutral"}
         />
       </div>
 

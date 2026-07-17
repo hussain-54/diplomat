@@ -18,33 +18,31 @@ import {
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { getMe } from "@/lib/admin.functions";
-
-type Access = "all" | "editor" | "super_admin";
+import {
+  hasPermission,
+  ROLE_LABELS,
+  type Permission,
+  type AppRole,
+} from "@/lib/permissions";
 
 const NAV: Array<{
   to: string;
   label: string;
   icon: ComponentType<{ className?: string }>;
-  access: Access;
+  permission: Permission;
   exact?: boolean;
 }> = [
-  { to: "/admin", label: "Dashboard", icon: BarChart3, access: "all", exact: true },
-  { to: "/admin/articles", label: "Articles", icon: FileText, access: "all" },
-  { to: "/admin/categories", label: "Categories", icon: FolderTree, access: "super_admin" },
-  { to: "/admin/staff", label: "Authors & Staff", icon: Users, access: "super_admin" },
-  { to: "/admin/media", label: "Media Library", icon: BookOpenText, access: "all" },
-  { to: "/admin/comments", label: "Comments", icon: MessageSquareText, access: "editor" },
-  { to: "/admin/analytics", label: "Analytics", icon: BarChart3, access: "editor" },
-  { to: "/admin/settings", label: "Settings", icon: Settings, access: "super_admin" },
+  { to: "/admin", label: "Dashboard", icon: BarChart3, permission: "dashboard:view", exact: true },
+  { to: "/admin/articles", label: "Articles", icon: FileText, permission: "articles:view" },
+  { to: "/admin/categories", label: "Categories", icon: FolderTree, permission: "categories:manage" },
+  { to: "/admin/staff", label: "Authors & Staff", icon: Users, permission: "staff:manage" },
+  { to: "/admin/media", label: "Media Library", icon: BookOpenText, permission: "media:view" },
+  { to: "/admin/comments", label: "Comments", icon: MessageSquareText, permission: "comments:moderate" },
+  { to: "/admin/analytics", label: "Analytics", icon: BarChart3, permission: "analytics:view" },
+  { to: "/admin/settings", label: "Settings", icon: Settings, permission: "settings:manage" },
 ];
 
 const PAGE_NAMES = [...NAV].sort((a, b) => b.to.length - a.to.length);
-
-function canSee(access: Access, roles: string[]) {
-  if (access === "all") return true;
-  if (access === "super_admin") return roles.includes("super_admin");
-  return roles.some((role) => role === "super_admin" || role === "section_editor");
-}
 
 function initialTheme() {
   if (typeof window === "undefined") return false;
@@ -61,7 +59,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [dark, setDark] = useState(initialTheme);
   const roles = meQ.data?.roles ?? [];
-  const visibleNav = useMemo(() => NAV.filter((item) => canSee(item.access, roles)), [roles]);
+  const visibleNav = useMemo(
+    () => NAV.filter((item) => hasPermission(roles, item.permission)),
+    [roles],
+  );
   const pageName =
     PAGE_NAMES.find((item) =>
       item.exact ? location.pathname === item.to : location.pathname.startsWith(item.to),
@@ -146,7 +147,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
               {meQ.isLoading ? "Loading…" : meQ.data?.profile?.name ?? "Newsroom user"}
             </div>
             <div className="truncate text-[10px] capitalize text-muted-foreground">
-              {roles[0]?.replace("_", " ") ?? "No role"}
+              {roles[0] ? ROLE_LABELS[roles[0] as AppRole] ?? roles[0].replaceAll("_", " ") : "No role"}
             </div>
           </div>
           <button

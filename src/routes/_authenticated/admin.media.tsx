@@ -11,12 +11,16 @@ import {
 } from "@/components/cms-ui";
 import {
   deleteMediaAsset,
+  getMe,
   listMediaAssets,
   updateMediaAsset,
   uploadHeroImage,
 } from "@/lib/admin.functions";
+import { hasPermission } from "@/lib/permissions";
+import { requirePermissionRoute } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/admin/media")({
+  beforeLoad: ({ context }) => requirePermissionRoute(context.roles, "media:view"),
   component: MediaPage,
 });
 
@@ -32,6 +36,7 @@ async function fileToBase64(file: File) {
 function MediaPage() {
   const queryClient = useQueryClient();
   const media = useQuery({ queryKey: ["media-assets"], queryFn: listMediaAssets });
+  const me = useQuery({ queryKey: ["me"], queryFn: getMe });
   const [search, setSearch] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const [editingAlt, setEditingAlt] = useState<{ id: string; value: string } | null>(null);
@@ -71,6 +76,8 @@ function MediaPage() {
   }, [media.data, search]);
   const totalBytes = (media.data ?? []).reduce((sum, asset) => sum + asset.size_bytes, 0);
   const error = media.error ?? upload.error ?? update.error ?? remove.error;
+  const canUpload = hasPermission(me.data?.roles, "media:upload");
+  const canManageAll = hasPermission(me.data?.roles, "media:manage_all");
 
   return (
     <div className="space-y-6">
@@ -78,7 +85,7 @@ function MediaPage() {
         eyebrow="Digital asset management"
         title="Media Library"
         description={`${media.data?.length ?? 0} indexed assets · ${(totalBytes / 1024 / 1024).toFixed(1)} MB`}
-        actions={
+        actions={canUpload ?
           <label className={`${cmsButton} cursor-pointer`}>
             <ImagePlus className="h-4 w-4" />
             {upload.isPending ? "Uploading…" : "Upload image"}
@@ -94,7 +101,7 @@ function MediaPage() {
               }}
             />
           </label>
-        }
+        : null}
       />
 
       {error && (
@@ -145,7 +152,7 @@ function MediaPage() {
                       <span>{(asset.size_bytes / 1024).toFixed(0)} KB</span>
                     </div>
                   </div>
-                  {editingAlt?.id === asset.id ? (
+                  {(canManageAll || asset.uploaded_by === me.data?.userId) && editingAlt?.id === asset.id ? (
                     <div className="flex gap-2">
                       <input
                         className={cmsInput}
@@ -163,7 +170,7 @@ function MediaPage() {
                         <Check className="h-4 w-4" />
                       </button>
                     </div>
-                  ) : (
+                  ) : canManageAll || asset.uploaded_by === me.data?.userId ? (
                     <button
                       type="button"
                       className="block w-full truncate text-left text-xs text-muted-foreground hover:text-foreground"
@@ -171,13 +178,17 @@ function MediaPage() {
                     >
                       {asset.alt_text || "Add accessibility description…"}
                     </button>
+                  ) : (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {asset.alt_text || "No accessibility description"}
+                    </p>
                   )}
                   <div className="flex items-center justify-between border-t border-border pt-3">
                     <span className="text-[10px] text-muted-foreground">
                       {new Date(asset.created_at).toLocaleDateString()}
                     </span>
                     <div className="flex gap-1">
-                      <button
+                      {(canManageAll || asset.uploaded_by === me.data?.userId) && <button
                         type="button"
                         className="p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
                         onClick={async () => {
@@ -188,7 +199,7 @@ function MediaPage() {
                         aria-label="Copy image URL"
                       >
                         {copied === asset.id ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                      </button>
+                      </button>}
                       <button
                         type="button"
                         className="p-2 text-muted-foreground hover:bg-crimson/10 hover:text-crimson"

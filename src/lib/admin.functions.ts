@@ -1,11 +1,15 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
 import { toAppError } from "@/lib/db-errors";
+import {
+  hasAnyPermission,
+  hasPermission,
+  type AppRole,
+  type Permission,
+} from "@/lib/permissions";
 
 type BadgeType = Database["public"]["Enums"]["badge_type"];
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
-
-const EDITOR_ROLES = ["super_admin", "section_editor"] as const;
 
 const slugify = (s: string) =>
   s
@@ -34,14 +38,16 @@ const requireNewsroomRole = async () => {
   return { user, roles: roleList };
 };
 
-const hasEditorRole = (roles: string[]) => roles.some((r) => (EDITOR_ROLES as readonly string[]).includes(r));
-
-const requireEditorRole = async () => {
+const requirePermission = async (permission: Permission) => {
   const newsroom = await requireNewsroomRole();
-  if (!hasEditorRole(newsroom.roles)) {
-    throw new Error("This newsroom section requires an editor or super-admin role.");
+  if (!hasPermission(newsroom.roles, permission)) {
+    throw new Error(`Forbidden — missing ${permission} permission.`);
   }
   return newsroom;
+};
+
+const requireEditorRole = async () => {
+  return requirePermission("newsroom:manage");
 };
 
 export const getMe = async () => {
@@ -62,12 +68,16 @@ export const getMe = async () => {
     profile: profileRes.data,
     roles,
     sectionAccess,
-    canPublish: hasEditorRole(roles) || sectionAccess.length > 0,
+    canPublish:
+      roles.some((role) =>
+        ["super_admin", "editor_in_chief", "managing_editor"].includes(role),
+      ) ||
+      (hasPermission(roles, "articles:publish") && sectionAccess.length > 0),
   };
 };
 
 export const listAdminArticles = async () => {
-  await checkAuth();
+  await requirePermission("articles:view");
   const { data, error } = await supabase
     .from("articles")
     .select("id,slug,title,status,badge_type,published_at,updated_at,section_id, sections(name,slug)")
@@ -78,7 +88,7 @@ export const listAdminArticles = async () => {
 };
 
 export const getAdminArticle = async ({ data }: { data: { id: string } }) => {
-  await checkAuth();
+  await requirePermission("articles:view");
   const { data: a, error } = await supabase.from("articles").select("*").eq("id", data.id).maybeSingle();
   if (error) throw toAppError(error);
   return a;
@@ -101,6 +111,12 @@ export const upsertArticle = async ({
   };
 }) => {
   const { user, roles } = await requireNewsroomRole();
+  const required = data.id
+    ? (["articles:edit_own", "articles:edit_all", "articles:review"] as const)
+    : (["articles:create"] as const);
+  if (!hasAnyPermission(roles, required)) {
+    throw new Error("You do not have permission to save articles.");
+  }
   if (!data.title?.trim()) throw new Error("Title is required.");
   if (!data.section_id) throw new Error("Select a section.");
 
@@ -113,7 +129,12 @@ export const upsertArticle = async ({
   if (accessError) throw toAppError(accessError);
 
   const wantsPublish = data.status === "published";
-  const mayPublish = hasEditorRole(roles) || !!accessRows;
+  const isEditorialLeader = roles.some((role) =>
+    ["super_admin", "editor_in_chief", "managing_editor"].includes(role),
+  );
+  const mayPublish =
+    isEditorialLeader ||
+    (hasPermission(roles, "articles:publish") && !!accessRows);
   if (wantsPublish && !mayPublish) {
     throw new Error(
       "Contributors cannot publish. Save as Draft or In review, or ask a super admin to grant section_editor / super_admin.",
@@ -206,7 +227,7 @@ export const upsertArticle = async ({
 };
 
 export const deleteArticle = async ({ data }: { data: { id: string } }) => {
-  await checkAuth();
+  await requirePermission("articles:delete");
   const { error } = await supabase.from("articles").delete().eq("id", data.id);
   if (error) throw toAppError(error);
   return { ok: true };
@@ -368,7 +389,7 @@ export const deleteTicker = async ({ data }: { data: { id: string } }) => {
 
 // VIDEOS
 export const listVideos = async () => {
-  await requireEditorRole();
+  await requirePermission("videos:manage");
   const { data, error } = await supabase.from("videos").select("*").order("published_at", { ascending: false });
   if (error) throw toAppError(error);
   return data ?? [];
@@ -386,7 +407,7 @@ export const upsertVideo = async ({
     video_url?: string;
   };
 }) => {
-  await requireEditorRole();
+  await requirePermission("videos:manage");
   const { id, ...payload } = data;
   if (id) {
     const { error } = await supabase.from("videos").update(payload).eq("id", id);
@@ -399,23 +420,14 @@ export const upsertVideo = async ({
 };
 
 export const deleteVideo = async ({ data }: { data: { id: string } }) => {
-  await requireEditorRole();
+  await requirePermission("videos:manage");
   const { error } = await supabase.from("videos").delete().eq("id", data.id);
   if (error) throw toAppError(error);
   return { ok: true };
 };
 
 const requireSuperAdmin = async () => {
-  const user = await checkAuth();
-  const { data: saRow, error } = await supabase
-    .from("user_roles")
-    .select("user_id")
-    .eq("user_id", user.id)
-    .eq("role", "super_admin")
-    .maybeSingle();
-  if (error) throw toAppError(error);
-  if (!saRow) throw new Error("Forbidden — super admin only.");
-  return user;
+  return (await requirePermission("staff:manage")).user;
 };
 
 // ACCESS MANAGEMENT (super admin only)
@@ -461,7 +473,7 @@ export const toggleSectionAccess = async ({
 export const setUserRole = async ({
   data,
 }: {
-  data: { user_id: string; role: "super_admin" | "section_editor" | "contributor"; grant: boolean };
+  data: { user_id: string; role: AppRole; grant: boolean };
 }) => {
   await requireSuperAdmin();
   if (data.grant) {
@@ -483,7 +495,7 @@ export const uploadHeroImage = async ({
 }: {
   data: { fileName: string; contentType: string; base64: string; bucket?: "article-hero" | "avatars" };
 }) => {
-  const user = await checkAuth();
+  const { user } = await requirePermission("media:upload");
   const bucket = data.bucket ?? "article-hero";
   if (!data.contentType.startsWith("image/")) {
     throw new Error("Only image files can be uploaded.");
@@ -521,7 +533,7 @@ export const uploadHeroImage = async ({
 
 // CATEGORIES
 export const listCategories = async () => {
-  await requireNewsroomRole();
+  await requirePermission("categories:manage");
   const { data, error } = await supabase
     .from("sections")
     .select("*, articles(count)")
@@ -536,7 +548,7 @@ export const upsertCategory = async ({
 }: {
   data: { id?: string; name: string; slug?: string; color?: string | null; sort_order?: number };
 }) => {
-  await requireSuperAdmin();
+  await requirePermission("categories:manage");
   const payload = {
     name: data.name.trim(),
     slug: data.slug?.trim() || slugify(data.name),
@@ -552,7 +564,7 @@ export const upsertCategory = async ({
 };
 
 export const deleteCategory = async ({ data }: { data: { id: string } }) => {
-  await requireSuperAdmin();
+  await requirePermission("categories:manage");
   const { count, error: countError } = await supabase
     .from("articles")
     .select("id", { count: "exact", head: true })
@@ -581,7 +593,7 @@ export const updateStaffProfile = async ({
 
 // MEDIA LIBRARY
 export const listMediaAssets = async () => {
-  await requireNewsroomRole();
+  await requirePermission("media:view");
   const { data, error } = await supabase
     .from("media_assets")
     .select("*, profiles(name)")
@@ -596,7 +608,7 @@ export const updateMediaAsset = async ({
 }: {
   data: { id: string; alt_text: string };
 }) => {
-  await requireNewsroomRole();
+  await requirePermission("media:view");
   const { error } = await supabase
     .from("media_assets")
     .update({ alt_text: data.alt_text.trim() || null })
@@ -606,7 +618,7 @@ export const updateMediaAsset = async ({
 };
 
 export const deleteMediaAsset = async ({ data }: { data: { id: string } }) => {
-  await requireNewsroomRole();
+  await requirePermission("media:view");
   const { data: asset, error: readError } = await supabase
     .from("media_assets")
     .select("bucket, object_path")
@@ -624,7 +636,7 @@ export const deleteMediaAsset = async ({ data }: { data: { id: string } }) => {
 
 // COMMENTS
 export const listComments = async () => {
-  await requireEditorRole();
+  await requirePermission("comments:moderate");
   const { data, error } = await supabase
     .from("comments")
     .select("*, articles(id,title,slug)")
@@ -639,7 +651,7 @@ export const moderateComment = async ({
 }: {
   data: { id: string; status: Database["public"]["Enums"]["comment_status"] };
 }) => {
-  const { user } = await requireEditorRole();
+  const { user } = await requirePermission("comments:moderate");
   const { error } = await supabase
     .from("comments")
     .update({
@@ -653,7 +665,7 @@ export const moderateComment = async ({
 };
 
 export const deleteComment = async ({ data }: { data: { id: string } }) => {
-  await requireEditorRole();
+  await requirePermission("comments:moderate");
   const { error } = await supabase.from("comments").delete().eq("id", data.id);
   if (error) throw toAppError(error);
   return { ok: true };
@@ -661,7 +673,7 @@ export const deleteComment = async ({ data }: { data: { id: string } }) => {
 
 // ANALYTICS
 export const getAnalyticsOverview = async () => {
-  await requireEditorRole();
+  await requirePermission("analytics:view");
   const since = new Date();
   since.setUTCDate(since.getUTCDate() - 29);
   const date = since.toISOString().slice(0, 10);
@@ -689,7 +701,7 @@ export const getAnalyticsOverview = async () => {
 
 // SETTINGS
 export const getNewsroomSettings = async () => {
-  await requireNewsroomRole();
+  await requirePermission("settings:manage");
   const { data, error } = await supabase
     .from("newsroom_settings")
     .select("*")
@@ -704,7 +716,7 @@ export const updateNewsroomSettings = async ({
 }: {
   data: Database["public"]["Tables"]["newsroom_settings"]["Update"];
 }) => {
-  await requireSuperAdmin();
+  await requirePermission("settings:manage");
   const { id: _id, updated_at: _updatedAt, updated_by: _updatedBy, ...payload } = data;
   const { error } = await supabase.from("newsroom_settings").update(payload).eq("id", true);
   if (error) throw toAppError(error);

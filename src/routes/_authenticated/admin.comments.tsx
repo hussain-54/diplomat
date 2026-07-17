@@ -10,11 +10,11 @@ import {
   cmsSecondaryButton,
 } from "@/components/cms-ui";
 import { deleteComment, listComments, moderateComment } from "@/lib/admin.functions";
-import { requireEditorRoute } from "@/lib/route-guards";
+import { requirePermissionRoute } from "@/lib/route-guards";
 import type { Database } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/admin/comments")({
-  beforeLoad: ({ context }) => requireEditorRoute(context.roles),
+  beforeLoad: ({ context }) => requirePermissionRoute(context.roles, "comments:moderate"),
   component: CommentsPage,
 });
 

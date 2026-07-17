@@ -16,14 +16,13 @@ import {
   updateStaffProfile,
 } from "@/lib/admin.functions";
 import { getSections } from "@/lib/content.functions";
+import { APP_ROLES, ROLE_LABELS, type AppRole } from "@/lib/permissions";
 import { requireSuperAdminRoute } from "@/lib/route-guards";
 
 export const Route = createFileRoute("/_authenticated/admin/staff")({
   beforeLoad: ({ context }) => requireSuperAdminRoute(context.roles),
   component: StaffPage,
 });
-
-type AppRole = "super_admin" | "section_editor" | "contributor";
 
 function StaffPage() {
   const queryClient = useQueryClient();
@@ -137,15 +136,18 @@ function StaffPage() {
                           {profileRoles.map((item) => (
                             <CmsStatus
                               key={item.id}
-                              tone={item.role === "super_admin" ? "danger" : item.role === "section_editor" ? "info" : "neutral"}
+                              tone={item.role === "super_admin" ? "danger" : item.role.includes("editor") ? "info" : "neutral"}
                             >
-                              {item.role.replace("_", " ")}
+                              {ROLE_LABELS[item.role as AppRole] ?? item.role.replaceAll("_", " ")}
                             </CmsStatus>
                           ))}
                         </div>
                       </td>
                       <td className="px-5 py-4 text-muted-foreground">
-                        {hasRole(profile.id, "section_editor") || hasRole(profile.id, "super_admin")
+                        {hasRole(profile.id, "section_editor") ||
+                        hasRole(profile.id, "managing_editor") ||
+                        hasRole(profile.id, "editor_in_chief") ||
+                        hasRole(profile.id, "super_admin")
                           ? "All categories"
                           : `${accessCount} assigned`}
                       </td>
@@ -205,9 +207,9 @@ function StaffPage() {
                   <ShieldCheck className="h-4 w-4" /> Newsroom roles
                 </div>
                 <div className="space-y-2">
-                  {(["super_admin", "section_editor", "contributor"] as const).map((role) => (
+                  {APP_ROLES.map((role) => (
                     <label key={role} className="flex items-center justify-between border border-border px-3 py-2">
-                      <span className="text-xs capitalize">{role.replace("_", " ")}</span>
+                      <span className="text-xs">{ROLE_LABELS[role]}</span>
                       <input
                         type="checkbox"
                         checked={hasRole(selected.id, role)}
