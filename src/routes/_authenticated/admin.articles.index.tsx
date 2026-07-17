@@ -54,7 +54,10 @@ function ArticlesPage() {
   const queryClient = useQueryClient();
   const articles = useQuery({ queryKey: ["admin-articles"], queryFn: listAdminArticles });
   const me = useQuery({ queryKey: ["me"], queryFn: getMe });
-  const sections = useQuery({ queryKey: ["sections"], queryFn: getSections });
+  const sections = useQuery({
+    queryKey: ["sections", "editorial"],
+    queryFn: () => getSections({ includeHidden: true }),
+  });
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [author, setAuthor] = useState("all");

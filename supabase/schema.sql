@@ -75,10 +75,17 @@ CREATE TABLE IF NOT EXISTS public.sections (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   slug TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
+  description TEXT,
+  parent_id UUID REFERENCES public.sections(id) ON DELETE SET NULL,
+  visibility TEXT NOT NULL DEFAULT 'public'
+    CHECK (visibility IN ('public', 'hidden')),
   color TEXT,
   sort_order INT NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT sections_parent_not_self CHECK (parent_id IS NULL OR parent_id <> id)
 );
+CREATE INDEX IF NOT EXISTS sections_parent_sort_idx ON public.sections(parent_id, sort_order, name);
+CREATE INDEX IF NOT EXISTS sections_visibility_idx ON public.sections(visibility, sort_order);
 
 -- Editor Section Access
 CREATE TABLE IF NOT EXISTS public.editor_section_access (

@@ -27,7 +27,10 @@ export const Route = createFileRoute("/_authenticated/admin/staff")({
 function StaffPage() {
   const queryClient = useQueryClient();
   const staff = useQuery({ queryKey: ["editors"], queryFn: listEditors });
-  const sections = useQuery({ queryKey: ["sections"], queryFn: getSections });
+  const sections = useQuery({
+    queryKey: ["sections", "editorial"],
+    queryFn: () => getSections({ includeHidden: true }),
+  });
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [profileForm, setProfileForm] = useState({ name: "", bio: "" });

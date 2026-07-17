@@ -15,7 +15,10 @@ export const Route = createFileRoute("/_authenticated/admin/access")({
 function Page() {
   const qc = useQueryClient();
   const editorsQ = useQuery({ queryKey: ["editors"], queryFn: () => listEditors() });
-  const sectionsQ = useQuery({ queryKey: ["sections"], queryFn: () => getSections() });
+  const sectionsQ = useQuery({
+    queryKey: ["sections", "editorial"],
+    queryFn: () => getSections({ includeHidden: true }),
+  });
   const toggle = useMutation({
     mutationFn: (v: { profile_id: string; section_id: string; grant: boolean }) => toggleSectionAccess({ data: v }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["editors"] }),

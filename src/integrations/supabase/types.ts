@@ -524,28 +524,45 @@ export type Database = {
         Row: {
           color: string | null
           created_at: string
+          description: string | null
           id: string
           name: string
+          parent_id: string | null
           slug: string
           sort_order: number
+          visibility: string
         }
         Insert: {
           color?: string | null
           created_at?: string
+          description?: string | null
           id?: string
           name: string
+          parent_id?: string | null
           slug: string
           sort_order?: number
+          visibility?: string
         }
         Update: {
           color?: string | null
           created_at?: string
+          description?: string | null
           id?: string
           name?: string
+          parent_id?: string | null
           slug?: string
           sort_order?: number
+          visibility?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "sections_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "sections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tags: {
         Row: {
@@ -724,6 +741,12 @@ export type Database = {
           p_action: string
           p_ids: string[]
           p_section_id?: string | null
+        }
+        Returns: number
+      }
+      admin_reorder_categories: {
+        Args: {
+          p_items: Json
         }
         Returns: number
       }

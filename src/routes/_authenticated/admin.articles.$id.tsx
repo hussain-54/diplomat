@@ -53,7 +53,10 @@ function EditArticle() {
   const mayUploadMedia = hasPermission(editorRoles, "media:upload");
   const mayManageTags = hasPermission(editorRoles, "articles:create");
 
-  const sectionsQ = useQuery({ queryKey: ["sections"], queryFn: () => getSections() });
+  const sectionsQ = useQuery({
+    queryKey: ["sections", "editorial"],
+    queryFn: () => getSections({ includeHidden: true }),
+  });
   const articleQ = useQuery({
     queryKey: ["admin-article", id],
     queryFn: () => getAdminArticle({ data: { id } }),

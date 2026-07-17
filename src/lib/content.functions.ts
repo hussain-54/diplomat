@@ -14,10 +14,10 @@ export const getHomeData = async () => {
     supabase.from("embassies").select("*").order("updated_at", { ascending: false }).limit(6),
     supabase.from("ticker_items").select("*").eq("active", true).order("sort_order").limit(20),
     supabase.from("videos").select("*").order("published_at", { ascending: false }).limit(4),
-    supabase.from("sections").select("*").order("sort_order"),
+    getSections(),
   ]);
 
-  for (const res of [articles, war, ambassadors, embassies, ticker, videos, sections]) {
+  for (const res of [articles, war, ambassadors, embassies, ticker, videos]) {
     if (res.error) throw toAppError(res.error);
   }
 
@@ -28,13 +28,25 @@ export const getHomeData = async () => {
     embassies: embassies.data ?? [],
     ticker: ticker.data ?? [],
     videos: videos.data ?? [],
-    sections: sections.data ?? [],
+    sections,
   };
 };
 
-export const getSections = async () => {
-  const { data, error } = await supabase.from("sections").select("*").order("sort_order");
-  if (error) throw toAppError(error);
+export const getSections = async ({
+  includeHidden = false,
+}: { includeHidden?: boolean } = {}) => {
+  let query = supabase.from("sections").select("*").order("sort_order").order("name");
+  if (!includeHidden) query = query.eq("visibility", "public");
+  const { data, error } = await query;
+  if (error) {
+    // Before taxonomy migration, visibility column may be missing.
+    if (/visibility|schema cache|PGRST/i.test(error.message) && !includeHidden) {
+      const fallback = await supabase.from("sections").select("*").order("sort_order");
+      if (fallback.error) throw toAppError(fallback.error);
+      return fallback.data ?? [];
+    }
+    throw toAppError(error);
+  }
   return data ?? [];
 };
 
@@ -56,6 +68,7 @@ export const getSectionWithArticles = async ({ data }: { data: { slug: string } 
     .maybeSingle();
   if (sectionError) throw toAppError(sectionError);
   if (!section) return { section: null, articles: [] };
+  if (section.visibility === "hidden") return { section: null, articles: [] };
   const { data: articles, error } = await supabase
     .from("articles")
     .select("id,slug,title,deck,hero_image_url,badge_type,published_at,region")

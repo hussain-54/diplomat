@@ -78,6 +78,7 @@ export async function publishedArticles({ newsOnly = false, rssOnly = false } = 
 export async function publicSections() {
   return rest("sections", {
     select: "slug,name",
+    visibility: "eq.public",
     order: "sort_order.asc",
     limit: "5000",
   });
