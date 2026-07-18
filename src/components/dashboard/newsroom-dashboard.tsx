@@ -31,12 +31,12 @@ import {
   cmsSecondaryButton,
 } from "@/components/cms-ui";
 import {
-  FilterChip,
   MetricCard,
   NotificationCenter,
   RoleGuard,
+  SegmentedControl,
+  SegmentedItem,
   StatusBadge,
-  statusToneFor,
 } from "@/components/cms";
 import { cn } from "@/lib/utils";
 
@@ -101,17 +101,22 @@ export function DashboardViewTabs({
   onChange: (view: DashboardView) => void;
 }) {
   return (
-    <div className="flex flex-wrap gap-2 border-b border-border pb-3">
+    <SegmentedControl className="w-full sm:w-auto">
       {DASHBOARD_VIEWS.map((view) => {
         const Icon = view.icon;
         return (
-          <FilterChip key={view.id} active={active === view.id} onClick={() => onChange(view.id)}>
+          <SegmentedItem
+            key={view.id}
+            active={active === view.id}
+            onClick={() => onChange(view.id)}
+          >
             <Icon className="h-3.5 w-3.5" />
-            {view.label}
-          </FilterChip>
+            <span className="hidden sm:inline">{view.label}</span>
+            <span className="sm:hidden">{view.label.split(" ")[0]}</span>
+          </SegmentedItem>
         );
       })}
-    </div>
+    </SegmentedControl>
   );
 }
 
@@ -154,7 +159,7 @@ function ArticleRow({
     <Link
       to="/admin/articles/$id"
       params={{ id: article.id }}
-      className="grid gap-3 px-5 py-4 hover:bg-muted/30 sm:grid-cols-[1fr_auto_auto] sm:items-center"
+      className="grid gap-3 px-5 py-4 cms-transition hover:bg-accent/50 sm:grid-cols-[1fr_auto_auto] sm:items-center"
     >
       {content}
     </Link>
@@ -178,8 +183,11 @@ function MiniBar({
         <span className="font-medium text-foreground">{label}</span>
         <span className="tabular-nums text-muted-foreground">{value.toLocaleString()}</span>
       </div>
-      <div className="h-1.5 bg-muted">
-        <div className={cn("h-full", tone)} style={{ width: `${Math.max((value / max) * 100, value ? 4 : 0)}%` }} />
+      <div className="h-1.5 overflow-hidden bg-muted">
+        <div
+          className={cn("h-full cms-transition", tone)}
+          style={{ width: `${Math.max((value / max) * 100, value ? 4 : 0)}%` }}
+        />
       </div>
     </div>
   );
@@ -835,7 +843,7 @@ export function QuickActionsView() {
           <Link
             to={action.href}
             params={action.params}
-            className="group border border-border bg-card p-5 transition-colors hover:bg-muted/30"
+            className="group border border-border bg-card p-5 shadow-[var(--cms-shadow)] cms-transition hover:border-foreground/20 hover:shadow-[var(--cms-shadow-hover)]"
           >
             <div className="flex h-10 w-10 items-center justify-center bg-muted text-foreground group-hover:bg-foreground group-hover:text-background">
               <Icon className="h-5 w-5" />

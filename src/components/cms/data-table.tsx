@@ -15,28 +15,33 @@ export function DataTable({
   children,
   empty,
   toolbar,
+  footer,
   minWidth = "960px",
   className,
+  dense = false,
 }: {
   columns: DataTableColumn[];
   children: ReactNode;
   empty?: ReactNode;
   toolbar?: ReactNode;
+  footer?: ReactNode;
   minWidth?: string;
   className?: string;
+  dense?: boolean;
 }) {
   return (
     <div className={cn("overflow-hidden", className)}>
       {toolbar}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm" style={{ minWidth }}>
-          <thead className="border-b border-border bg-muted/50 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+          <thead className="sticky top-0 z-10 border-b border-border bg-muted/70 text-[10px] uppercase tracking-[0.1em] text-muted-foreground backdrop-blur">
             <tr>
               {columns.map((column) => (
                 <th
                   key={column.key}
                   className={cn(
-                    "px-4 py-3 font-semibold",
+                    "px-4 font-semibold",
+                    dense ? "py-2.5" : "py-3",
                     column.align === "right" && "text-right",
                     column.align === "center" && "text-center",
                     column.className,
@@ -52,6 +57,7 @@ export function DataTable({
         </table>
       </div>
       {empty}
+      {footer}
     </div>
   );
 }
@@ -60,15 +66,23 @@ export function DataTableRow({
   children,
   className,
   onClick,
+  selected,
 }: {
   children: ReactNode;
   className?: string;
   onClick?: () => void;
+  selected?: boolean;
 }) {
   return (
     <tr
-      className={cn("hover:bg-muted/30", onClick && "cursor-pointer", className)}
+      className={cn(
+        "cms-transition hover:bg-accent/60",
+        selected && "bg-accent/80",
+        onClick && "cursor-pointer",
+        className,
+      )}
       onClick={onClick}
+      data-selected={selected || undefined}
     >
       {children}
     </tr>
@@ -80,19 +94,22 @@ export function DataTableCell({
   align = "left",
   className,
   colSpan,
+  mono,
 }: {
   children?: ReactNode;
   align?: "left" | "right" | "center";
   className?: string;
   colSpan?: number;
+  mono?: boolean;
 }) {
   return (
     <td
       colSpan={colSpan}
       className={cn(
-        "px-4 py-4 align-middle",
+        "px-4 py-3.5 align-middle",
         align === "right" && "text-right",
         align === "center" && "text-center",
+        mono && "cms-metric text-[13px]",
         className,
       )}
     >
@@ -105,15 +122,17 @@ export function DataTableEmpty({
   title = "No results",
   description = "Nothing matches the current filters.",
   colSpan,
+  action,
 }: {
   title?: string;
   description?: string;
   colSpan: number;
+  action?: ReactNode;
 }) {
   return (
     <tr>
       <td colSpan={colSpan} className="p-0">
-        <CmsEmptyState title={title} description={description} />
+        <CmsEmptyState title={title} description={description} action={action} />
       </td>
     </tr>
   );

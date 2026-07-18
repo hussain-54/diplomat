@@ -6,7 +6,15 @@ export type { StatusTone } from "./status-badge";
 
 export { MetricCard } from "./metric-card";
 export { PageHeader } from "./page-header";
-export { FilterBar, FilterChip } from "./filter-bar";
+export {
+  FilterBar,
+  FilterChip,
+  FilterField,
+  SegmentedControl,
+  SegmentedItem,
+} from "./filter-bar";
+export { CmsPagination } from "./pagination";
+export { CmsPageSkeleton, CmsTableSkeleton } from "./loading";
 export { RoleGuard } from "./role-guard";
 export { NotificationCenter, NotificationList } from "./notification-center";
 export type { NotificationItem } from "./notification-center";
@@ -23,7 +31,9 @@ export {
   CmsStat,
   CmsStatus,
   CmsEmptyState,
+  CmsAlert,
   cmsButton,
   cmsSecondaryButton,
+  cmsGhostButton,
   cmsInput,
 } from "@/components/cms-ui";

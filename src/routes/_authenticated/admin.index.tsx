@@ -10,8 +10,7 @@ import {
   listDashboardArticles,
 } from "@/lib/admin.functions";
 import { getTicker } from "@/lib/content.functions";
-import { PageHeader } from "@/components/cms";
-import { Skeleton } from "@/components/ui/skeleton";
+import { PageHeader, CmsPageSkeleton, CmsAlert } from "@/components/cms";
 import {
   AnalyticsView,
   DashboardViewTabs,
@@ -30,6 +29,7 @@ import { useLiveVisitors } from "@/hooks/useLiveVisitors";
 import { useNewsroomRealtime } from "@/hooks/useNewsroomRealtime";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermissionRoute } from "@/lib/route-guards";
+import { cmsButton } from "@/components/cms-ui";
 
 export const Route = createFileRoute("/_authenticated/admin/")({
   beforeLoad: ({ context }) => requirePermissionRoute(context.roles, "dashboard:view"),
@@ -143,7 +143,7 @@ function Overview() {
     month: "long",
   }).format(new Date());
 
-  if (isLoading) return <DashboardSkeleton />;
+  if (isLoading) return <CmsPageSkeleton metrics={6} panels={2} />;
 
   return (
     <div className="space-y-6">
@@ -165,7 +165,7 @@ function Overview() {
               <Link
                 to="/admin/articles/$id"
                 params={{ id: "new" }}
-                className="inline-flex h-9 items-center gap-2 bg-primary px-3 text-xs font-semibold text-primary-foreground"
+                className={cmsButton}
               >
                 <FileText className="h-4 w-4" /> New article
               </Link>
@@ -175,9 +175,9 @@ function Overview() {
       />
 
       {error && (
-        <div className="border border-crimson/30 bg-crimson/10 px-4 py-3 text-sm text-crimson">
+        <CmsAlert>
           Dashboard data could not be fully refreshed. {error.message}
-        </div>
+        </CmsAlert>
       )}
 
       <DashboardViewTabs active={view} onChange={setView} />
@@ -267,40 +267,4 @@ function greeting() {
   if (hour < 12) return "morning";
   if (hour < 18) return "afternoon";
   return "evening";
-}
-
-function DashboardSkeleton() {
-  return (
-    <div className="space-y-6" aria-label="Loading newsroom dashboard">
-      <div className="space-y-2 border-b border-border pb-5">
-        <Skeleton className="h-3 w-32" />
-        <Skeleton className="h-8 w-72" />
-        <Skeleton className="h-4 w-96 max-w-full" />
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {Array.from({ length: 8 }).map((_, index) => (
-          <Skeleton key={index} className="h-9 w-24" />
-        ))}
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="space-y-3 border border-border bg-card p-4">
-            <Skeleton className="h-3 w-28" />
-            <Skeleton className="h-9 w-16" />
-            <Skeleton className="h-3 w-40" />
-          </div>
-        ))}
-      </div>
-      <div className="grid gap-6 xl:grid-cols-2">
-        {Array.from({ length: 2 }).map((_, index) => (
-          <div key={index} className="space-y-4 border border-border bg-card p-5">
-            <Skeleton className="h-5 w-40" />
-            {Array.from({ length: 5 }).map((__, row) => (
-              <Skeleton key={row} className="h-12 w-full" />
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }

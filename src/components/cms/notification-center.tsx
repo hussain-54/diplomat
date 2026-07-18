@@ -66,7 +66,7 @@ function NotificationRow({ item }: { item: NotificationItem }) {
     return (
       <a
         href={item.href}
-        className="flex items-center gap-3 px-5 py-4 transition-colors hover:bg-muted/40"
+        className="flex items-center gap-3 px-5 py-4 cms-transition hover:bg-accent/50"
       >
         {content}
       </a>

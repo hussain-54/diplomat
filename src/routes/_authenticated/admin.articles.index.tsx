@@ -9,9 +9,8 @@ import {
   Search,
   Send,
   Trash2,
-  X,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   bulkManageArticles,
   duplicateArticle,
@@ -20,21 +19,30 @@ import {
 } from "@/lib/admin.functions";
 import { getSections } from "@/lib/content.functions";
 import {
-  CmsEmptyState,
+  CmsAlert,
   CmsPageHeader,
   CmsPanel,
+  CmsPagination,
   CmsStatus,
+  CmsTableSkeleton,
+  DataTable,
+  DataTableCell,
+  DataTableEmpty,
+  DataTableRow,
+  FilterBar,
+  FilterField,
   cmsButton,
   cmsInput,
   cmsSecondaryButton,
-} from "@/components/cms-ui";
-import { Skeleton } from "@/components/ui/skeleton";
+} from "@/components/cms";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermissionRoute } from "@/lib/route-guards";
 import type { Database } from "@/integrations/supabase/types";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
 type BulkAction = "publish" | "archive" | "delete" | "reassign_category";
+
+const PAGE_SIZE = 25;
 
 const STATUSES: Array<"all" | ArticleStatus> = [
   "all",
@@ -43,6 +51,16 @@ const STATUSES: Array<"all" | ArticleStatus> = [
   "scheduled",
   "published",
   "archived",
+];
+
+const ARTICLE_COLUMNS = [
+  { key: "select", header: "", width: "48px" },
+  { key: "article", header: "Article" },
+  { key: "author", header: "Author", width: "140px" },
+  { key: "category", header: "Category", width: "140px" },
+  { key: "status", header: "Status", width: "120px" },
+  { key: "updated", header: "Updated", width: "160px" },
+  { key: "actions", header: "Actions", align: "right" as const, width: "200px" },
 ];
 
 export const Route = createFileRoute("/_authenticated/admin/articles/")({
@@ -65,6 +83,7 @@ function ArticlesPage() {
   const [status, setStatus] = useState<"all" | ArticleStatus>("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
 
   const refresh = () => {
     setSelected([]);
@@ -121,8 +140,17 @@ function ArticlesPage() {
     });
   }, [articles.data, author, category, dateFrom, dateTo, search, status]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [search, author, category, status, dateFrom, dateTo]);
+
+  const pageRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, page]);
+
   const allVisibleSelected =
-    filtered.length > 0 && filtered.every((article) => selected.includes(article.id));
+    pageRows.length > 0 && pageRows.every((article) => selected.includes(article.id));
   const error = articles.error ?? me.error ?? sections.error ?? duplicate.error ?? bulk.error;
   const hasFilters =
     Boolean(search || dateFrom || dateTo) ||
@@ -158,90 +186,117 @@ function ArticlesPage() {
         description="Create, review, schedule, publish, archive, and audit newsroom reporting."
         actions={
           canCreate ? (
-            <Link
-              to="/admin/articles/$id"
-              params={{ id: "new" }}
-              className={cmsButton}
-            >
+            <Link to="/admin/articles/$id" params={{ id: "new" }} className={cmsButton}>
               <Plus className="h-4 w-4" /> Create article
             </Link>
           ) : null
         }
       />
 
-      {error && (
-        <div className="border border-crimson/30 bg-crimson/10 px-4 py-3 text-sm text-crimson">
-          {error.message}
-        </div>
-      )}
+      {error ? <CmsAlert>{error.message}</CmsAlert> : null}
 
       <CmsPanel>
-        <div className="grid gap-3 border-b border-border p-4 lg:grid-cols-[minmax(220px,1fr)_repeat(3,minmax(150px,0.45fr))]">
-          <label className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+        <FilterBar onClear={hasFilters ? resetFilters : undefined}>
+          <FilterField label="Search">
+            <div className="relative">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <input
+                className={`${cmsInput} pl-9`}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Title or slug"
+              />
+            </div>
+          </FilterField>
+          <FilterField label="Author">
+            <select className={cmsInput} value={author} onChange={(event) => setAuthor(event.target.value)}>
+              <option value="all">All authors</option>
+              {authorOptions.map(([id, name]) => (
+                <option key={id} value={id}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <FilterField label="Category">
+            <select
+              className={cmsInput}
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+            >
+              <option value="all">All categories</option>
+              {(sections.data ?? []).map((section) => (
+                <option key={section.id} value={section.id}>
+                  {section.name}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <FilterField label="Status">
+            <select
+              className={cmsInput}
+              value={status}
+              onChange={(event) => setStatus(event.target.value as "all" | ArticleStatus)}
+            >
+              {STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {statusLabel(value)}
+                </option>
+              ))}
+            </select>
+          </FilterField>
+          <FilterField label="Updated from">
             <input
-              className={`${cmsInput} pl-9`}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search title or slug"
+              type="date"
+              className={cmsInput}
+              value={dateFrom}
+              onChange={(event) => setDateFrom(event.target.value)}
             />
-          </label>
-          <select className={cmsInput} value={author} onChange={(event) => setAuthor(event.target.value)}>
-            <option value="all">All authors</option>
-            {authorOptions.map(([id, name]) => (
-              <option key={id} value={id}>{name}</option>
-            ))}
-          </select>
-          <select className={cmsInput} value={category} onChange={(event) => setCategory(event.target.value)}>
-            <option value="all">All categories</option>
-            {(sections.data ?? []).map((section) => (
-              <option key={section.id} value={section.id}>{section.name}</option>
-            ))}
-          </select>
-          <select
-            className={cmsInput}
-            value={status}
-            onChange={(event) => setStatus(event.target.value as "all" | ArticleStatus)}
-          >
-            {STATUSES.map((value) => (
-              <option key={value} value={value}>{statusLabel(value)}</option>
-            ))}
-          </select>
-        </div>
+          </FilterField>
+          <FilterField label="Updated to">
+            <input
+              type="date"
+              className={cmsInput}
+              value={dateTo}
+              onChange={(event) => setDateTo(event.target.value)}
+            />
+          </FilterField>
+        </FilterBar>
 
-        <div className="flex flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            Updated date
-          </span>
-          <input type="date" className={`${cmsInput} sm:w-40`} value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
-          <span className="text-xs text-muted-foreground">to</span>
-          <input type="date" className={`${cmsInput} sm:w-40`} value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
-          {hasFilters && (
-            <button type="button" className={`${cmsSecondaryButton} sm:ml-auto`} onClick={resetFilters}>
-              <X className="h-3.5 w-3.5" /> Clear filters
-            </button>
-          )}
-        </div>
-
-        {selected.length > 0 && (
+        {selected.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-4 py-3">
-            <span className="mr-2 text-xs font-semibold">{selected.length} selected</span>
-            {canPublish && (
+            <span className="mr-2 cms-metric text-xs font-semibold">{selected.length} selected</span>
+            {canPublish ? (
               <>
-                <button type="button" className={cmsSecondaryButton} onClick={() => runBulk("publish")} disabled={bulk.isPending}>
+                <button
+                  type="button"
+                  className={cmsSecondaryButton}
+                  onClick={() => runBulk("publish")}
+                  disabled={bulk.isPending}
+                >
                   <Send className="h-3.5 w-3.5" /> Publish
                 </button>
-                <button type="button" className={cmsSecondaryButton} onClick={() => runBulk("archive")} disabled={bulk.isPending}>
+                <button
+                  type="button"
+                  className={cmsSecondaryButton}
+                  onClick={() => runBulk("archive")}
+                  disabled={bulk.isPending}
+                >
                   <Archive className="h-3.5 w-3.5" /> Archive
                 </button>
               </>
-            )}
-            {canDelete && (
-              <button type="button" className={cmsSecondaryButton} onClick={() => runBulk("delete")} disabled={bulk.isPending}>
+            ) : null}
+            {canDelete ? (
+              <button
+                type="button"
+                className={cmsSecondaryButton}
+                onClick={() => runBulk("delete")}
+                disabled={bulk.isPending}
+              >
                 <Trash2 className="h-3.5 w-3.5" /> Delete
               </button>
-            )}
-            {canReassign && (
+            ) : null}
+            {canReassign ? (
               <select
                 className={`${cmsInput} w-auto min-w-48`}
                 value=""
@@ -257,51 +312,70 @@ function ArticlesPage() {
               >
                 <option value="">Reassign category…</option>
                 {(sections.data ?? []).map((section) => (
-                  <option key={section.id} value={section.id}>{section.name}</option>
+                  <option key={section.id} value={section.id}>
+                    {section.name}
+                  </option>
                 ))}
               </select>
-            )}
+            ) : null}
           </div>
-        )}
+        ) : null}
 
         {articles.isLoading ? (
-          <ArticlesSkeleton />
-        ) : !filtered.length ? (
-          <CmsEmptyState
-            title="No matching articles"
-            description="Adjust the filters or create a new article."
-          />
+          <CmsTableSkeleton rows={8} cols={6} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1080px] text-left text-sm">
-              <thead className="border-b border-border bg-muted/50 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
-                <tr>
-                  <th className="w-12 px-4 py-3">
+          <DataTable
+            columns={ARTICLE_COLUMNS}
+            minWidth="1080px"
+            footer={
+              <CmsPagination
+                page={page}
+                pageSize={PAGE_SIZE}
+                total={filtered.length}
+                onPageChange={setPage}
+              />
+            }
+          >
+            {!pageRows.length ? (
+              <DataTableEmpty
+                colSpan={ARTICLE_COLUMNS.length}
+                title="No matching articles"
+                description="Adjust the filters or create a new article."
+                action={
+                  canCreate ? (
+                    <Link to="/admin/articles/$id" params={{ id: "new" }} className={cmsButton}>
+                      <Plus className="h-4 w-4" /> Create article
+                    </Link>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <>
+                <DataTableRow className="bg-muted/20 hover:bg-muted/20">
+                  <DataTableCell>
                     <input
                       type="checkbox"
                       checked={allVisibleSelected}
                       onChange={(event) =>
                         setSelected(
                           event.target.checked
-                            ? [...new Set([...selected, ...filtered.map((article) => article.id)])]
-                            : selected.filter((id) => !filtered.some((article) => article.id === id)),
+                            ? [...new Set([...selected, ...pageRows.map((article) => article.id)])]
+                            : selected.filter((id) => !pageRows.some((article) => article.id === id)),
                         )
                       }
                       aria-label="Select all visible articles"
                     />
-                  </th>
-                  <th className="px-4 py-3 font-semibold">Article</th>
-                  <th className="px-4 py-3 font-semibold">Author</th>
-                  <th className="px-4 py-3 font-semibold">Category</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold">Updated</th>
-                  <th className="px-4 py-3 text-right font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {filtered.map((article) => (
-                  <tr key={article.id} className="hover:bg-muted/30">
-                    <td className="px-4 py-4">
+                  </DataTableCell>
+                  <DataTableCell colSpan={ARTICLE_COLUMNS.length - 1}>
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                      Select page
+                      {bulk.isPending ? " · Applying bulk action…" : ""}
+                    </span>
+                  </DataTableCell>
+                </DataTableRow>
+                {pageRows.map((article) => (
+                  <DataTableRow key={article.id} selected={selected.includes(article.id)}>
+                    <DataTableCell>
                       <input
                         type="checkbox"
                         checked={selected.includes(article.id)}
@@ -314,77 +388,104 @@ function ArticlesPage() {
                         }
                         aria-label={`Select ${article.title}`}
                       />
-                    </td>
-                    <td className="max-w-md px-4 py-4">
+                    </DataTableCell>
+                    <DataTableCell className="max-w-md">
                       <Link
                         to="/admin/articles/$id"
                         params={{ id: article.id }}
-                        className="block truncate font-semibold text-foreground hover:text-cat-blue"
+                        className="block truncate font-semibold text-foreground cms-transition hover:text-cat-blue"
                       >
                         {article.title}
                       </Link>
                       <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
                         /article/{article.slug}
                       </div>
-                    </td>
-                    <td className="px-4 py-4 text-xs text-muted-foreground">
+                    </DataTableCell>
+                    <DataTableCell className="text-xs text-muted-foreground">
                       {authorName(article.author) || "Unknown"}
-                    </td>
-                    <td className="px-4 py-4 text-xs text-muted-foreground">
+                    </DataTableCell>
+                    <DataTableCell className="text-xs text-muted-foreground">
                       {sectionName(article.sections)}
-                    </td>
-                    <td className="px-4 py-4">
-                      <CmsStatus tone={statusTone(article.status)}>{statusLabel(article.status)}</CmsStatus>
-                      {article.status === "scheduled" && article.scheduled_at && (
-                        <div className="mt-1 text-[10px] text-muted-foreground">
+                    </DataTableCell>
+                    <DataTableCell>
+                      <CmsStatus tone={statusTone(article.status)}>
+                        {statusLabel(article.status)}
+                      </CmsStatus>
+                      {article.status === "scheduled" && article.scheduled_at ? (
+                        <div className="mt-1 font-mono text-[10px] text-muted-foreground">
                           {new Date(article.scheduled_at).toLocaleString()}
                         </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 text-xs text-muted-foreground">
+                      ) : null}
+                    </DataTableCell>
+                    <DataTableCell mono className="text-xs text-muted-foreground">
                       {new Date(article.updated_at).toLocaleString()}
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex justify-end gap-1">
-                        <Link to="/admin/articles/$id" params={{ id: article.id }} className="p-2 text-muted-foreground hover:bg-accent hover:text-foreground" title="Edit article">
+                    </DataTableCell>
+                    <DataTableCell align="right">
+                      <div className="flex justify-end gap-0.5">
+                        <Link
+                          to="/admin/articles/$id"
+                          params={{ id: article.id }}
+                          className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
+                          title="Edit article"
+                        >
                           <Pencil className="h-4 w-4" />
                         </Link>
-                        <Link to="/admin/articles/$id" params={{ id: article.id }} className="p-2 text-muted-foreground hover:bg-accent hover:text-foreground" title="Revision history">
+                        <Link
+                          to="/admin/articles/$id"
+                          params={{ id: article.id }}
+                          className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
+                          title="Revision history"
+                        >
                           <History className="h-4 w-4" />
                         </Link>
-                        {canCreate && (
-                          <button type="button" className="p-2 text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => duplicate.mutate(article.id)} title="Duplicate article">
+                        {canCreate ? (
+                          <button
+                            type="button"
+                            className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
+                            onClick={() => duplicate.mutate(article.id)}
+                            title="Duplicate article"
+                          >
                             <Copy className="h-4 w-4" />
                           </button>
-                        )}
-                        {canPublish && article.status !== "published" && (
-                          <button type="button" className="p-2 text-muted-foreground hover:bg-cat-green/10 hover:text-cat-green" onClick={() => runBulk("publish", [article.id])} title="Publish article">
+                        ) : null}
+                        {canPublish && article.status !== "published" ? (
+                          <button
+                            type="button"
+                            className="p-2 text-muted-foreground cms-transition hover:bg-cat-green/10 hover:text-cat-green"
+                            onClick={() => runBulk("publish", [article.id])}
+                            title="Publish article"
+                          >
                             <Send className="h-4 w-4" />
                           </button>
-                        )}
-                        {canPublish && article.status !== "archived" && (
-                          <button type="button" className="p-2 text-muted-foreground hover:bg-gold/10 hover:text-gold" onClick={() => runBulk("archive", [article.id])} title="Archive article">
+                        ) : null}
+                        {canPublish && article.status !== "archived" ? (
+                          <button
+                            type="button"
+                            className="p-2 text-muted-foreground cms-transition hover:bg-gold/10 hover:text-gold"
+                            onClick={() => runBulk("archive", [article.id])}
+                            title="Archive article"
+                          >
                             <Archive className="h-4 w-4" />
                           </button>
-                        )}
-                        {canDelete && (
-                          <button type="button" className="p-2 text-muted-foreground hover:bg-crimson/10 hover:text-crimson" onClick={() => runBulk("delete", [article.id])} title="Delete article">
+                        ) : null}
+                        {canDelete ? (
+                          <button
+                            type="button"
+                            className="p-2 text-muted-foreground cms-transition hover:bg-crimson/10 hover:text-crimson"
+                            onClick={() => runBulk("delete", [article.id])}
+                            title="Delete article"
+                          >
                             <Trash2 className="h-4 w-4" />
                           </button>
-                        )}
+                        ) : null}
                       </div>
-                    </td>
-                  </tr>
+                    </DataTableCell>
+                  </DataTableRow>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </>
+            )}
+          </DataTable>
         )}
-
-        <footer className="flex items-center justify-between border-t border-border px-4 py-3 text-xs text-muted-foreground">
-          <span>{filtered.length} of {articles.data?.length ?? 0} articles</span>
-          {bulk.isPending && <span>Applying bulk action…</span>}
-        </footer>
       </CmsPanel>
     </div>
   );
@@ -410,20 +511,4 @@ function statusTone(status: ArticleStatus): "neutral" | "warning" | "info" | "su
   if (status === "scheduled") return "info";
   if (status === "archived") return "danger";
   return "neutral";
-}
-
-function ArticlesSkeleton() {
-  return (
-    <div className="space-y-px bg-border">
-      {Array.from({ length: 7 }).map((_, index) => (
-        <div key={index} className="flex items-center gap-4 bg-card px-4 py-4">
-          <Skeleton className="h-4 w-4" />
-          <Skeleton className="h-10 flex-1" />
-          <Skeleton className="h-6 w-24" />
-          <Skeleton className="h-6 w-28" />
-          <Skeleton className="h-8 w-40" />
-        </div>
-      ))}
-    </div>
-  );
 }

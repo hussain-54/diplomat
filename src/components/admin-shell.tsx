@@ -24,6 +24,7 @@ import {
   type Permission,
   type AppRole,
 } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
 
 const NAV: Array<{
   to: string;
@@ -84,14 +85,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
   const sidebar = (
     <aside className="flex h-full w-64 flex-col border-r border-border bg-card">
-      <div className="flex h-16 items-center justify-between border-b border-border px-5">
-        <Link to="/" className="flex items-center gap-2" aria-label="Diplomacy Lens home">
-          <div className="flex h-7 w-7 items-center justify-center bg-foreground text-[11px] font-black text-background">
+      <div className="flex h-14 items-center justify-between border-b border-border px-4">
+        <Link to="/" className="flex items-center gap-2.5" aria-label="Diplomacy Lens home">
+          <div className="flex h-8 w-8 items-center justify-center bg-foreground font-mono text-[11px] font-bold text-background">
             DL
           </div>
           <div>
-            <div className="text-sm font-bold tracking-tight text-foreground">DIPLOMACY LENS</div>
-            <div className="text-[9px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+            <div className="text-[13px] font-bold tracking-tight text-foreground">Diplomacy Lens</div>
+            <div className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               Newsroom CMS
             </div>
           </div>
@@ -99,21 +100,21 @@ export function AdminShell({ children }: { children: ReactNode }) {
         <button
           type="button"
           onClick={() => setMenuOpen(false)}
-          className="p-1 text-muted-foreground lg:hidden"
+          className="p-1.5 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground lg:hidden"
           aria-label="Close navigation"
         >
-          <X className="h-5 w-5" />
+          <X className="h-4 w-4" />
         </button>
       </div>
 
-      <div className="border-b border-border px-5 py-3">
-        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+      <div className="border-b border-border px-4 py-2.5">
+        <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-cat-green" />
-          Newsroom operational
+          Desk online
         </div>
       </div>
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4" aria-label="Newsroom navigation">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3" aria-label="Newsroom navigation">
         {visibleNav.map((item) => {
           const active = item.exact
             ? location.pathname === item.to
@@ -123,23 +124,24 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <Link
               key={item.to}
               to={item.to}
-              className={`group flex h-10 items-center gap-3 px-3 text-[13px] font-medium transition-colors ${
+              className={cn(
+                "group flex h-9 items-center gap-2.5 px-2.5 text-[13px] font-medium cms-transition",
                 active
                   ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
-              }`}
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground",
+              )}
             >
-              <Icon className="h-4 w-4" />
+              <Icon className="h-4 w-4 opacity-80" />
               <span className="flex-1">{item.label}</span>
-              {active && <ChevronRight className="h-3.5 w-3.5" />}
+              {active ? <ChevronRight className="h-3.5 w-3.5 opacity-70" /> : null}
             </Link>
           );
         })}
       </nav>
 
-      <div className="border-t border-border p-3">
-        <div className="flex items-center gap-3 px-2 py-2">
-          <div className="flex h-8 w-8 items-center justify-center bg-muted text-xs font-bold text-foreground">
+      <div className="border-t border-border p-2.5">
+        <div className="flex items-center gap-2.5 px-2 py-2">
+          <div className="flex h-8 w-8 items-center justify-center bg-muted font-mono text-xs font-bold text-foreground">
             {(meQ.data?.profile?.name ?? "E").slice(0, 1).toUpperCase()}
           </div>
           <div className="min-w-0 flex-1">
@@ -153,7 +155,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={signOut}
-            className="p-2 text-muted-foreground hover:text-crimson"
+            className="p-2 text-muted-foreground cms-transition hover:bg-crimson/10 hover:text-crimson"
             aria-label="Sign out"
           >
             <LogOut className="h-4 w-4" />
@@ -164,40 +166,38 @@ export function AdminShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="cms-app min-h-screen bg-background text-foreground">
       <div className="fixed inset-y-0 left-0 z-40 hidden lg:block">{sidebar}</div>
-      {menuOpen && (
+      {menuOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
             type="button"
-            className="absolute inset-0 bg-black/50"
+            className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
             onClick={() => setMenuOpen(false)}
             aria-label="Close navigation overlay"
           />
-          <div className="relative h-full">{sidebar}</div>
+          <div className="relative h-full w-64 max-w-[85vw] shadow-2xl">{sidebar}</div>
         </div>
-      )}
+      ) : null}
 
       <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 px-4 backdrop-blur sm:px-6">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/90 px-4 backdrop-blur-md sm:px-6">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setMenuOpen(true)}
-              className="p-2 text-muted-foreground lg:hidden"
+              className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground lg:hidden"
               aria-label="Open navigation"
             >
               <Menu className="h-5 w-5" />
             </button>
             <div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Newsroom
-              </div>
-              <div className="text-sm font-semibold text-foreground">{pageName}</div>
+              <div className="eyebrow text-[9px]">Newsroom</div>
+              <div className="text-sm font-semibold tracking-tight text-foreground">{pageName}</div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="hidden border-r border-border pr-4 text-xs text-muted-foreground sm:inline">
+            <span className="hidden border-r border-border pr-3 font-mono text-[11px] text-muted-foreground sm:inline">
               {new Intl.DateTimeFormat("en", {
                 weekday: "short",
                 day: "2-digit",
@@ -208,14 +208,16 @@ export function AdminShell({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => setDark((value) => !value)}
-              className="flex h-9 w-9 items-center justify-center border border-input text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="flex h-8 w-8 items-center justify-center border border-input text-muted-foreground cms-transition hover:border-foreground/25 hover:bg-accent hover:text-foreground"
               aria-label={dark ? "Use light mode" : "Use dark mode"}
             >
-              {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {dark ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
             </button>
           </div>
         </header>
-        <main className="mx-auto min-h-[calc(100vh-4rem)] max-w-[1680px] p-4 sm:p-6 lg:p-8">{children}</main>
+        <main className="mx-auto min-h-[calc(100vh-3.5rem)] max-w-[1680px] p-4 sm:p-6 lg:p-8">
+          {children}
+        </main>
       </div>
     </div>
   );
