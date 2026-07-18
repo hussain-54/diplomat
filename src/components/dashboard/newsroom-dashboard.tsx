@@ -3,12 +3,19 @@ import { Link } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  Archive,
   ArrowRight,
   Bell,
+  CalendarClock,
   CircleAlert,
+  ClipboardList,
   Clock3,
+  Eye,
+  FilePenLine,
   FilePlus2,
+  FileText,
   Radio,
+  Users,
 } from "lucide-react";
 import {
   CmsEmptyState,
@@ -21,6 +28,7 @@ import {
   SegmentedItem,
   StatusBadge,
 } from "@/components/cms";
+import { AreaTrendChart, ChartCard } from "@/components/dashboard/chart-card";
 import { cn } from "@/lib/utils";
 
 import {
@@ -37,14 +45,17 @@ export { DASHBOARD_VIEWS, sectionName, authorName } from "@/components/dashboard
 export function DashboardViewTabs({
   active,
   onChange,
+  badges,
 }: {
   active: DashboardView;
   onChange: (view: DashboardView) => void;
+  badges?: Partial<Record<DashboardView, number>>;
 }) {
   return (
-    <SegmentedControl className="w-full sm:w-auto">
+    <SegmentedControl className="w-full overflow-x-auto sm:w-auto">
       {DASHBOARD_VIEWS.map((view) => {
         const Icon = view.icon;
+        const badge = badges?.[view.id] ?? 0;
         return (
           <SegmentedItem
             key={view.id}
@@ -54,6 +65,18 @@ export function DashboardViewTabs({
             <Icon className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">{view.label}</span>
             <span className="sm:hidden">{view.label.split(" ")[0]}</span>
+            {badge > 0 ? (
+              <span
+                className={cn(
+                  "cms-metric rounded-full px-1.5 py-0.5 text-[10px] font-bold",
+                  active === view.id
+                    ? "bg-primary/15 text-primary"
+                    : "bg-foreground/10 text-muted-foreground",
+                )}
+              >
+                {badge > 99 ? "99+" : badge}
+              </span>
+            ) : null}
           </SegmentedItem>
         );
       })}
@@ -122,11 +145,13 @@ function MiniBar({
     <div>
       <div className="mb-1.5 flex justify-between text-xs">
         <span className="font-medium text-foreground">{label}</span>
-        <span className="tabular-nums text-muted-foreground">{value.toLocaleString()}</span>
+        <span className="cms-metric tabular-nums text-muted-foreground">
+          {value.toLocaleString()}
+        </span>
       </div>
-      <div className="h-1.5 overflow-hidden bg-muted">
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
         <div
-          className={cn("h-full cms-transition", tone)}
+          className={cn("h-full rounded-full cms-transition", tone)}
           style={{ width: `${Math.max((value / max) * 100, value ? 4 : 0)}%` }}
         />
       </div>
@@ -192,70 +217,81 @@ export function OverviewView({
   const topAuthors = [...authorCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   const maxCategory = Math.max(...topCategories.map(([, n]) => n), 1);
   const maxAuthor = Math.max(...topAuthors.map(([, n]) => n), 1);
-  const maxDaily = Math.max(...dailyRows.map(([, v]) => v), 1);
   const publishRate =
     metrics.totalArticles > 0
       ? Math.round((metrics.publishedTotal / metrics.totalArticles) * 100)
       : 0;
   const backlog = metrics.pendingReview + metrics.drafts + metrics.scheduled;
+  const hasTraffic = dailyRows.some(([, v]) => v > 0);
+  const trend = dailyRows.map(([label, value]) => ({
+    label: new Date(`${label}T00:00:00Z`).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    }),
+    views: value,
+  }));
 
   return (
     <div className="space-y-6">
-      {/* Metrics row */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        <MetricCard label="Total articles" value={metrics.totalArticles} detail="All statuses" />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <MetricCard
           label="Published"
           value={metrics.publishedTotal}
+          icon={FileText}
           detail={`${metrics.publishedToday} today`}
           trend={metrics.publishedToday ? "up" : "neutral"}
         />
-        <MetricCard label="Drafts" value={metrics.drafts} detail="In progress" />
+        <MetricCard
+          label="Drafts"
+          value={metrics.drafts}
+          icon={FilePenLine}
+          detail="In progress"
+        />
         <MetricCard
           label="Pending review"
           value={metrics.pendingReview}
+          icon={ClipboardList}
           detail="Editorial queue"
           trend={metrics.pendingReview ? "down" : "neutral"}
         />
-        <MetricCard label="Scheduled" value={metrics.scheduled} detail="Awaiting publish" />
         <MetricCard
-          label="Active authors"
-          value={metrics.activeAuthors}
-          detail="With assigned work"
-          trend={metrics.activeAuthors ? "up" : "neutral"}
+          label="Scheduled"
+          value={metrics.scheduled}
+          icon={CalendarClock}
+          detail="Awaiting publish"
         />
         <MetricCard
           label="Monthly traffic"
           value={metrics.monthlyViews.toLocaleString()}
+          icon={Eye}
           detail="Pageviews · 30d"
           trend={metrics.monthlyViews ? "up" : "neutral"}
         />
         <MetricCard
-          label="Revenue"
-          value={adManagerConfigured ? metrics.monthlyViews.toLocaleString() : "—"}
-          detail={
-            adManagerConfigured
-              ? "Inventory signal · GAM linked"
-              : "Connect Ad Manager in Settings"
-          }
-          trend={adManagerConfigured && metrics.monthlyViews ? "up" : "neutral"}
+          label="Active authors"
+          value={metrics.activeAuthors}
+          icon={Users}
+          detail={`${metrics.totalArticles} stories total`}
+          trend={metrics.activeAuthors ? "up" : "neutral"}
         />
       </div>
 
-      {/* Main grid */}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <CmsPanel
-          title="Recent activity feed"
+          title="Recent activity"
           description="Latest editorial movements across the desk"
           action={
             canViewArticles ? (
-              <Link to="/admin/articles" className="flex items-center gap-1 text-xs font-semibold text-cat-blue">
-                Open queue <ArrowRight className="h-3.5 w-3.5" />
+              <Link
+                to="/admin/articles/all"
+                className="flex items-center gap-1 text-xs font-semibold text-primary"
+              >
+                Open library <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             ) : null
           }
         >
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/70">
             {!activity.length ? (
               <CmsEmptyState
                 title="No activity yet"
@@ -278,13 +314,16 @@ export function OverviewView({
           description="Stories live on the site"
           action={
             canViewArticles ? (
-              <Link to="/admin/articles" className="flex items-center gap-1 text-xs font-semibold text-cat-blue">
+              <Link
+                to="/admin/articles/published"
+                className="flex items-center gap-1 text-xs font-semibold text-primary"
+              >
                 View all <ArrowRight className="h-3.5 w-3.5" />
               </Link>
             ) : null
           }
         >
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/70">
             {!recentPublished.length ? (
               <CmsEmptyState
                 title="No publications yet"
@@ -306,7 +345,7 @@ export function OverviewView({
               <CmsEmptyState title="No categories" description="Assign sections to stories." />
             ) : (
               topCategories.map(([name, count]) => (
-                <MiniBar key={name} label={name} value={count} max={maxCategory} tone="bg-cat-blue" />
+                <MiniBar key={name} label={name} value={count} max={maxCategory} tone="bg-primary" />
               ))
             )}
           </div>
@@ -318,20 +357,35 @@ export function OverviewView({
               <CmsEmptyState title="No authors" description="Assign bylines to populate." />
             ) : (
               topAuthors.map(([name, count]) => (
-                <MiniBar key={name} label={name} value={count} max={maxAuthor} tone="bg-gold" />
+                <MiniBar
+                  key={name}
+                  label={name}
+                  value={count}
+                  max={maxAuthor}
+                  tone="bg-cat-indigo"
+                />
               ))
             )}
           </div>
         </CmsPanel>
 
         <CmsPanel title="Quick stats" description="Operational snapshot">
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/70">
             <QuickStatRow label="Publish rate" value={`${publishRate}%`} detail="Published / total" />
-            <QuickStatRow label="Editorial backlog" value={String(backlog)} detail="Draft + review + scheduled" />
+            <QuickStatRow
+              label="Editorial backlog"
+              value={String(backlog)}
+              detail="Draft + review + scheduled"
+            />
+            <QuickStatRow
+              label="Archived"
+              value={String(metrics.archived)}
+              detail="Library archive"
+            />
             <QuickStatRow
               label="Live visitors"
               value={presenceConnected ? String(liveVisitors) : "—"}
-              detail={presenceConnected ? "On site now" : "Connecting"}
+              detail={presenceConnected ? "On site now" : "Presence offline"}
             />
             <QuickStatRow
               label="Pending comments"
@@ -343,22 +397,17 @@ export function OverviewView({
               value={String(alerts.length)}
               detail="Active ticker items"
             />
-            <QuickStatRow
-              label="Realtime"
-              value={realtimeConnected ? "Synced" : "Offline"}
-              detail={realtimeConnected ? "Channels healthy" : "Reconnecting"}
-            />
           </div>
         </CmsPanel>
 
         <CmsPanel title="Attention" description="Needs action now">
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/70">
             <AttentionRow
               icon={CircleAlert}
               label="Editorial review"
               detail={`${review.length} waiting`}
               active={review.length > 0}
-              href="/admin/articles"
+              href="/admin/articles/review"
             />
             <AttentionRow
               icon={Bell}
@@ -379,9 +428,18 @@ export function OverviewView({
               detail={realtimeConnected ? "Synchronized" : "Reconnecting"}
               active={!realtimeConnected}
             />
+            <AttentionRow
+              icon={Archive}
+              label="Revenue"
+              detail={
+                adManagerConfigured ? "GAM linked · reports pending" : "Connect Ad Manager"
+              }
+              active={!adManagerConfigured}
+              href="/admin/settings"
+            />
           </div>
           {canCreateArticles ? (
-            <div className="border-t border-border p-4">
+            <div className="border-t border-border/70 p-4">
               <Link to="/admin/articles/$id" params={{ id: "new" }} className={cmsButton}>
                 <FilePlus2 className="h-4 w-4" /> New article
               </Link>
@@ -390,52 +448,50 @@ export function OverviewView({
         </CmsPanel>
       </div>
 
-      {/* Performance snapshot */}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.6fr)]">
-        <CmsPanel title="Performance snapshot" description="Traffic over the last 30 days">
-          <div className="space-y-3 p-5">
-            {!dailyRows.some(([, v]) => v > 0) ? (
-              <CmsEmptyState
-                title="No traffic data yet"
-                description="Daily pageviews will chart here as analytics accumulate."
-              />
-            ) : (
-              <>
-                <div className="flex h-36 items-end gap-1">
-                  {dailyRows.map(([date, views]) => (
-                    <div
-                      key={date}
-                      className="group relative flex-1 bg-foreground/15 cms-transition hover:bg-foreground/70"
-                      style={{ height: `${Math.max((views / maxDaily) * 100, views ? 4 : 2)}%` }}
-                      title={`${date}: ${views.toLocaleString()} views`}
-                    />
-                  ))}
-                </div>
-                <div className="flex justify-between text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-                  <span>{dailyRows[0]?.[0] ?? "—"}</span>
-                  <span className="cms-metric text-foreground">
-                    {metrics.monthlyViews.toLocaleString()} views · 30d
-                  </span>
-                  <span>{dailyRows[dailyRows.length - 1]?.[0] ?? "—"}</span>
-                </div>
-              </>
-            )}
+        <ChartCard
+          title="Performance snapshot"
+          description="Traffic over the last 30 days"
+          empty={!hasTraffic}
+          emptyTitle="No traffic data yet"
+          emptyDescription="Daily pageviews will chart here as analytics accumulate."
+        >
+          <div className="p-2 sm:p-4">
+            <AreaTrendChart
+              data={trend}
+              dataKey="views"
+              config={{ views: { label: "Views", color: "var(--color-primary)" } }}
+            />
+            <div className="mt-2 flex justify-between px-2 text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
+              <span>{dailyRows[0]?.[0] ?? "—"}</span>
+              <span className="cms-metric text-foreground">
+                {metrics.monthlyViews.toLocaleString()} views · 30d
+              </span>
+              <span>{dailyRows[dailyRows.length - 1]?.[0] ?? "—"}</span>
+            </div>
           </div>
-        </CmsPanel>
+        </ChartCard>
 
         <CmsPanel title="Top stories" description="By views this period">
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border/70">
             {!topStories.length ? (
-              <CmsEmptyState title="No view leaders" description="Story rankings appear with traffic." />
+              <CmsEmptyState
+                title="No view leaders"
+                description="Story rankings appear with traffic."
+              />
             ) : (
               topStories.slice(0, 6).map((story, index) => (
                 <div
                   key={`${story.title}-${index}`}
                   className="flex items-center justify-between gap-3 px-5 py-3.5"
                 >
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-foreground">{story.title}</div>
-                    <div className="mt-0.5 text-[11px] text-muted-foreground">#{index + 1}</div>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="cms-metric flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[11px] font-bold text-primary">
+                      {index + 1}
+                    </span>
+                    <div className="truncate text-sm font-semibold text-foreground">
+                      {story.title}
+                    </div>
                   </div>
                   <div className="cms-metric shrink-0 text-sm font-semibold text-foreground">
                     {story.views.toLocaleString()}
@@ -468,9 +524,20 @@ function ActivityFeedRow({
             ? "Archived"
             : "Updated draft";
 
+  const dotTone =
+    article.status === "published"
+      ? "bg-cat-green"
+      : article.status === "review"
+        ? "bg-cat-amber"
+        : article.status === "scheduled"
+          ? "bg-cat-sky"
+          : article.status === "archived"
+            ? "bg-cat-purple"
+            : "bg-muted-foreground/50";
+
   const body = (
     <>
-      <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-foreground/40" />
+      <div className={cn("mt-1.5 h-2 w-2 shrink-0 rounded-full", dotTone)} />
       <div className="min-w-0 flex-1">
         <div className="text-sm font-semibold text-foreground">
           <span className="text-muted-foreground">{verb}</span>
@@ -495,7 +562,7 @@ function ActivityFeedRow({
     <Link
       to="/admin/articles/$id"
       params={{ id: article.id }}
-      className="flex items-start gap-3 px-5 py-4 cms-transition hover:bg-accent/50"
+      className="flex items-start gap-3 px-5 py-4 cms-transition hover:bg-primary/[0.03]"
     >
       {body}
     </Link>
@@ -537,19 +604,27 @@ function AttentionRow({
 }) {
   const body = (
     <>
-      <div className={cn("flex h-8 w-8 items-center justify-center", active ? "bg-gold/15 text-gold" : "bg-muted text-muted-foreground")}>
+      <div
+        className={cn(
+          "flex h-8 w-8 items-center justify-center rounded-lg",
+          active ? "bg-cat-amber/15 text-cat-amber" : "bg-muted text-muted-foreground",
+        )}
+      >
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
         <div className="text-xs font-semibold text-foreground">{label}</div>
         <div className="mt-0.5 text-xs text-muted-foreground">{detail}</div>
       </div>
-      {active && <span className="h-2 w-2 rounded-full bg-crimson" />}
+      {active ? <span className="h-2 w-2 rounded-full bg-cat-rose" /> : null}
     </>
   );
   if (href) {
     return (
-      <Link to={href} className="flex items-center gap-3 px-5 py-4 cms-transition hover:bg-accent/50">
+      <Link
+        to={href}
+        className="flex items-center gap-3 px-5 py-4 cms-transition hover:bg-primary/[0.03]"
+      >
         {body}
       </Link>
     );

@@ -7,7 +7,6 @@ import {
   AreaTrendChart,
   BarMetricChart,
   ChartCard,
-  DonutChart,
 } from "@/components/dashboard/chart-card";
 
 export function RevenueView({
@@ -26,7 +25,6 @@ export function RevenueView({
   sectionCounts: Array<[string, number]>;
 }) {
   const configured = Boolean(adManagerCode?.trim());
-  // Inventory-based planning signal only — never invent currency revenue.
   const inventoryIndex = totalViews;
   const trend = dailyRows.map(([label, value]) => ({
     label: new Date(`${label}T00:00:00Z`).toLocaleDateString(undefined, {
@@ -43,18 +41,12 @@ export function RevenueView({
     label: story.title.length > 24 ? `${story.title.slice(0, 24)}…` : story.title,
     value: story.views,
   }));
-  const adUnits = [
-    { label: "ROS leaderboard", value: Math.round(totalViews * 0.28) || 1 },
-    { label: "Article mid", value: Math.round(totalViews * 0.36) || 1 },
-    { label: "Sidebar", value: Math.round(totalViews * 0.22) || 1 },
-    { label: "Sponsored slot", value: Math.round(totalViews * 0.14) || 1 },
-  ];
 
   return (
     <div className="space-y-6">
       <SectionHeader
         title="Revenue readiness"
-        description="Monetization metrics stay blank until Ad Manager reporting is connected — inventory signals are shown for planning"
+        description="Currency metrics stay blank until Ad Manager reporting connects — inventory signals are for planning only"
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
@@ -89,47 +81,52 @@ export function RevenueView({
 
       <div className="grid gap-6 xl:grid-cols-2">
         <ChartCard
-          title="Revenue trend"
-          description="Inventory proxy until currency reports sync"
+          title="Inventory trend"
+          description="Pageview proxy until currency reports sync"
           empty={!totalViews}
         >
           <AreaTrendChart
             data={trend}
             dataKey="inventory"
-            config={{ inventory: { label: "Inventory", color: "var(--color-gold)" } }}
+            config={{ inventory: { label: "Inventory", color: "var(--color-cat-amber)" } }}
           />
         </ChartCard>
-        <ChartCard title="Revenue by category" description="View-weighted desk mix" empty={!byCategory.length}>
+        <ChartCard
+          title="Inventory by category"
+          description="View-weighted desk mix"
+          empty={!byCategory.length}
+        >
           <BarMetricChart data={byCategory} layout="vertical" />
         </ChartCard>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
-        <ChartCard title="Top earning articles" description="By traffic inventory" empty={!byArticle.length}>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ChartCard title="Top inventory articles" description="By traffic" empty={!byArticle.length}>
           <BarMetricChart
             data={byArticle}
             layout="vertical"
             config={{ value: { label: "Views", color: "var(--color-cat-green)" } }}
           />
         </ChartCard>
-        <ChartCard title="Revenue by ad unit" description="Modeled share of inventory" empty={!totalViews}>
-          <DonutChart data={adUnits} />
-        </ChartCard>
         <CmsPanel title="Revenue forecast" description="Integration checklist">
           <div className="space-y-3 p-5 text-sm">
-            <div className="flex items-center justify-between border border-border px-4 py-3">
+            <div className="flex items-center justify-between rounded-xl border border-border/80 px-4 py-3">
               <span>Google Ad Manager network</span>
               <StatusBadge tone={configured ? "success" : "warning"}>
                 {configured ? "Configured" : "Missing"}
               </StatusBadge>
             </div>
-            <div className="flex items-center justify-between border border-border px-4 py-3">
+            <div className="flex items-center justify-between rounded-xl border border-border/80 px-4 py-3">
               <span>Currency revenue API</span>
               <StatusBadge tone="neutral">Pending</StatusBadge>
             </div>
-            <div className="flex items-center justify-between border border-border px-4 py-3">
+            <div className="flex items-center justify-between rounded-xl border border-border/80 px-4 py-3">
               <span>Sponsored / subscription ledgers</span>
               <StatusBadge tone="neutral">Not enabled</StatusBadge>
+            </div>
+            <div className="flex items-center justify-between rounded-xl border border-border/80 px-4 py-3">
+              <span>Ad unit reporting</span>
+              <StatusBadge tone="neutral">Not instrumented</StatusBadge>
             </div>
             <RoleGuard permission="settings:manage">
               <Link to="/admin/settings" className={cmsSecondaryButton}>

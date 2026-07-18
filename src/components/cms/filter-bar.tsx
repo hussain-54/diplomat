@@ -70,7 +70,7 @@ export function SegmentedControl({
   return (
     <div
       className={cn(
-        "flex flex-wrap gap-1 border border-border bg-muted/30 p-1",
+        "flex flex-wrap gap-1 rounded-xl border border-border/80 bg-muted/30 p-1",
         className,
       )}
       role="tablist"
@@ -96,7 +96,7 @@ export function SegmentedItem({
       aria-selected={active}
       onClick={onClick}
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 px-3 text-xs font-semibold cms-transition",
+        "inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold cms-transition",
         active
           ? "bg-card text-foreground shadow-[var(--cms-shadow)]"
           : "text-muted-foreground hover:text-foreground",

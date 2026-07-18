@@ -1,3 +1,9 @@
+import {
+  BarChart3,
+  Eye,
+  MessageSquare,
+  Sparkles,
+} from "lucide-react";
 import { MetricCard } from "@/components/cms";
 import { CmsPanel } from "@/components/cms-ui";
 import { SectionHeader } from "@/components/dashboard/primitives";
@@ -5,7 +11,6 @@ import {
   AreaTrendChart,
   BarMetricChart,
   ChartCard,
-  DonutChart,
   LineTrendChart,
 } from "@/components/dashboard/chart-card";
 
@@ -39,46 +44,37 @@ export function AnalyticsView({
     value: story.views,
   }));
 
-  // Only pageviews are instrumented. Other KPIs stay honest placeholders.
-  const uniqueEstimate = Math.round(totalViews * 0.62);
-  const engagementRate =
-    published > 0 ? Math.min(100, Math.round((commentCount / published) * 12)) : 0;
-
-  const deviceMix = [
-    { label: "Desktop", value: Math.round(totalViews * 0.48) || 1 },
-    { label: "Mobile", value: Math.round(totalViews * 0.44) || 1 },
-    { label: "Tablet", value: Math.round(totalViews * 0.08) || 1 },
-  ];
-  const sources = [
-    { label: "Direct", value: Math.round(totalViews * 0.34) || 1 },
-    { label: "Search", value: Math.round(totalViews * 0.31) || 1 },
-    { label: "Social", value: Math.round(totalViews * 0.22) || 1 },
-    { label: "Referral", value: Math.round(totalViews * 0.13) || 1 },
-  ];
-
   const hasTraffic = totalViews > 0;
 
   return (
     <div className="space-y-6">
       <SectionHeader
         title="Newsroom analytics"
-        description="Traffic, engagement, and audience composition · rolling 30 days"
+        description="Instrumented traffic and content mix · rolling 30 days"
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-        <MetricCard label="Page views" value={totalViews.toLocaleString()} detail="Instrumented" trend={hasTraffic ? "up" : "neutral"} />
+        <MetricCard
+          label="Page views"
+          value={totalViews.toLocaleString()}
+          icon={Eye}
+          detail="Instrumented"
+          trend={hasTraffic ? "up" : "neutral"}
+        />
         <MetricCard
           label="Unique visitors"
-          value={hasTraffic ? uniqueEstimate.toLocaleString() : "—"}
-          detail="Estimated · 62% of views"
+          value="—"
+          icon={Sparkles}
+          detail="Requires GA4 / Plausible"
         />
-        <MetricCard label="Avg session" value="—" detail="Requires GA4 / Plausible" />
+        <MetricCard label="Avg session" value="—" detail="Requires session analytics" />
         <MetricCard label="Bounce rate" value="—" detail="Requires session analytics" />
         <MetricCard label="CTR" value="—" detail="Requires ad/search click data" />
         <MetricCard
-          label="Engagement rate"
-          value={hasTraffic ? `${engagementRate}%` : "—"}
-          detail={`${commentCount} comments · ${pendingComments} pending`}
+          label="Comments"
+          value={commentCount}
+          icon={MessageSquare}
+          detail={`${pendingComments} pending · ${published} published`}
         />
       </div>
 
@@ -87,7 +83,7 @@ export function AnalyticsView({
           <AreaTrendChart
             data={trend}
             dataKey="views"
-            config={{ views: { label: "Views", color: "var(--color-cat-blue)" } }}
+            config={{ views: { label: "Views", color: "var(--color-primary)" } }}
           />
         </ChartCard>
         <ChartCard title="Audience growth" description="Cumulative daily views" empty={!hasTraffic}>
@@ -98,7 +94,7 @@ export function AnalyticsView({
               return acc;
             }, [])}
             dataKey="views"
-            config={{ views: { label: "Cumulative", color: "var(--color-gold)" } }}
+            config={{ views: { label: "Cumulative", color: "var(--color-cat-indigo)" } }}
           />
         </ChartCard>
       </div>
@@ -114,23 +110,39 @@ export function AnalyticsView({
             config={{ value: { label: "Views", color: "var(--color-cat-teal)" } }}
           />
         </ChartCard>
-        <ChartCard title="Traffic sources" description="Modeled mix until source tags ship" empty={!hasTraffic}>
-          <DonutChart data={sources} />
+        <ChartCard
+          title="Traffic sources"
+          description="Not instrumented"
+          empty
+          emptyTitle="Sources unavailable"
+          emptyDescription="Connect GA4 or first-party referral events to populate source mix."
+        >
+          <div />
         </ChartCard>
-        <ChartCard title="Device breakdown" description="Modeled mix until device analytics ship" empty={!hasTraffic}>
-          <DonutChart data={deviceMix} />
+        <ChartCard
+          title="Device breakdown"
+          description="Not instrumented"
+          empty
+          emptyTitle="Devices unavailable"
+          emptyDescription="Device mix requires analytics SDK instrumentation."
+        >
+          <div />
         </ChartCard>
       </div>
 
       <CmsPanel title="Instrumentation notes" description="What is live vs planned">
         <div className="grid gap-3 p-5 text-sm text-muted-foreground sm:grid-cols-2">
           <p>
-            <span className="font-semibold text-foreground">Live:</span> pageviews via{" "}
-            <code className="text-xs">article_daily_metrics</code>, comments, publish counts.
+            <span className="inline-flex items-center gap-1.5 font-semibold text-foreground">
+              <BarChart3 className="h-3.5 w-3.5 text-primary" /> Live:
+            </span>{" "}
+            pageviews via <code className="text-xs">article_daily_metrics</code>, comments, publish
+            counts, and section volume.
           </p>
           <p>
-            <span className="font-semibold text-foreground">Planned:</span> session duration, bounce,
-            CTR, and verified device/source mix via GA4 or first-party analytics events.
+            <span className="font-semibold text-foreground">Planned:</span> unique visitors, session
+            duration, bounce, CTR, and verified device/source mix via GA4 or first-party analytics
+            events.
           </p>
         </div>
       </CmsPanel>

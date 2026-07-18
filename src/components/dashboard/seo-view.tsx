@@ -97,7 +97,7 @@ export function SeoView({
           detail="Pageviews · 30d proxy"
           trend={monthlyViews ? "up" : "neutral"}
         />
-        <MetricCard label="Sitemap status" value="Live" detail="/sitemap.xml" trend="up" />
+        <MetricCard label="Sitemap status" value="Assumed" detail="/sitemap.xml · not probed" />
         <MetricCard
           label="Index coverage"
           value={articles.length - noindex.length}

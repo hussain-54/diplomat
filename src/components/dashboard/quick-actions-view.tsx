@@ -55,7 +55,7 @@ export function QuickActionsView() {
         <QuickActionCard
           title="Publish scheduled"
           description="Review the timed publication queue"
-          href="/admin/articles"
+          href="/admin/articles/scheduled"
           icon={CalendarClock}
           permission="articles:publish"
         />
@@ -98,7 +98,7 @@ export const FLOATING_QUICK_ACTIONS = [
   },
   {
     title: "Scheduled queue",
-    href: "/admin/articles",
+    href: "/admin/articles/scheduled",
     icon: CalendarClock,
     permission: "articles:publish" as const,
   },

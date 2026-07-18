@@ -55,9 +55,9 @@ export function QuickActionCard({
     <Link
       to={href}
       params={params}
-      className="group border border-border bg-card p-5 shadow-[var(--cms-shadow)] cms-transition hover:border-foreground/20 hover:shadow-[var(--cms-shadow-hover)]"
+      className="group rounded-xl border border-border/80 bg-card p-5 shadow-[var(--cms-shadow)] cms-transition hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[var(--cms-shadow-hover)]"
     >
-      <div className="flex h-10 w-10 items-center justify-center bg-muted text-foreground cms-transition group-hover:bg-foreground group-hover:text-background">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/12 text-primary cms-transition group-hover:bg-primary group-hover:text-primary-foreground">
         <Icon className="h-5 w-5" />
       </div>
       <div className="mt-4 text-sm font-semibold text-foreground">{title}</div>

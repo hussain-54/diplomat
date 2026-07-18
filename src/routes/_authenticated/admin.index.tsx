@@ -223,13 +223,17 @@ function Overview() {
       <PageHeader
         eyebrow={dateLabel}
         title={`Good ${greeting()}, ${me.data?.profile?.name?.split(" ")[0] ?? "editor"}`}
-        description="Enterprise newsroom command center — editorial, SEO, analytics, revenue readiness, and live operations."
+        description="Enterprise newsroom command center — editorial queues, SEO health, analytics, and live operations."
+        breadcrumbs={[
+          { label: "Newsroom", href: "/admin" },
+          { label: "Dashboard" },
+        ]}
         actions={
           <>
-            <div className="flex h-9 items-center gap-2 border border-border px-3 text-xs text-muted-foreground">
+            <div className="flex h-9 items-center gap-2 rounded-lg border border-border/80 px-3 text-xs text-muted-foreground">
               <span
                 className={`h-2 w-2 rounded-full ${
-                  realtimeConnected ? "bg-cat-green" : "bg-gold"
+                  realtimeConnected ? "bg-cat-green" : "bg-cat-amber"
                 }`}
               />
               {realtimeConnected ? "Live updates on" : "Connecting…"}
@@ -249,7 +253,15 @@ function Overview() {
         </CmsAlert>
       )}
 
-      <DashboardViewTabs active={view} onChange={setView} />
+      <DashboardViewTabs
+        active={view}
+        onChange={setView}
+        badges={{
+          editorial: metrics.data?.pendingReview ?? 0,
+          notifications:
+            review.length + pendingComments + flaggedComments + breakingAlerts.length + seoIssues,
+        }}
+      />
 
       {view === "overview" && (
         <OverviewView
