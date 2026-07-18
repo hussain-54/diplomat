@@ -35,11 +35,34 @@ import { Route as AuthenticatedAdminMediaRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminEmbassiesRouteImport } from './routes/_authenticated/admin.embassies'
 import { Route as AuthenticatedAdminCommentsRouteImport } from './routes/_authenticated/admin.comments'
 import { Route as AuthenticatedAdminCategoriesRouteImport } from './routes/_authenticated/admin.categories'
+import { Route as AuthenticatedAdminArticlesRouteImport } from './routes/_authenticated/admin.articles'
 import { Route as AuthenticatedAdminAnalyticsRouteImport } from './routes/_authenticated/admin.analytics'
 import { Route as AuthenticatedAdminAmbassadorsRouteImport } from './routes/_authenticated/admin.ambassadors'
 import { Route as AuthenticatedAdminAccessRouteImport } from './routes/_authenticated/admin.access'
 import { Route as AuthenticatedAdminArticlesIndexRouteImport } from './routes/_authenticated/admin.articles.index'
+import { Route as AuthenticatedAdminArticlesWorkflowRouteImport } from './routes/_authenticated/admin.articles.workflow'
+import { Route as AuthenticatedAdminArticlesTrashRouteImport } from './routes/_authenticated/admin.articles.trash'
+import { Route as AuthenticatedAdminArticlesSettingsRouteImport } from './routes/_authenticated/admin.articles.settings'
+import { Route as AuthenticatedAdminArticlesScheduledRouteImport } from './routes/_authenticated/admin.articles.scheduled'
+import { Route as AuthenticatedAdminArticlesRevisionsRouteImport } from './routes/_authenticated/admin.articles.revisions'
+import { Route as AuthenticatedAdminArticlesReviewRouteImport } from './routes/_authenticated/admin.articles.review'
+import { Route as AuthenticatedAdminArticlesRelatedRouteImport } from './routes/_authenticated/admin.articles.related'
+import { Route as AuthenticatedAdminArticlesPublishedRouteImport } from './routes/_authenticated/admin.articles.published'
+import { Route as AuthenticatedAdminArticlesPreviewRouteImport } from './routes/_authenticated/admin.articles.preview'
+import { Route as AuthenticatedAdminArticlesInternalLinkingRouteImport } from './routes/_authenticated/admin.articles.internal-linking'
+import { Route as AuthenticatedAdminArticlesDraftsRouteImport } from './routes/_authenticated/admin.articles.drafts'
+import { Route as AuthenticatedAdminArticlesCreateRouteImport } from './routes/_authenticated/admin.articles.create'
+import { Route as AuthenticatedAdminArticlesContentScoreRouteImport } from './routes/_authenticated/admin.articles.content-score'
+import { Route as AuthenticatedAdminArticlesArchivedRouteImport } from './routes/_authenticated/admin.articles.archived'
+import { Route as AuthenticatedAdminArticlesApprovedRouteImport } from './routes/_authenticated/admin.articles.approved'
+import { Route as AuthenticatedAdminArticlesAllRouteImport } from './routes/_authenticated/admin.articles.all'
+import { Route as AuthenticatedAdminArticlesAiWritingRouteImport } from './routes/_authenticated/admin.articles.ai-writing'
+import { Route as AuthenticatedAdminArticlesAiSeoRouteImport } from './routes/_authenticated/admin.articles.ai-seo'
 import { Route as AuthenticatedAdminArticlesIdRouteImport } from './routes/_authenticated/admin.articles.$id'
+import { Route as AuthenticatedAdminArticlesRevisionsIndexRouteImport } from './routes/_authenticated/admin.articles.revisions.index'
+import { Route as AuthenticatedAdminArticlesPreviewIndexRouteImport } from './routes/_authenticated/admin.articles.preview.index'
+import { Route as AuthenticatedAdminArticlesRevisionsArticleIdRouteImport } from './routes/_authenticated/admin.articles.revisions.$articleId'
+import { Route as AuthenticatedAdminArticlesPreviewArticleIdRouteImport } from './routes/_authenticated/admin.articles.preview.$articleId'
 
 const VideoRoute = VideoRouteImport.update({
   id: '/video',
@@ -177,6 +200,12 @@ const AuthenticatedAdminCategoriesRoute =
     path: '/categories',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminArticlesRoute =
+  AuthenticatedAdminArticlesRouteImport.update({
+    id: '/articles',
+    path: '/articles',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAnalyticsRoute =
   AuthenticatedAdminAnalyticsRouteImport.update({
     id: '/analytics',
@@ -197,15 +226,147 @@ const AuthenticatedAdminAccessRoute =
   } as any)
 const AuthenticatedAdminArticlesIndexRoute =
   AuthenticatedAdminArticlesIndexRouteImport.update({
-    id: '/articles/',
-    path: '/articles/',
-    getParentRoute: () => AuthenticatedAdminRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesWorkflowRoute =
+  AuthenticatedAdminArticlesWorkflowRouteImport.update({
+    id: '/workflow',
+    path: '/workflow',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesTrashRoute =
+  AuthenticatedAdminArticlesTrashRouteImport.update({
+    id: '/trash',
+    path: '/trash',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesSettingsRoute =
+  AuthenticatedAdminArticlesSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesScheduledRoute =
+  AuthenticatedAdminArticlesScheduledRouteImport.update({
+    id: '/scheduled',
+    path: '/scheduled',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesRevisionsRoute =
+  AuthenticatedAdminArticlesRevisionsRouteImport.update({
+    id: '/revisions',
+    path: '/revisions',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesReviewRoute =
+  AuthenticatedAdminArticlesReviewRouteImport.update({
+    id: '/review',
+    path: '/review',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesRelatedRoute =
+  AuthenticatedAdminArticlesRelatedRouteImport.update({
+    id: '/related',
+    path: '/related',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesPublishedRoute =
+  AuthenticatedAdminArticlesPublishedRouteImport.update({
+    id: '/published',
+    path: '/published',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesPreviewRoute =
+  AuthenticatedAdminArticlesPreviewRouteImport.update({
+    id: '/preview',
+    path: '/preview',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesInternalLinkingRoute =
+  AuthenticatedAdminArticlesInternalLinkingRouteImport.update({
+    id: '/internal-linking',
+    path: '/internal-linking',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesDraftsRoute =
+  AuthenticatedAdminArticlesDraftsRouteImport.update({
+    id: '/drafts',
+    path: '/drafts',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesCreateRoute =
+  AuthenticatedAdminArticlesCreateRouteImport.update({
+    id: '/create',
+    path: '/create',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesContentScoreRoute =
+  AuthenticatedAdminArticlesContentScoreRouteImport.update({
+    id: '/content-score',
+    path: '/content-score',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesArchivedRoute =
+  AuthenticatedAdminArticlesArchivedRouteImport.update({
+    id: '/archived',
+    path: '/archived',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesApprovedRoute =
+  AuthenticatedAdminArticlesApprovedRouteImport.update({
+    id: '/approved',
+    path: '/approved',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesAllRoute =
+  AuthenticatedAdminArticlesAllRouteImport.update({
+    id: '/all',
+    path: '/all',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesAiWritingRoute =
+  AuthenticatedAdminArticlesAiWritingRouteImport.update({
+    id: '/ai-writing',
+    path: '/ai-writing',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesAiSeoRoute =
+  AuthenticatedAdminArticlesAiSeoRouteImport.update({
+    id: '/ai-seo',
+    path: '/ai-seo',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
   } as any)
 const AuthenticatedAdminArticlesIdRoute =
   AuthenticatedAdminArticlesIdRouteImport.update({
-    id: '/articles/$id',
-    path: '/articles/$id',
-    getParentRoute: () => AuthenticatedAdminRoute,
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminArticlesRevisionsIndexRoute =
+  AuthenticatedAdminArticlesRevisionsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAdminArticlesRevisionsRoute,
+  } as any)
+const AuthenticatedAdminArticlesPreviewIndexRoute =
+  AuthenticatedAdminArticlesPreviewIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAdminArticlesPreviewRoute,
+  } as any)
+const AuthenticatedAdminArticlesRevisionsArticleIdRoute =
+  AuthenticatedAdminArticlesRevisionsArticleIdRouteImport.update({
+    id: '/$articleId',
+    path: '/$articleId',
+    getParentRoute: () => AuthenticatedAdminArticlesRevisionsRoute,
+  } as any)
+const AuthenticatedAdminArticlesPreviewArticleIdRoute =
+  AuthenticatedAdminArticlesPreviewArticleIdRouteImport.update({
+    id: '/$articleId',
+    path: '/$articleId',
+    getParentRoute: () => AuthenticatedAdminArticlesPreviewRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -227,6 +388,7 @@ export interface FileRoutesByFullPath {
   '/admin/access': typeof AuthenticatedAdminAccessRoute
   '/admin/ambassadors': typeof AuthenticatedAdminAmbassadorsRoute
   '/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
+  '/admin/articles': typeof AuthenticatedAdminArticlesRouteWithChildren
   '/admin/categories': typeof AuthenticatedAdminCategoriesRoute
   '/admin/comments': typeof AuthenticatedAdminCommentsRoute
   '/admin/embassies': typeof AuthenticatedAdminEmbassiesRoute
@@ -238,7 +400,29 @@ export interface FileRoutesByFullPath {
   '/admin/war-monitor': typeof AuthenticatedAdminWarMonitorRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/admin/articles/$id': typeof AuthenticatedAdminArticlesIdRoute
+  '/admin/articles/ai-seo': typeof AuthenticatedAdminArticlesAiSeoRoute
+  '/admin/articles/ai-writing': typeof AuthenticatedAdminArticlesAiWritingRoute
+  '/admin/articles/all': typeof AuthenticatedAdminArticlesAllRoute
+  '/admin/articles/approved': typeof AuthenticatedAdminArticlesApprovedRoute
+  '/admin/articles/archived': typeof AuthenticatedAdminArticlesArchivedRoute
+  '/admin/articles/content-score': typeof AuthenticatedAdminArticlesContentScoreRoute
+  '/admin/articles/create': typeof AuthenticatedAdminArticlesCreateRoute
+  '/admin/articles/drafts': typeof AuthenticatedAdminArticlesDraftsRoute
+  '/admin/articles/internal-linking': typeof AuthenticatedAdminArticlesInternalLinkingRoute
+  '/admin/articles/preview': typeof AuthenticatedAdminArticlesPreviewRouteWithChildren
+  '/admin/articles/published': typeof AuthenticatedAdminArticlesPublishedRoute
+  '/admin/articles/related': typeof AuthenticatedAdminArticlesRelatedRoute
+  '/admin/articles/review': typeof AuthenticatedAdminArticlesReviewRoute
+  '/admin/articles/revisions': typeof AuthenticatedAdminArticlesRevisionsRouteWithChildren
+  '/admin/articles/scheduled': typeof AuthenticatedAdminArticlesScheduledRoute
+  '/admin/articles/settings': typeof AuthenticatedAdminArticlesSettingsRoute
+  '/admin/articles/trash': typeof AuthenticatedAdminArticlesTrashRoute
+  '/admin/articles/workflow': typeof AuthenticatedAdminArticlesWorkflowRoute
   '/admin/articles/': typeof AuthenticatedAdminArticlesIndexRoute
+  '/admin/articles/preview/$articleId': typeof AuthenticatedAdminArticlesPreviewArticleIdRoute
+  '/admin/articles/revisions/$articleId': typeof AuthenticatedAdminArticlesRevisionsArticleIdRoute
+  '/admin/articles/preview/': typeof AuthenticatedAdminArticlesPreviewIndexRoute
+  '/admin/articles/revisions/': typeof AuthenticatedAdminArticlesRevisionsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -269,7 +453,27 @@ export interface FileRoutesByTo {
   '/admin/war-monitor': typeof AuthenticatedAdminWarMonitorRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/articles/$id': typeof AuthenticatedAdminArticlesIdRoute
+  '/admin/articles/ai-seo': typeof AuthenticatedAdminArticlesAiSeoRoute
+  '/admin/articles/ai-writing': typeof AuthenticatedAdminArticlesAiWritingRoute
+  '/admin/articles/all': typeof AuthenticatedAdminArticlesAllRoute
+  '/admin/articles/approved': typeof AuthenticatedAdminArticlesApprovedRoute
+  '/admin/articles/archived': typeof AuthenticatedAdminArticlesArchivedRoute
+  '/admin/articles/content-score': typeof AuthenticatedAdminArticlesContentScoreRoute
+  '/admin/articles/create': typeof AuthenticatedAdminArticlesCreateRoute
+  '/admin/articles/drafts': typeof AuthenticatedAdminArticlesDraftsRoute
+  '/admin/articles/internal-linking': typeof AuthenticatedAdminArticlesInternalLinkingRoute
+  '/admin/articles/published': typeof AuthenticatedAdminArticlesPublishedRoute
+  '/admin/articles/related': typeof AuthenticatedAdminArticlesRelatedRoute
+  '/admin/articles/review': typeof AuthenticatedAdminArticlesReviewRoute
+  '/admin/articles/scheduled': typeof AuthenticatedAdminArticlesScheduledRoute
+  '/admin/articles/settings': typeof AuthenticatedAdminArticlesSettingsRoute
+  '/admin/articles/trash': typeof AuthenticatedAdminArticlesTrashRoute
+  '/admin/articles/workflow': typeof AuthenticatedAdminArticlesWorkflowRoute
   '/admin/articles': typeof AuthenticatedAdminArticlesIndexRoute
+  '/admin/articles/preview/$articleId': typeof AuthenticatedAdminArticlesPreviewArticleIdRoute
+  '/admin/articles/revisions/$articleId': typeof AuthenticatedAdminArticlesRevisionsArticleIdRoute
+  '/admin/articles/preview': typeof AuthenticatedAdminArticlesPreviewIndexRoute
+  '/admin/articles/revisions': typeof AuthenticatedAdminArticlesRevisionsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -292,6 +496,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/access': typeof AuthenticatedAdminAccessRoute
   '/_authenticated/admin/ambassadors': typeof AuthenticatedAdminAmbassadorsRoute
   '/_authenticated/admin/analytics': typeof AuthenticatedAdminAnalyticsRoute
+  '/_authenticated/admin/articles': typeof AuthenticatedAdminArticlesRouteWithChildren
   '/_authenticated/admin/categories': typeof AuthenticatedAdminCategoriesRoute
   '/_authenticated/admin/comments': typeof AuthenticatedAdminCommentsRoute
   '/_authenticated/admin/embassies': typeof AuthenticatedAdminEmbassiesRoute
@@ -303,7 +508,29 @@ export interface FileRoutesById {
   '/_authenticated/admin/war-monitor': typeof AuthenticatedAdminWarMonitorRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/admin/articles/$id': typeof AuthenticatedAdminArticlesIdRoute
+  '/_authenticated/admin/articles/ai-seo': typeof AuthenticatedAdminArticlesAiSeoRoute
+  '/_authenticated/admin/articles/ai-writing': typeof AuthenticatedAdminArticlesAiWritingRoute
+  '/_authenticated/admin/articles/all': typeof AuthenticatedAdminArticlesAllRoute
+  '/_authenticated/admin/articles/approved': typeof AuthenticatedAdminArticlesApprovedRoute
+  '/_authenticated/admin/articles/archived': typeof AuthenticatedAdminArticlesArchivedRoute
+  '/_authenticated/admin/articles/content-score': typeof AuthenticatedAdminArticlesContentScoreRoute
+  '/_authenticated/admin/articles/create': typeof AuthenticatedAdminArticlesCreateRoute
+  '/_authenticated/admin/articles/drafts': typeof AuthenticatedAdminArticlesDraftsRoute
+  '/_authenticated/admin/articles/internal-linking': typeof AuthenticatedAdminArticlesInternalLinkingRoute
+  '/_authenticated/admin/articles/preview': typeof AuthenticatedAdminArticlesPreviewRouteWithChildren
+  '/_authenticated/admin/articles/published': typeof AuthenticatedAdminArticlesPublishedRoute
+  '/_authenticated/admin/articles/related': typeof AuthenticatedAdminArticlesRelatedRoute
+  '/_authenticated/admin/articles/review': typeof AuthenticatedAdminArticlesReviewRoute
+  '/_authenticated/admin/articles/revisions': typeof AuthenticatedAdminArticlesRevisionsRouteWithChildren
+  '/_authenticated/admin/articles/scheduled': typeof AuthenticatedAdminArticlesScheduledRoute
+  '/_authenticated/admin/articles/settings': typeof AuthenticatedAdminArticlesSettingsRoute
+  '/_authenticated/admin/articles/trash': typeof AuthenticatedAdminArticlesTrashRoute
+  '/_authenticated/admin/articles/workflow': typeof AuthenticatedAdminArticlesWorkflowRoute
   '/_authenticated/admin/articles/': typeof AuthenticatedAdminArticlesIndexRoute
+  '/_authenticated/admin/articles/preview/$articleId': typeof AuthenticatedAdminArticlesPreviewArticleIdRoute
+  '/_authenticated/admin/articles/revisions/$articleId': typeof AuthenticatedAdminArticlesRevisionsArticleIdRoute
+  '/_authenticated/admin/articles/preview/': typeof AuthenticatedAdminArticlesPreviewIndexRoute
+  '/_authenticated/admin/articles/revisions/': typeof AuthenticatedAdminArticlesRevisionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -326,6 +553,7 @@ export interface FileRouteTypes {
     | '/admin/access'
     | '/admin/ambassadors'
     | '/admin/analytics'
+    | '/admin/articles'
     | '/admin/categories'
     | '/admin/comments'
     | '/admin/embassies'
@@ -337,7 +565,29 @@ export interface FileRouteTypes {
     | '/admin/war-monitor'
     | '/admin/'
     | '/admin/articles/$id'
+    | '/admin/articles/ai-seo'
+    | '/admin/articles/ai-writing'
+    | '/admin/articles/all'
+    | '/admin/articles/approved'
+    | '/admin/articles/archived'
+    | '/admin/articles/content-score'
+    | '/admin/articles/create'
+    | '/admin/articles/drafts'
+    | '/admin/articles/internal-linking'
+    | '/admin/articles/preview'
+    | '/admin/articles/published'
+    | '/admin/articles/related'
+    | '/admin/articles/review'
+    | '/admin/articles/revisions'
+    | '/admin/articles/scheduled'
+    | '/admin/articles/settings'
+    | '/admin/articles/trash'
+    | '/admin/articles/workflow'
     | '/admin/articles/'
+    | '/admin/articles/preview/$articleId'
+    | '/admin/articles/revisions/$articleId'
+    | '/admin/articles/preview/'
+    | '/admin/articles/revisions/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -368,7 +618,27 @@ export interface FileRouteTypes {
     | '/admin/war-monitor'
     | '/admin'
     | '/admin/articles/$id'
+    | '/admin/articles/ai-seo'
+    | '/admin/articles/ai-writing'
+    | '/admin/articles/all'
+    | '/admin/articles/approved'
+    | '/admin/articles/archived'
+    | '/admin/articles/content-score'
+    | '/admin/articles/create'
+    | '/admin/articles/drafts'
+    | '/admin/articles/internal-linking'
+    | '/admin/articles/published'
+    | '/admin/articles/related'
+    | '/admin/articles/review'
+    | '/admin/articles/scheduled'
+    | '/admin/articles/settings'
+    | '/admin/articles/trash'
+    | '/admin/articles/workflow'
     | '/admin/articles'
+    | '/admin/articles/preview/$articleId'
+    | '/admin/articles/revisions/$articleId'
+    | '/admin/articles/preview'
+    | '/admin/articles/revisions'
   id:
     | '__root__'
     | '/'
@@ -390,6 +660,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/access'
     | '/_authenticated/admin/ambassadors'
     | '/_authenticated/admin/analytics'
+    | '/_authenticated/admin/articles'
     | '/_authenticated/admin/categories'
     | '/_authenticated/admin/comments'
     | '/_authenticated/admin/embassies'
@@ -401,7 +672,29 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/war-monitor'
     | '/_authenticated/admin/'
     | '/_authenticated/admin/articles/$id'
+    | '/_authenticated/admin/articles/ai-seo'
+    | '/_authenticated/admin/articles/ai-writing'
+    | '/_authenticated/admin/articles/all'
+    | '/_authenticated/admin/articles/approved'
+    | '/_authenticated/admin/articles/archived'
+    | '/_authenticated/admin/articles/content-score'
+    | '/_authenticated/admin/articles/create'
+    | '/_authenticated/admin/articles/drafts'
+    | '/_authenticated/admin/articles/internal-linking'
+    | '/_authenticated/admin/articles/preview'
+    | '/_authenticated/admin/articles/published'
+    | '/_authenticated/admin/articles/related'
+    | '/_authenticated/admin/articles/review'
+    | '/_authenticated/admin/articles/revisions'
+    | '/_authenticated/admin/articles/scheduled'
+    | '/_authenticated/admin/articles/settings'
+    | '/_authenticated/admin/articles/trash'
+    | '/_authenticated/admin/articles/workflow'
     | '/_authenticated/admin/articles/'
+    | '/_authenticated/admin/articles/preview/$articleId'
+    | '/_authenticated/admin/articles/revisions/$articleId'
+    | '/_authenticated/admin/articles/preview/'
+    | '/_authenticated/admin/articles/revisions/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -606,6 +899,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminCategoriesRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/articles': {
+      id: '/_authenticated/admin/articles'
+      path: '/articles'
+      fullPath: '/admin/articles'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/analytics': {
       id: '/_authenticated/admin/analytics'
       path: '/analytics'
@@ -629,25 +929,283 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/admin/articles/': {
       id: '/_authenticated/admin/articles/'
-      path: '/articles'
+      path: '/'
       fullPath: '/admin/articles/'
       preLoaderRoute: typeof AuthenticatedAdminArticlesIndexRouteImport
-      parentRoute: typeof AuthenticatedAdminRoute
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/workflow': {
+      id: '/_authenticated/admin/articles/workflow'
+      path: '/workflow'
+      fullPath: '/admin/articles/workflow'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesWorkflowRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/trash': {
+      id: '/_authenticated/admin/articles/trash'
+      path: '/trash'
+      fullPath: '/admin/articles/trash'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesTrashRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/settings': {
+      id: '/_authenticated/admin/articles/settings'
+      path: '/settings'
+      fullPath: '/admin/articles/settings'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesSettingsRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/scheduled': {
+      id: '/_authenticated/admin/articles/scheduled'
+      path: '/scheduled'
+      fullPath: '/admin/articles/scheduled'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesScheduledRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/revisions': {
+      id: '/_authenticated/admin/articles/revisions'
+      path: '/revisions'
+      fullPath: '/admin/articles/revisions'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesRevisionsRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/review': {
+      id: '/_authenticated/admin/articles/review'
+      path: '/review'
+      fullPath: '/admin/articles/review'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesReviewRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/related': {
+      id: '/_authenticated/admin/articles/related'
+      path: '/related'
+      fullPath: '/admin/articles/related'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesRelatedRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/published': {
+      id: '/_authenticated/admin/articles/published'
+      path: '/published'
+      fullPath: '/admin/articles/published'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesPublishedRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/preview': {
+      id: '/_authenticated/admin/articles/preview'
+      path: '/preview'
+      fullPath: '/admin/articles/preview'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesPreviewRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/internal-linking': {
+      id: '/_authenticated/admin/articles/internal-linking'
+      path: '/internal-linking'
+      fullPath: '/admin/articles/internal-linking'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesInternalLinkingRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/drafts': {
+      id: '/_authenticated/admin/articles/drafts'
+      path: '/drafts'
+      fullPath: '/admin/articles/drafts'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesDraftsRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/create': {
+      id: '/_authenticated/admin/articles/create'
+      path: '/create'
+      fullPath: '/admin/articles/create'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesCreateRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/content-score': {
+      id: '/_authenticated/admin/articles/content-score'
+      path: '/content-score'
+      fullPath: '/admin/articles/content-score'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesContentScoreRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/archived': {
+      id: '/_authenticated/admin/articles/archived'
+      path: '/archived'
+      fullPath: '/admin/articles/archived'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesArchivedRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/approved': {
+      id: '/_authenticated/admin/articles/approved'
+      path: '/approved'
+      fullPath: '/admin/articles/approved'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesApprovedRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/all': {
+      id: '/_authenticated/admin/articles/all'
+      path: '/all'
+      fullPath: '/admin/articles/all'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesAllRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/ai-writing': {
+      id: '/_authenticated/admin/articles/ai-writing'
+      path: '/ai-writing'
+      fullPath: '/admin/articles/ai-writing'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesAiWritingRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/ai-seo': {
+      id: '/_authenticated/admin/articles/ai-seo'
+      path: '/ai-seo'
+      fullPath: '/admin/articles/ai-seo'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesAiSeoRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
     }
     '/_authenticated/admin/articles/$id': {
       id: '/_authenticated/admin/articles/$id'
-      path: '/articles/$id'
+      path: '/$id'
       fullPath: '/admin/articles/$id'
       preLoaderRoute: typeof AuthenticatedAdminArticlesIdRouteImport
-      parentRoute: typeof AuthenticatedAdminRoute
+      parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/articles/revisions/': {
+      id: '/_authenticated/admin/articles/revisions/'
+      path: '/'
+      fullPath: '/admin/articles/revisions/'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesRevisionsIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRevisionsRoute
+    }
+    '/_authenticated/admin/articles/preview/': {
+      id: '/_authenticated/admin/articles/preview/'
+      path: '/'
+      fullPath: '/admin/articles/preview/'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesPreviewIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesPreviewRoute
+    }
+    '/_authenticated/admin/articles/revisions/$articleId': {
+      id: '/_authenticated/admin/articles/revisions/$articleId'
+      path: '/$articleId'
+      fullPath: '/admin/articles/revisions/$articleId'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesRevisionsArticleIdRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesRevisionsRoute
+    }
+    '/_authenticated/admin/articles/preview/$articleId': {
+      id: '/_authenticated/admin/articles/preview/$articleId'
+      path: '/$articleId'
+      fullPath: '/admin/articles/preview/$articleId'
+      preLoaderRoute: typeof AuthenticatedAdminArticlesPreviewArticleIdRouteImport
+      parentRoute: typeof AuthenticatedAdminArticlesPreviewRoute
     }
   }
 }
+
+interface AuthenticatedAdminArticlesPreviewRouteChildren {
+  AuthenticatedAdminArticlesPreviewArticleIdRoute: typeof AuthenticatedAdminArticlesPreviewArticleIdRoute
+  AuthenticatedAdminArticlesPreviewIndexRoute: typeof AuthenticatedAdminArticlesPreviewIndexRoute
+}
+
+const AuthenticatedAdminArticlesPreviewRouteChildren: AuthenticatedAdminArticlesPreviewRouteChildren =
+  {
+    AuthenticatedAdminArticlesPreviewArticleIdRoute:
+      AuthenticatedAdminArticlesPreviewArticleIdRoute,
+    AuthenticatedAdminArticlesPreviewIndexRoute:
+      AuthenticatedAdminArticlesPreviewIndexRoute,
+  }
+
+const AuthenticatedAdminArticlesPreviewRouteWithChildren =
+  AuthenticatedAdminArticlesPreviewRoute._addFileChildren(
+    AuthenticatedAdminArticlesPreviewRouteChildren,
+  )
+
+interface AuthenticatedAdminArticlesRevisionsRouteChildren {
+  AuthenticatedAdminArticlesRevisionsArticleIdRoute: typeof AuthenticatedAdminArticlesRevisionsArticleIdRoute
+  AuthenticatedAdminArticlesRevisionsIndexRoute: typeof AuthenticatedAdminArticlesRevisionsIndexRoute
+}
+
+const AuthenticatedAdminArticlesRevisionsRouteChildren: AuthenticatedAdminArticlesRevisionsRouteChildren =
+  {
+    AuthenticatedAdminArticlesRevisionsArticleIdRoute:
+      AuthenticatedAdminArticlesRevisionsArticleIdRoute,
+    AuthenticatedAdminArticlesRevisionsIndexRoute:
+      AuthenticatedAdminArticlesRevisionsIndexRoute,
+  }
+
+const AuthenticatedAdminArticlesRevisionsRouteWithChildren =
+  AuthenticatedAdminArticlesRevisionsRoute._addFileChildren(
+    AuthenticatedAdminArticlesRevisionsRouteChildren,
+  )
+
+interface AuthenticatedAdminArticlesRouteChildren {
+  AuthenticatedAdminArticlesIdRoute: typeof AuthenticatedAdminArticlesIdRoute
+  AuthenticatedAdminArticlesAiSeoRoute: typeof AuthenticatedAdminArticlesAiSeoRoute
+  AuthenticatedAdminArticlesAiWritingRoute: typeof AuthenticatedAdminArticlesAiWritingRoute
+  AuthenticatedAdminArticlesAllRoute: typeof AuthenticatedAdminArticlesAllRoute
+  AuthenticatedAdminArticlesApprovedRoute: typeof AuthenticatedAdminArticlesApprovedRoute
+  AuthenticatedAdminArticlesArchivedRoute: typeof AuthenticatedAdminArticlesArchivedRoute
+  AuthenticatedAdminArticlesContentScoreRoute: typeof AuthenticatedAdminArticlesContentScoreRoute
+  AuthenticatedAdminArticlesCreateRoute: typeof AuthenticatedAdminArticlesCreateRoute
+  AuthenticatedAdminArticlesDraftsRoute: typeof AuthenticatedAdminArticlesDraftsRoute
+  AuthenticatedAdminArticlesInternalLinkingRoute: typeof AuthenticatedAdminArticlesInternalLinkingRoute
+  AuthenticatedAdminArticlesPreviewRoute: typeof AuthenticatedAdminArticlesPreviewRouteWithChildren
+  AuthenticatedAdminArticlesPublishedRoute: typeof AuthenticatedAdminArticlesPublishedRoute
+  AuthenticatedAdminArticlesRelatedRoute: typeof AuthenticatedAdminArticlesRelatedRoute
+  AuthenticatedAdminArticlesReviewRoute: typeof AuthenticatedAdminArticlesReviewRoute
+  AuthenticatedAdminArticlesRevisionsRoute: typeof AuthenticatedAdminArticlesRevisionsRouteWithChildren
+  AuthenticatedAdminArticlesScheduledRoute: typeof AuthenticatedAdminArticlesScheduledRoute
+  AuthenticatedAdminArticlesSettingsRoute: typeof AuthenticatedAdminArticlesSettingsRoute
+  AuthenticatedAdminArticlesTrashRoute: typeof AuthenticatedAdminArticlesTrashRoute
+  AuthenticatedAdminArticlesWorkflowRoute: typeof AuthenticatedAdminArticlesWorkflowRoute
+  AuthenticatedAdminArticlesIndexRoute: typeof AuthenticatedAdminArticlesIndexRoute
+}
+
+const AuthenticatedAdminArticlesRouteChildren: AuthenticatedAdminArticlesRouteChildren =
+  {
+    AuthenticatedAdminArticlesIdRoute: AuthenticatedAdminArticlesIdRoute,
+    AuthenticatedAdminArticlesAiSeoRoute: AuthenticatedAdminArticlesAiSeoRoute,
+    AuthenticatedAdminArticlesAiWritingRoute:
+      AuthenticatedAdminArticlesAiWritingRoute,
+    AuthenticatedAdminArticlesAllRoute: AuthenticatedAdminArticlesAllRoute,
+    AuthenticatedAdminArticlesApprovedRoute:
+      AuthenticatedAdminArticlesApprovedRoute,
+    AuthenticatedAdminArticlesArchivedRoute:
+      AuthenticatedAdminArticlesArchivedRoute,
+    AuthenticatedAdminArticlesContentScoreRoute:
+      AuthenticatedAdminArticlesContentScoreRoute,
+    AuthenticatedAdminArticlesCreateRoute:
+      AuthenticatedAdminArticlesCreateRoute,
+    AuthenticatedAdminArticlesDraftsRoute:
+      AuthenticatedAdminArticlesDraftsRoute,
+    AuthenticatedAdminArticlesInternalLinkingRoute:
+      AuthenticatedAdminArticlesInternalLinkingRoute,
+    AuthenticatedAdminArticlesPreviewRoute:
+      AuthenticatedAdminArticlesPreviewRouteWithChildren,
+    AuthenticatedAdminArticlesPublishedRoute:
+      AuthenticatedAdminArticlesPublishedRoute,
+    AuthenticatedAdminArticlesRelatedRoute:
+      AuthenticatedAdminArticlesRelatedRoute,
+    AuthenticatedAdminArticlesReviewRoute:
+      AuthenticatedAdminArticlesReviewRoute,
+    AuthenticatedAdminArticlesRevisionsRoute:
+      AuthenticatedAdminArticlesRevisionsRouteWithChildren,
+    AuthenticatedAdminArticlesScheduledRoute:
+      AuthenticatedAdminArticlesScheduledRoute,
+    AuthenticatedAdminArticlesSettingsRoute:
+      AuthenticatedAdminArticlesSettingsRoute,
+    AuthenticatedAdminArticlesTrashRoute: AuthenticatedAdminArticlesTrashRoute,
+    AuthenticatedAdminArticlesWorkflowRoute:
+      AuthenticatedAdminArticlesWorkflowRoute,
+    AuthenticatedAdminArticlesIndexRoute: AuthenticatedAdminArticlesIndexRoute,
+  }
+
+const AuthenticatedAdminArticlesRouteWithChildren =
+  AuthenticatedAdminArticlesRoute._addFileChildren(
+    AuthenticatedAdminArticlesRouteChildren,
+  )
 
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAccessRoute: typeof AuthenticatedAdminAccessRoute
   AuthenticatedAdminAmbassadorsRoute: typeof AuthenticatedAdminAmbassadorsRoute
   AuthenticatedAdminAnalyticsRoute: typeof AuthenticatedAdminAnalyticsRoute
+  AuthenticatedAdminArticlesRoute: typeof AuthenticatedAdminArticlesRouteWithChildren
   AuthenticatedAdminCategoriesRoute: typeof AuthenticatedAdminCategoriesRoute
   AuthenticatedAdminCommentsRoute: typeof AuthenticatedAdminCommentsRoute
   AuthenticatedAdminEmbassiesRoute: typeof AuthenticatedAdminEmbassiesRoute
@@ -658,14 +1216,13 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminVideosRoute: typeof AuthenticatedAdminVideosRoute
   AuthenticatedAdminWarMonitorRoute: typeof AuthenticatedAdminWarMonitorRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
-  AuthenticatedAdminArticlesIdRoute: typeof AuthenticatedAdminArticlesIdRoute
-  AuthenticatedAdminArticlesIndexRoute: typeof AuthenticatedAdminArticlesIndexRoute
 }
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAccessRoute: AuthenticatedAdminAccessRoute,
   AuthenticatedAdminAmbassadorsRoute: AuthenticatedAdminAmbassadorsRoute,
   AuthenticatedAdminAnalyticsRoute: AuthenticatedAdminAnalyticsRoute,
+  AuthenticatedAdminArticlesRoute: AuthenticatedAdminArticlesRouteWithChildren,
   AuthenticatedAdminCategoriesRoute: AuthenticatedAdminCategoriesRoute,
   AuthenticatedAdminCommentsRoute: AuthenticatedAdminCommentsRoute,
   AuthenticatedAdminEmbassiesRoute: AuthenticatedAdminEmbassiesRoute,
@@ -676,8 +1233,6 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminVideosRoute: AuthenticatedAdminVideosRoute,
   AuthenticatedAdminWarMonitorRoute: AuthenticatedAdminWarMonitorRoute,
   AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
-  AuthenticatedAdminArticlesIdRoute: AuthenticatedAdminArticlesIdRoute,
-  AuthenticatedAdminArticlesIndexRoute: AuthenticatedAdminArticlesIndexRoute,
 }
 
 const AuthenticatedAdminRouteWithChildren =

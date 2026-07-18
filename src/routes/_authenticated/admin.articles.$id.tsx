@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, History, Loader2, RotateCcw, X } from "lucide-react";
 import {
@@ -23,15 +23,20 @@ import { requirePermissionRoute } from "@/lib/route-guards";
 import { BlockEditor } from "@/components/block-editor";
 import { parseBody, serializeBlocks, type Block } from "@/lib/blocks";
 import { parseHreflang, seoLengthTone, siteUrl } from "@/lib/seo";
+import { ARTICLES_STATIC_SEGMENTS } from "@/components/articles/nav";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
 
 export const Route = createFileRoute("/_authenticated/admin/articles/$id")({
-  beforeLoad: ({ context, params }) =>
+  beforeLoad: ({ context, params }) => {
+    if (ARTICLES_STATIC_SEGMENTS.has(params.id)) {
+      throw redirect({ href: `/admin/articles/${params.id}` });
+    }
     requirePermissionRoute(
       context.roles,
       params.id === "new" ? "articles:create" : "articles:view",
-    ),
+    );
+  },
   component: EditArticle,
 });
 
