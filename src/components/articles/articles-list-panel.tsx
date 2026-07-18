@@ -8,6 +8,7 @@ import {
   Eye,
   History,
   ImageIcon,
+  PanelRight,
   Pencil,
   Plus,
   Send,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArticlesAdvancedFilters } from "@/components/articles/articles-advanced-filters";
+import { ArticleInspector } from "@/components/articles/article-inspector";
 import {
   DEFAULT_ARTICLES_FILTERS,
   computeArticleSeoScore,
@@ -132,6 +134,7 @@ export function ArticlesListPanel({
   const [visibility, setVisibility] = useState(loadColumnVisibility);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [importMessage, setImportMessage] = useState<string | null>(null);
+  const [inspectId, setInspectId] = useState<string | null>(null);
 
   useEffect(() => {
     if (lockedStatus) {
@@ -426,6 +429,11 @@ export function ArticlesListPanel({
     }
   });
 
+  const inspectSeed = useMemo(
+    () => sorted.find((article) => article.id === inspectId) ?? null,
+    [inspectId, sorted],
+  );
+
   const tabCounts = counts.data;
 
   return (
@@ -696,6 +704,7 @@ export function ArticlesListPanel({
                     article={article}
                     visibility={visibility}
                     selected={selected.includes(article.id)}
+                    inspecting={inspectId === article.id}
                     onSelect={(checked) =>
                       setSelected((current) =>
                         checked
@@ -703,6 +712,7 @@ export function ArticlesListPanel({
                           : current.filter((id) => id !== article.id),
                       )
                     }
+                    onInspect={() => setInspectId(article.id)}
                     canCreate={canCreate}
                     canPublish={canPublish}
                     canDelete={canDelete}
@@ -717,6 +727,23 @@ export function ArticlesListPanel({
           </DataTable>
         )}
       </CmsPanel>
+
+      <ArticleInspector
+        articleId={inspectId}
+        seed={inspectSeed}
+        open={Boolean(inspectId)}
+        onOpenChange={(open) => {
+          if (!open) setInspectId(null);
+        }}
+        canCreate={canCreate}
+        canPublish={canPublish}
+        onDuplicate={() => {
+          if (inspectId) duplicate.mutate(inspectId);
+        }}
+        onArchive={() => {
+          if (inspectId) runBulk("archive", [inspectId]);
+        }}
+      />
     </div>
   );
 }
@@ -725,7 +752,9 @@ function ArticleTableRow({
   article,
   visibility,
   selected,
+  inspecting,
   onSelect,
+  onInspect,
   canCreate,
   canPublish,
   canDelete,
@@ -744,7 +773,9 @@ function ArticleTableRow({
   };
   visibility: Record<ArticlesTableColumnKey, boolean>;
   selected: boolean;
+  inspecting: boolean;
   onSelect: (checked: boolean) => void;
+  onInspect: () => void;
   canCreate: boolean;
   canPublish: boolean;
   canDelete: boolean;
@@ -754,12 +785,17 @@ function ArticleTableRow({
   onDelete: () => void;
 }) {
   return (
-    <DataTableRow selected={selected}>
+    <DataTableRow
+      selected={selected || inspecting}
+      onClick={onInspect}
+      className={inspecting ? "bg-accent/50" : undefined}
+    >
       {visibility.select ? (
         <DataTableCell>
           <input
             type="checkbox"
             checked={selected}
+            onClick={(event) => event.stopPropagation()}
             onChange={(event) => onSelect(event.target.checked)}
             aria-label={`Select ${article.title}`}
           />
@@ -787,6 +823,7 @@ function ArticleTableRow({
             to="/admin/articles/$id"
             params={{ id: article.id }}
             className="block truncate font-semibold text-foreground cms-transition hover:text-cat-blue"
+            onClick={(event) => event.stopPropagation()}
           >
             {article.title}
           </Link>
@@ -862,7 +899,15 @@ function ArticleTableRow({
       ) : null}
       {visibility.actions ? (
         <DataTableCell align="right">
-          <div className="flex justify-end gap-0.5">
+          <div className="flex justify-end gap-0.5" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
+              onClick={onInspect}
+              title="Inspect article"
+            >
+              <PanelRight className="h-4 w-4" />
+            </button>
             <Link
               to="/admin/articles/$id"
               params={{ id: article.id }}
