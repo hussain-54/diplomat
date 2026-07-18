@@ -74,6 +74,14 @@ const requirePermission = async (permission: Permission) => {
   return newsroom;
 };
 
+const requireAnyPermission = async (permissions: Permission[]) => {
+  const newsroom = await requireNewsroomRole();
+  if (!hasAnyPermission(newsroom.roles, permissions)) {
+    throw new Error(`Forbidden — missing one of: ${permissions.join(", ")}.`);
+  }
+  return newsroom;
+};
+
 const requireEditorRole = async () => {
   return requirePermission("newsroom:manage");
 };
@@ -1106,6 +1114,207 @@ export const getArticleRevisions = async ({ data }: { data: { article_id: string
   return revisions ?? [];
 };
 
+/** Unwrap format-1 (flat) and format-2 (`{ article, tag_ids }`) revision snapshots. */
+export function unwrapRevisionSnapshot(raw: unknown): Partial<
+  Database["public"]["Tables"]["articles"]["Row"]
+> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const obj = raw as Record<string, unknown>;
+  if (obj.article && typeof obj.article === "object" && !Array.isArray(obj.article)) {
+    return obj.article as Partial<Database["public"]["Tables"]["articles"]["Row"]>;
+  }
+  return obj as Partial<Database["public"]["Tables"]["articles"]["Row"]>;
+}
+
+export type ArticleNoteType = "editorial" | "fact_check";
+
+export type ArticleApprovalAction =
+  | "submit_review"
+  | "approve"
+  | "reject"
+  | "request_changes"
+  | "publish"
+  | "schedule"
+  | "archive";
+
+export const listArticleNotes = async ({
+  data,
+}: {
+  data: { article_id: string; note_type?: ArticleNoteType };
+}) => {
+  await requirePermission("articles:view");
+  let query = supabase
+    .from("article_notes")
+    .select("*, author:profiles!article_notes_author_id_fkey(name)")
+    .eq("article_id", data.article_id)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (data.note_type) query = query.eq("note_type", data.note_type);
+  const { data: rows, error } = await query;
+  if (error) throw toAppError(error);
+  return rows ?? [];
+};
+
+export const addArticleNote = async ({
+  data,
+}: {
+  data: { article_id: string; note_type: ArticleNoteType; body: string };
+}) => {
+  const body = data.body.trim();
+  if (!body) throw new Error("Note cannot be empty.");
+  if (data.note_type === "editorial") {
+    await requireAnyPermission(["articles:edit_own", "articles:edit_all", "articles:review"]);
+  } else {
+    await requireAnyPermission(["articles:review", "articles:edit_all"]);
+  }
+  const { data: row, error } = await supabase
+    .from("article_notes")
+    .insert({
+      article_id: data.article_id,
+      note_type: data.note_type,
+      body,
+    })
+    .select("*, author:profiles!article_notes_author_id_fkey(name)")
+    .single();
+  if (error) throw toAppError(error);
+  return row;
+};
+
+export const listArticleApprovals = async ({
+  data,
+}: {
+  data: { article_id: string };
+}) => {
+  await requirePermission("articles:view");
+  const { data: rows, error } = await supabase
+    .from("article_approvals")
+    .select("*, actor:profiles!article_approvals_actor_id_fkey(name)")
+    .eq("article_id", data.article_id)
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) throw toAppError(error);
+  return rows ?? [];
+};
+
+export const recordArticleApproval = async ({
+  data,
+}: {
+  data: {
+    article_id: string;
+    action: ArticleApprovalAction;
+    from_status?: ArticleStatus | null;
+    to_status?: ArticleStatus | null;
+    note?: string | null;
+  };
+}) => {
+  await requireAnyPermission([
+    "articles:review",
+    "articles:publish",
+    "articles:edit_all",
+    "articles:edit_own",
+  ]);
+  const { data: row, error } = await supabase
+    .from("article_approvals")
+    .insert({
+      article_id: data.article_id,
+      action: data.action,
+      from_status: data.from_status ?? null,
+      to_status: data.to_status ?? null,
+      note: data.note?.trim() || null,
+    })
+    .select("*, actor:profiles!article_approvals_actor_id_fkey(name)")
+    .single();
+  if (error) throw toAppError(error);
+  return row;
+};
+
+export const applyArticleWorkflowAction = async ({
+  data,
+}: {
+  data: {
+    article_id: string;
+    action: ArticleApprovalAction;
+    note?: string;
+    scheduled_at?: string | null;
+  };
+}) => {
+  const article = await getAdminArticle({ data: { id: data.article_id } });
+  if (!article) throw new Error("Article not found.");
+  const from = article.status as ArticleStatus;
+
+  let to: ArticleStatus = from;
+  switch (data.action) {
+    case "submit_review":
+      if (from !== "draft") throw new Error("Only drafts can be submitted for review.");
+      to = "review";
+      break;
+    case "approve":
+      if (from !== "review") throw new Error("Only articles in review can be approved.");
+      to = "review";
+      break;
+    case "reject":
+    case "request_changes":
+      if (from !== "review") throw new Error("Only articles in review can be sent back.");
+      to = "draft";
+      break;
+    case "publish":
+      to = "published";
+      break;
+    case "schedule":
+      to = "scheduled";
+      break;
+    case "archive":
+      to = "archived";
+      break;
+    default:
+      throw new Error("Unknown workflow action.");
+  }
+
+  if (data.action === "publish" || data.action === "schedule" || data.action === "archive") {
+    await requirePermission("articles:publish");
+  } else if (data.action === "submit_review") {
+    await requireAnyPermission(["articles:edit_own", "articles:edit_all", "articles:create"]);
+  } else {
+    await requireAnyPermission(["articles:review", "articles:publish", "articles:edit_all"]);
+  }
+
+  const updated =
+    to !== from
+      ? await upsertArticle({
+          data: {
+            id: data.article_id,
+            title: article.title,
+            deck: article.deck ?? undefined,
+            body: article.body ?? undefined,
+            section_id: article.section_id!,
+            region: article.region ?? undefined,
+            badge_type: article.badge_type,
+            hero_image_url: article.hero_image_url ?? undefined,
+            status: to,
+            slug: article.slug,
+            scheduled_at:
+              to === "scheduled"
+                ? (data.scheduled_at ?? article.scheduled_at)
+                : to === "published"
+                  ? null
+                  : article.scheduled_at,
+          },
+        })
+      : article;
+
+  await recordArticleApproval({
+    data: {
+      article_id: data.article_id,
+      action: data.action,
+      from_status: from,
+      to_status: to,
+      note: data.note,
+    },
+  });
+
+  return updated;
+};
+
 export const restoreArticleRevision = async ({
   data,
 }: {
@@ -1130,15 +1339,7 @@ export const restoreArticleRevision = async ({
     .single();
   if (error) throw toAppError(error);
 
-  const raw = revision.snapshot as unknown;
-  const wrapped =
-    raw &&
-    typeof raw === "object" &&
-    !Array.isArray(raw) &&
-    "article" in (raw as Record<string, unknown>)
-      ? (raw as { article: Database["public"]["Tables"]["articles"]["Row"]; tag_ids?: string[] })
-      : null;
-  const snapshot = (wrapped?.article ?? raw) as Database["public"]["Tables"]["articles"]["Row"];
+  const snapshot = unwrapRevisionSnapshot(revision.snapshot) as Database["public"]["Tables"]["articles"]["Row"];
   if (!snapshot?.title || !snapshot.section_id) {
     throw new Error("This revision cannot be restored.");
   }
@@ -1193,12 +1394,20 @@ export const restoreArticleRevision = async ({
     },
   });
 
-  if (wrapped?.tag_ids?.length) {
-    const { data: tags } = await supabase.from("tags").select("id,name").in("id", wrapped.tag_ids);
-    if (tags?.length) {
-      await setArticleTags({
-        data: { article_id: data.article_id, tag_names: tags.map((tag) => tag.name) },
-      });
+  if (
+    revision.snapshot &&
+    typeof revision.snapshot === "object" &&
+    !Array.isArray(revision.snapshot) &&
+    Array.isArray((revision.snapshot as { tag_ids?: unknown }).tag_ids)
+  ) {
+    const tagIds = (revision.snapshot as { tag_ids: string[] }).tag_ids;
+    if (tagIds.length) {
+      const { data: tags } = await supabase.from("tags").select("id,name").in("id", tagIds);
+      if (tags?.length) {
+        await setArticleTags({
+          data: { article_id: data.article_id, tag_names: tags.map((tag) => tag.name) },
+        });
+      }
     }
   }
 

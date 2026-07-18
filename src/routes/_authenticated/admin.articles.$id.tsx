@@ -1,25 +1,42 @@
 import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, History, Loader2, RotateCcw, X } from "lucide-react";
+import { CheckCircle2, History, Loader2, RotateCcw, Wifi, X } from "lucide-react";
 import {
+  applyArticleWorkflowAction,
   getAdminArticle,
   getArticleRevisions,
   getArticleTags,
   getMe,
   listTags,
+  recordArticleApproval,
   restoreArticleRevision,
   setArticleTags,
+  unwrapRevisionSnapshot,
   updateArticleSeo,
   upsertArticle,
   uploadHeroImage,
+  type ArticleApprovalAction,
   type ArticleSeoInput,
 } from "@/lib/admin.functions";
 import { getSections } from "@/lib/content.functions";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { Database } from "@/integrations/supabase/types";
 import { CmsPageHeader, CmsPanel, CmsStatus, cmsButton, cmsInput } from "@/components/cms-ui";
 import { MediaUploader, RichEditor, SEOForm } from "@/components/cms";
 import { ArticleAiAssistantPanel } from "@/components/articles/ai-assistant-panel";
+import {
+  ArticleApprovalHistoryPanel,
+  ArticleNotesPanel,
+  WorkflowActions,
+} from "@/components/articles/article-edit-panels";
+import {
+  clearArticleDraftCache,
+  loadArticleDraftCache,
+  moveArticleDraftCache,
+  saveArticleDraftCache,
+  type ArticleDraftCachePayload,
+} from "@/lib/article-draft-cache";
+import { useArticleEditRealtime } from "@/hooks/useArticleEditRealtime";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermissionRoute } from "@/lib/route-guards";
 import { parseBody, serializeBlocks, type Block } from "@/lib/blocks";
@@ -117,6 +134,13 @@ function EditArticle() {
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [draftRecovery, setDraftRecovery] = useState<ArticleDraftCachePayload | null>(null);
+  const hydratedRef = useRef(false);
+  const cacheKey = isNew ? "new" : id;
+
+  const { connected: realtimeConnected, remoteUpdatedAt } = useArticleEditRealtime(
+    isNew ? null : id,
+  );
 
   const patchForm = (patch: Partial<typeof form>) => {
     setForm((f) => ({ ...f, ...patch }));
@@ -172,9 +196,28 @@ function EditArticle() {
       setHreflangRows(
         Object.entries(hreflang).map(([locale, url]) => ({ locale, url })),
       );
+      hydratedRef.current = true;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articleQ.data]);
+
+  useEffect(() => {
+    if (isNew) hydratedRef.current = true;
+  }, [isNew]);
+
+  // Offer local draft recovery when cache is newer than the server row.
+  useEffect(() => {
+    if (!hydratedRef.current && !isNew) return;
+    const cached = loadArticleDraftCache(cacheKey);
+    if (!cached) return;
+    if (!isNew && articleQ.data?.updated_at) {
+      if (new Date(cached.savedAt).getTime() <= new Date(articleQ.data.updated_at).getTime()) {
+        clearArticleDraftCache(cacheKey);
+        return;
+      }
+    }
+    setDraftRecovery(cached);
+  }, [cacheKey, isNew, articleQ.data?.updated_at]);
 
   useEffect(() => {
     if (articleTagsQ.data && !dirty) {
@@ -205,9 +248,86 @@ function EditArticle() {
     ) &&
     articleQ.data?.author_id !== meQ.data?.userId;
   const readOnly = protectedReadOnly || articleReadOnly;
+  const canReview =
+    isEditorialLeader ||
+    hasPermission(editorRoles, "articles:review") ||
+    canPublish;
+  const canSubmitReview =
+    !readOnly &&
+    (isEditorialLeader ||
+      hasPermission(editorRoles, "articles:edit_own") ||
+      hasPermission(editorRoles, "articles:edit_all") ||
+      hasPermission(editorRoles, "articles:create"));
+  const canWriteEditorialNotes =
+    !isNew &&
+    (hasPermission(editorRoles, "articles:edit_own") ||
+      hasPermission(editorRoles, "articles:edit_all") ||
+      hasPermission(editorRoles, "articles:review"));
+  const canWriteFactCheckNotes =
+    !isNew &&
+    (isFactChecker ||
+      hasPermission(editorRoles, "articles:review") ||
+      hasPermission(editorRoles, "articles:edit_all"));
+
+  // Persist unsaved work locally for recovery.
+  useEffect(() => {
+    if (!dirty || readOnly) return;
+    const timer = setTimeout(() => {
+      saveArticleDraftCache(cacheKey, {
+        savedAt: new Date().toISOString(),
+        form: { ...form },
+        blocks,
+        tagNames,
+        seo: { ...seo },
+        hreflangRows,
+      });
+    }, 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, form, blocks, tagNames, seo, hreflangRows, cacheKey, readOnly]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [dirty]);
+
+  const applyDraftRecovery = () => {
+    if (!draftRecovery) return;
+    const cached = draftRecovery;
+    setForm({
+      title: cached.form.title,
+      deck: cached.form.deck,
+      section_id: cached.form.section_id,
+      region: cached.form.region,
+      badge_type: cached.form.badge_type,
+      hero_image_url: cached.form.hero_image_url,
+      status: (cached.form.status as ArticleStatus) || "draft",
+      slug: cached.form.slug,
+      scheduled_at: cached.form.scheduled_at,
+    });
+    if (Array.isArray(cached.blocks) && cached.blocks.length) {
+      setBlocks(cached.blocks as Block[]);
+    }
+    setTagNames(cached.tagNames ?? []);
+    setSeo((current) => ({ ...current, ...(cached.seo as Partial<ArticleSeoInput>) }));
+    setHreflangRows(cached.hreflangRows ?? []);
+    setDirty(true);
+    setDraftRecovery(null);
+  };
+
+  const discardDraftRecovery = () => {
+    clearArticleDraftCache(cacheKey);
+    setDraftRecovery(null);
+  };
 
   const save = useMutation({
     mutationFn: async ({ auto: _auto }: { auto?: boolean } = {}) => {
+      const previousStatus = articleQ.data?.status;
       const article = await upsertArticle({
         data: {
           id: isNew ? undefined : id,
@@ -239,13 +359,50 @@ function EditArticle() {
           data: { article_id: article.id, ...seo, hreflang },
         });
       }
+      if (
+        article?.id &&
+        previousStatus &&
+        previousStatus !== form.status &&
+        ["published", "scheduled", "archived", "review"].includes(form.status)
+      ) {
+        const action: ArticleApprovalAction | null =
+          form.status === "published"
+            ? "publish"
+            : form.status === "scheduled"
+              ? "schedule"
+              : form.status === "archived"
+                ? "archive"
+                : form.status === "review" && previousStatus === "draft"
+                  ? "submit_review"
+                  : null;
+        if (action) {
+          try {
+            await recordArticleApproval({
+              data: {
+                article_id: article.id,
+                action,
+                from_status: previousStatus,
+                to_status: form.status,
+              },
+            });
+          } catch {
+            // Approval log is best-effort; save already succeeded.
+          }
+        }
+      }
       return article;
     },
     onSuccess: (article, variables) => {
       setDirty(false);
       setLastSavedAt(new Date());
+      clearArticleDraftCache(cacheKey);
+      if (isNew && article?.id) {
+        moveArticleDraftCache("new", article.id);
+        clearArticleDraftCache("new");
+      }
       qc.invalidateQueries({ queryKey: ["admin-articles"] });
       qc.invalidateQueries({ queryKey: ["article-revisions", id] });
+      qc.invalidateQueries({ queryKey: ["article-approvals", article?.id ?? id] });
       qc.invalidateQueries({ queryKey: ["all-tags"] });
       qc.invalidateQueries({ queryKey: ["home"] });
       qc.invalidateQueries({ queryKey: ["latest"] });
@@ -255,6 +412,26 @@ function EditArticle() {
       if (isNew && article?.id && !variables?.auto) {
         navigate({ to: "/admin/articles/$id", params: { id: article.id }, replace: true });
       }
+    },
+  });
+
+  const workflow = useMutation({
+    mutationFn: ({ action, note }: { action: ArticleApprovalAction; note?: string }) =>
+      applyArticleWorkflowAction({
+        data: {
+          article_id: id,
+          action,
+          note,
+          scheduled_at:
+            form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null,
+        },
+      }),
+    onSuccess: () => {
+      setDirty(false);
+      void qc.invalidateQueries({ queryKey: ["admin-article", id] });
+      void qc.invalidateQueries({ queryKey: ["article-approvals", id] });
+      void qc.invalidateQueries({ queryKey: ["article-revisions", id] });
+      void qc.invalidateQueries({ queryKey: ["admin-articles"] });
     },
   });
 
@@ -373,6 +550,22 @@ function EditArticle() {
         }
         actions={
           <div className="flex items-center gap-3">
+            {!isNew ? (
+              <span
+                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground"
+                title={
+                  realtimeConnected
+                    ? "Live updates connected"
+                    : "Connecting to live updates…"
+                }
+              >
+                <Wifi
+                  className={`h-3.5 w-3.5 ${realtimeConnected ? "text-emerald-600" : "text-muted-foreground/50"}`}
+                />
+                {realtimeConnected ? "Live" : "Offline"}
+                <CmsStatus tone={statusTone(form.status)}>{form.status}</CmsStatus>
+              </span>
+            ) : null}
             <SaveIndicator saving={save.isPending} dirty={dirty} lastSavedAt={lastSavedAt} autosave={autosaveEligible || (!isNew && ["draft", "review"].includes(form.status))} />
             <Link to="/admin/articles" className="text-xs font-semibold text-muted-foreground hover:text-foreground">
               ← Back to articles
@@ -380,6 +573,34 @@ function EditArticle() {
           </div>
         }
       />
+      {draftRecovery ? (
+        <div className="flex flex-col gap-3 border border-gold/40 bg-gold/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-muted-foreground">
+            Unsaved local draft from{" "}
+            <span className="font-semibold text-foreground">
+              {new Date(draftRecovery.savedAt).toLocaleString()}
+            </span>{" "}
+            is available. Recover it or discard and keep the server version.
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button type="button" className={cmsButton} onClick={applyDraftRecovery}>
+              Recover draft
+            </button>
+            <button type="button" className="text-xs font-semibold text-muted-foreground hover:text-foreground" onClick={discardDraftRecovery}>
+              Discard
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {remoteUpdatedAt && dirty ? (
+        <div className="border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          Someone else updated this article at{" "}
+          <span className="font-semibold text-foreground">
+            {new Date(remoteUpdatedAt).toLocaleString()}
+          </span>
+          . Save carefully or reload to pick up their changes.
+        </div>
+      ) : null}
       {!canPublish && (
         <div className="border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-muted-foreground">
           {protectedReadOnly ? (
@@ -500,6 +721,21 @@ function EditArticle() {
                 <span className="text-xs font-semibold text-foreground">Current state</span>
                 <CmsStatus tone={statusTone(form.status)}>{form.status}</CmsStatus>
               </div>
+              {!isNew && !readOnly ? (
+                <WorkflowActions
+                  status={form.status}
+                  canSubmitReview={canSubmitReview}
+                  canReview={canReview}
+                  canPublish={canPublish}
+                  disabled={workflow.isPending || save.isPending}
+                  onAction={(action, note) => workflow.mutate({ action, note })}
+                />
+              ) : null}
+              {workflow.isError ? (
+                <div className="border border-crimson/30 bg-crimson/10 p-3 text-xs text-crimson">
+                  {workflow.error.message}
+                </div>
+              ) : null}
               <button type="submit" disabled={!canSubmit} className={`${cmsButton} w-full`}>
                 {save.isPending
                   ? "Saving…"
@@ -698,6 +934,17 @@ function EditArticle() {
               )}
             </div>
           </CmsPanel>
+
+          {!isNew ? (
+            <>
+              <ArticleNotesPanel
+                articleId={id}
+                canEditorial={canWriteEditorialNotes}
+                canFactCheck={canWriteFactCheckNotes}
+              />
+              <ArticleApprovalHistoryPanel articleId={id} />
+            </>
+          ) : null}
         </aside>
       </form>
 
@@ -723,10 +970,7 @@ function EditArticle() {
           ) : (
             <div className="divide-y divide-border">
               {revisionsQ.data.map((revision) => {
-                const snapshot = revision.snapshot as unknown as {
-                  status?: ArticleStatus;
-                  title?: string;
-                };
+                const snapshot = unwrapRevisionSnapshot(revision.snapshot);
                 const changer = Array.isArray(revision.changer)
                   ? revision.changer[0]?.name
                   : revision.changer?.name;
@@ -743,7 +987,7 @@ function EditArticle() {
                         {new Date(revision.changed_at).toLocaleString()} · {changer ?? "System"}
                       </div>
                     </div>
-                    <CmsStatus tone={statusTone(snapshot.status ?? "draft")}>
+                    <CmsStatus tone={statusTone((snapshot.status as ArticleStatus) ?? "draft")}>
                       {snapshot.status ?? "draft"}
                     </CmsStatus>
                     {!readOnly && (

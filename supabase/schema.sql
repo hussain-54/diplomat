@@ -371,6 +371,36 @@ CREATE TABLE IF NOT EXISTS public.article_revisions (
   UNIQUE (article_id, version)
 );
 
+CREATE TABLE IF NOT EXISTS public.article_notes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  article_id uuid NOT NULL REFERENCES public.articles(id) ON DELETE CASCADE,
+  note_type text NOT NULL CHECK (note_type IN ('editorial', 'fact_check')),
+  body text NOT NULL CHECK (char_length(trim(body)) > 0),
+  author_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.article_approvals (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  article_id uuid NOT NULL REFERENCES public.articles(id) ON DELETE CASCADE,
+  action text NOT NULL CHECK (
+    action IN (
+      'submit_review',
+      'approve',
+      'reject',
+      'request_changes',
+      'publish',
+      'schedule',
+      'archive'
+    )
+  ),
+  from_status public.article_status,
+  to_status public.article_status,
+  note text,
+  actor_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.article_daily_metrics (
   article_id uuid NOT NULL REFERENCES public.articles(id) ON DELETE CASCADE,
   metric_date date NOT NULL DEFAULT current_date,

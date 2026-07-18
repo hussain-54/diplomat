@@ -118,6 +118,96 @@ export type Database = {
           },
         ]
       }
+      article_approvals: {
+        Row: {
+          action: string
+          actor_id: string | null
+          article_id: string
+          created_at: string
+          from_status: Database["public"]["Enums"]["article_status"] | null
+          id: string
+          note: string | null
+          to_status: Database["public"]["Enums"]["article_status"] | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          article_id: string
+          created_at?: string
+          from_status?: Database["public"]["Enums"]["article_status"] | null
+          id?: string
+          note?: string | null
+          to_status?: Database["public"]["Enums"]["article_status"] | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          article_id?: string
+          created_at?: string
+          from_status?: Database["public"]["Enums"]["article_status"] | null
+          id?: string
+          note?: string | null
+          to_status?: Database["public"]["Enums"]["article_status"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_approvals_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_approvals_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      article_notes: {
+        Row: {
+          article_id: string
+          author_id: string | null
+          body: string
+          created_at: string
+          id: string
+          note_type: string
+        }
+        Insert: {
+          article_id: string
+          author_id?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          note_type: string
+        }
+        Update: {
+          article_id?: string
+          author_id?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          note_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "article_notes_article_id_fkey"
+            columns: ["article_id"]
+            isOneToOne: false
+            referencedRelation: "articles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "article_notes_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       article_revisions: {
         Row: {
           article_id: string

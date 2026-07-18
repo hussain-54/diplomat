@@ -5,17 +5,30 @@ import {
   getAdminArticle,
   getArticleRevisions,
   restoreArticleRevision,
+  unwrapRevisionSnapshot,
 } from "@/lib/admin.functions";
 import {
   CmsAlert,
   CmsEmptyState,
   CmsPageHeader,
   CmsPanel,
+  CmsStatus,
   cmsButton,
   cmsSecondaryButton,
 } from "@/components/cms";
 import { requirePermissionRoute } from "@/lib/route-guards";
 import { ARTICLES_STATIC_SEGMENTS } from "@/components/articles/nav";
+import type { Database } from "@/integrations/supabase/types";
+
+type ArticleStatus = Database["public"]["Enums"]["article_status"];
+
+function statusTone(status: ArticleStatus): "neutral" | "success" | "warning" | "danger" | "info" {
+  if (status === "published") return "success";
+  if (status === "scheduled") return "info";
+  if (status === "review") return "warning";
+  if (status === "archived") return "neutral";
+  return "neutral";
+}
 
 export const Route = createFileRoute("/_authenticated/admin/articles/revisions/$articleId")({
   beforeLoad: ({ context, params }) => {
@@ -86,14 +99,15 @@ function ArticleRevisionsPage() {
               const changer = Array.isArray(revision.changer)
                 ? revision.changer[0]
                 : revision.changer;
+              const snapshot = unwrapRevisionSnapshot(revision.snapshot);
               return (
                 <div
                   key={revision.id}
                   className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div>
-                    <div className="text-sm font-semibold">
-                      Version {revision.version}
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">
+                      v{revision.version} · {snapshot.title ?? "Untitled revision"}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
                       {changer?.name ?? "Unknown editor"} ·{" "}
@@ -102,18 +116,23 @@ function ArticleRevisionsPage() {
                       </span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={cmsSecondaryButton}
-                    disabled={restore.isPending}
-                    onClick={() => {
-                      if (window.confirm(`Restore version ${revision.version}?`)) {
-                        restore.mutate(revision.id);
-                      }
-                    }}
-                  >
-                    <RotateCcw className="h-3.5 w-3.5" /> Restore
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <CmsStatus tone={statusTone((snapshot.status as ArticleStatus) ?? "draft")}>
+                      {snapshot.status ?? "draft"}
+                    </CmsStatus>
+                    <button
+                      type="button"
+                      className={cmsSecondaryButton}
+                      disabled={restore.isPending}
+                      onClick={() => {
+                        if (window.confirm(`Restore version ${revision.version}?`)) {
+                          restore.mutate(revision.id);
+                        }
+                      }}
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" /> Restore
+                    </button>
+                  </div>
                 </div>
               );
             })}
