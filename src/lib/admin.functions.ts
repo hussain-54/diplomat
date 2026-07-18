@@ -774,7 +774,9 @@ export const getAdminArticle = async ({ data }: { data: { id: string } }) => {
   await requirePermission("articles:view");
   const { data: a, error } = await supabase
     .from("articles")
-    .select("*, author:profiles!articles_author_id_fkey(id,name,avatar_url)")
+    .select(
+      "*, author:profiles!articles_author_id_fkey(id,name,avatar_url), sections(name,slug)",
+    )
     .eq("id", data.id)
     .maybeSingle();
   if (error) throw toAppError(error);
