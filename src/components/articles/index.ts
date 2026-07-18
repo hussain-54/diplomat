@@ -9,3 +9,7 @@ export {
   builtinFilterPresets,
   computeArticleSeoScore,
 } from "./articles-filters";
+export {
+  ARTICLES_TABLE_COLUMNS,
+  computeArticleContentScore,
+} from "./articles-table";

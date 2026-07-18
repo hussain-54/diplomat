@@ -2,18 +2,23 @@ import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  Columns3,
   Copy,
+  Download,
   Eye,
   History,
+  ImageIcon,
   Pencil,
   Plus,
   Send,
   Trash2,
+  Upload,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArticlesAdvancedFilters } from "@/components/articles/articles-advanced-filters";
 import {
   DEFAULT_ARTICLES_FILTERS,
+  computeArticleSeoScore,
   isArticlesFilterActive,
   matchesArticlesFilters,
   type ArticlesFilterState,
@@ -22,6 +27,17 @@ import {
   ARTICLES_LIBRARY_TABS,
   matchesLibraryTab,
 } from "@/components/articles/library-tabs";
+import {
+  ARTICLES_TABLE_COLUMNS,
+  computeArticleContentScore,
+  downloadCsv,
+  loadColumnVisibility,
+  parseCsv,
+  saveColumnVisibility,
+  scoreTone,
+  type ArticlesSortKey,
+  type ArticlesTableColumnKey,
+} from "@/components/articles/articles-table";
 import {
   CmsAlert,
   CmsPageHeader,
@@ -34,15 +50,18 @@ import {
   DataTableEmpty,
   DataTableRow,
   cmsButton,
+  cmsGhostButton,
   cmsInput,
   cmsSecondaryButton,
 } from "@/components/cms";
 import {
   bulkManageArticles,
   duplicateArticle,
+  getArticleCommentCounts,
   getArticleViewTotals,
   getArticlesLibraryCounts,
   getMe,
+  importArticlesCsv,
   listAdminArticles,
   listTags,
   type ArticlesLibraryTab,
@@ -54,18 +73,9 @@ import type { Database } from "@/integrations/supabase/types";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
 type BulkAction = "publish" | "archive" | "delete" | "reassign_category";
+type AdminArticle = Awaited<ReturnType<typeof listAdminArticles>>[number];
 
 const PAGE_SIZE = 25;
-
-const ARTICLE_COLUMNS = [
-  { key: "select", header: "", width: "48px" },
-  { key: "article", header: "Article" },
-  { key: "author", header: "Author", width: "140px" },
-  { key: "category", header: "Category", width: "140px" },
-  { key: "status", header: "Status", width: "120px" },
-  { key: "updated", header: "Updated", width: "160px" },
-  { key: "actions", header: "Actions", align: "right" as const, width: "200px" },
-];
 
 export function ArticlesListPanel({
   title,
@@ -87,10 +97,16 @@ export function ArticlesListPanel({
   onLibraryTabChange?: (tab: ArticlesLibraryTab) => void;
 }) {
   const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const articles = useQuery({ queryKey: ["admin-articles"], queryFn: listAdminArticles });
   const views = useQuery({
     queryKey: ["article-view-totals"],
     queryFn: getArticleViewTotals,
+    staleTime: 60_000,
+  });
+  const comments = useQuery({
+    queryKey: ["article-comment-counts"],
+    queryFn: getArticleCommentCounts,
     staleTime: 60_000,
   });
   const tags = useQuery({ queryKey: ["tags"], queryFn: listTags, staleTime: 60_000 });
@@ -111,6 +127,11 @@ export function ArticlesListPanel({
     status: lockedStatus ?? "all",
   }));
   const [page, setPage] = useState(1);
+  const [sortKey, setSortKey] = useState<ArticlesSortKey>("updated");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [visibility, setVisibility] = useState(loadColumnVisibility);
+  const [columnsOpen, setColumnsOpen] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (lockedStatus) {
@@ -123,6 +144,7 @@ export function ArticlesListPanel({
     void queryClient.invalidateQueries({ queryKey: ["admin-articles"] });
     void queryClient.invalidateQueries({ queryKey: ["articles-library-counts"] });
     void queryClient.invalidateQueries({ queryKey: ["article-view-totals"] });
+    void queryClient.invalidateQueries({ queryKey: ["article-comment-counts"] });
     void queryClient.invalidateQueries({ queryKey: ["dashboard-articles"] });
     void queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
     void queryClient.invalidateQueries({ queryKey: ["articles-dashboard"] });
@@ -139,6 +161,15 @@ export function ArticlesListPanel({
       section_id?: string | null;
     }) => bulkManageArticles({ data: value }),
     onSuccess: refresh,
+  });
+  const importer = useMutation({
+    mutationFn: importArticlesCsv,
+    onSuccess: (result) => {
+      refresh();
+      const extra = result.errors.length ? ` ${result.errors.slice(0, 3).join(" ")}` : "";
+      setImportMessage(`Imported ${result.created} draft(s).${extra}`);
+    },
+    onError: (error: Error) => setImportMessage(error.message),
   });
 
   const roles = me.data?.roles;
@@ -159,39 +190,86 @@ export function ArticlesListPanel({
     return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [articles.data]);
 
-  const filtered = useMemo(() => {
+  const enriched = useMemo(() => {
     const viewTotals = views.data ?? {};
-    return (articles.data ?? []).filter((article) => {
+    const commentTotals = comments.data ?? {};
+    return (articles.data ?? []).map((article) => {
+      const seo = computeArticleSeoScore(article);
+      const content = computeArticleContentScore(article);
+      return {
+        ...article,
+        views: viewTotals[article.id] ?? 0,
+        comments: commentTotals[article.id] ?? 0,
+        seoScore: seo,
+        contentScore: content,
+      };
+    });
+  }, [articles.data, comments.data, views.data]);
+
+  const filtered = useMemo(() => {
+    return enriched.filter((article) => {
       if (libraryMode && !matchesLibraryTab(article, libraryTab)) return false;
       if (badgeFilter && article.badge_type !== badgeFilter) return false;
       if (lockedStatus && article.status !== lockedStatus) return false;
-      return matchesArticlesFilters(
-        article,
-        filters,
-        viewTotals[article.id] ?? 0,
-        { ignoreStatus: ignoreStatusInFilters },
-      );
+      return matchesArticlesFilters(article, filters, article.views, {
+        ignoreStatus: ignoreStatusInFilters,
+      });
     });
   }, [
-    articles.data,
     badgeFilter,
+    enriched,
     filters,
     ignoreStatusInFilters,
     libraryMode,
     libraryTab,
     lockedStatus,
-    views.data,
   ]);
+
+  const sorted = useMemo(() => {
+    const rows = [...filtered];
+    const direction = sortDir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      const value = (article: (typeof rows)[number]) => {
+        switch (sortKey) {
+          case "title":
+            return article.title.toLowerCase();
+          case "author":
+            return (authorName(article.author) || "").toLowerCase();
+          case "category":
+            return sectionName(article.sections).toLowerCase();
+          case "seo":
+            return article.seoScore;
+          case "content":
+            return article.contentScore;
+          case "views":
+            return article.views;
+          case "comments":
+            return article.comments;
+          case "status":
+            return article.status;
+          case "updated":
+          default:
+            return new Date(article.updated_at).getTime();
+        }
+      };
+      const left = value(a);
+      const right = value(b);
+      if (typeof left === "number" && typeof right === "number") return (left - right) * direction;
+      return String(left).localeCompare(String(right)) * direction;
+    });
+    return rows;
+  }, [filtered, sortDir, sortKey]);
 
   useEffect(() => {
     setPage(1);
-  }, [filters, lockedStatus, badgeFilter, libraryTab]);
+  }, [filters, lockedStatus, badgeFilter, libraryTab, sortKey, sortDir]);
 
   const pageRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, page]);
+    return sorted.slice(start, start + PAGE_SIZE);
+  }, [page, sorted]);
 
+  const visibleColumns = ARTICLES_TABLE_COLUMNS.filter((column) => visibility[column.key]);
   const allVisibleSelected =
     pageRows.length > 0 && pageRows.every((article) => selected.includes(article.id));
   const error =
@@ -200,10 +278,29 @@ export function ArticlesListPanel({
     sections.error ??
     tags.error ??
     views.error ??
+    comments.error ??
     duplicate.error ??
     bulk.error ??
-    counts.error;
+    counts.error ??
+    importer.error;
   const hasFilters = isArticlesFilterActive(filters, { ignoreStatus: ignoreStatusInFilters });
+
+  const toggleSort = (key: ArticlesSortKey) => {
+    if (sortKey === key) {
+      setSortDir((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(key);
+    setSortDir(key === "title" || key === "author" || key === "category" ? "asc" : "desc");
+  };
+
+  const setColumnVisible = (key: ArticlesTableColumnKey, visible: boolean) => {
+    setVisibility((current) => {
+      const next = { ...current, [key]: visible, select: true, title: true, actions: true };
+      saveColumnVisibility(next);
+      return next;
+    });
+  };
 
   const runBulk = (
     action: Exclude<BulkAction, "reassign_category">,
@@ -223,6 +320,112 @@ export function ArticlesListPanel({
     });
   };
 
+  const exportRows = () => {
+    const source = selected.length
+      ? sorted.filter((article) => selected.includes(article.id))
+      : sorted;
+    downloadCsv("articles-export.csv", [
+      ["id", "title", "slug", "author", "category", "tags", "seo_score", "content_score", "views", "comments", "status", "updated_at"],
+      ...source.map((article) => [
+        article.id,
+        article.title,
+        article.slug,
+        authorName(article.author) || "",
+        sectionName(article.sections),
+        (article.tags ?? []).map((tag) => tag.name).join("|"),
+        String(article.seoScore),
+        String(article.contentScore),
+        String(article.views),
+        String(article.comments),
+        article.status,
+        article.updated_at,
+      ]),
+    ]);
+  };
+
+  const onImportFile = async (file: File) => {
+    const text = await file.text();
+    const matrix = parseCsv(text);
+    if (!matrix.length) {
+      setImportMessage("CSV is empty.");
+      return;
+    }
+    const [header, ...body] = matrix;
+    const index = Object.fromEntries(
+      header.map((cell, i) => [cell.trim().toLowerCase(), i]),
+    );
+    const titleIdx = index.title ?? index.headline ?? 0;
+    const rows = body.map((row) => ({
+      title: row[titleIdx] ?? "",
+      slug: index.slug != null ? row[index.slug] : undefined,
+      deck: index.deck != null ? row[index.deck] : index.subtitle != null ? row[index.subtitle] : undefined,
+      section:
+        index.section != null
+          ? row[index.section]
+          : index.category != null
+            ? row[index.category]
+            : undefined,
+    }));
+    importer.mutate({ data: { rows } });
+  };
+
+  const sortProps = (key: ArticlesSortKey) => ({
+    sortable: true as const,
+    sortDirection: (sortKey === key ? sortDir : false) as "asc" | "desc" | false,
+    onSort: () => toggleSort(key),
+  });
+
+  const tableColumns = visibleColumns.map((column) => {
+    switch (column.key) {
+      case "select":
+        return { key: column.key, header: "", width: "48px" };
+      case "thumbnail":
+        return { key: column.key, header: "Thumb", width: "72px" };
+      case "title":
+        return { key: column.key, header: "Title", ...sortProps("title") };
+      case "author":
+        return { key: column.key, header: "Author", width: "130px", ...sortProps("author") };
+      case "category":
+        return { key: column.key, header: "Category", width: "120px", ...sortProps("category") };
+      case "tags":
+        return { key: column.key, header: "Tags", width: "160px" };
+      case "seo":
+        return { key: column.key, header: "SEO", width: "88px", align: "right" as const, ...sortProps("seo") };
+      case "content":
+        return {
+          key: column.key,
+          header: "Content",
+          width: "96px",
+          align: "right" as const,
+          ...sortProps("content"),
+        };
+      case "views":
+        return {
+          key: column.key,
+          header: "Views",
+          width: "88px",
+          align: "right" as const,
+          ...sortProps("views"),
+        };
+      case "comments":
+        return {
+          key: column.key,
+          header: "Comments",
+          width: "100px",
+          align: "right" as const,
+          ...sortProps("comments"),
+        };
+      case "status":
+        return { key: column.key, header: "Status", width: "120px", ...sortProps("status") };
+      case "updated":
+        return { key: column.key, header: "Updated", width: "150px", ...sortProps("updated") };
+      case "actions":
+        return { key: column.key, header: "Actions", align: "right" as const, width: "200px" };
+      default:
+        return { key: column.key, header: column.label };
+    }
+  });
+
   const tabCounts = counts.data;
 
   return (
@@ -241,6 +444,7 @@ export function ArticlesListPanel({
       />
 
       {error ? <CmsAlert>{error.message}</CmsAlert> : null}
+      {importMessage ? <CmsAlert>{importMessage}</CmsAlert> : null}
 
       {libraryMode ? (
         <div className="overflow-x-auto border border-border bg-card">
@@ -298,6 +502,74 @@ export function ArticlesListPanel({
           tags={(tags.data ?? []).map((tag) => ({ id: tag.id, name: tag.name }))}
           showStatus={showStatusFilter}
         />
+
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-background px-4 py-3">
+          <button type="button" className={cmsSecondaryButton} onClick={exportRows}>
+            <Download className="h-3.5 w-3.5" /> Export CSV
+          </button>
+          {canCreate ? (
+            <>
+              <button
+                type="button"
+                className={cmsSecondaryButton}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importer.isPending}
+              >
+                <Upload className="h-3.5 w-3.5" /> Import CSV
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) void onImportFile(file);
+                  event.target.value = "";
+                }}
+              />
+            </>
+          ) : null}
+          <div className="relative">
+            <button
+              type="button"
+              className={cmsSecondaryButton}
+              onClick={() => setColumnsOpen((open) => !open)}
+              aria-expanded={columnsOpen}
+            >
+              <Columns3 className="h-3.5 w-3.5" /> Columns
+            </button>
+            {columnsOpen ? (
+              <div className="absolute left-0 z-20 mt-1 w-56 border border-border bg-card p-3 shadow-[var(--cms-shadow-hover)]">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                  Column visibility
+                </div>
+                <div className="space-y-2">
+                  {ARTICLES_TABLE_COLUMNS.filter((column) => column.hideable).map((column) => (
+                    <label key={column.key} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={visibility[column.key]}
+                        onChange={(event) => setColumnVisible(column.key, event.target.checked)}
+                      />
+                      {column.label}
+                    </label>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  className={`${cmsGhostButton} mt-3 w-full justify-center`}
+                  onClick={() => setColumnsOpen(false)}
+                >
+                  Done
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <span className="ml-auto cms-metric text-[11px] text-muted-foreground">
+            {sorted.length.toLocaleString()} rows
+          </span>
+        </div>
 
         {selected.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-4 py-3">
@@ -358,23 +630,24 @@ export function ArticlesListPanel({
         ) : null}
 
         {articles.isLoading ? (
-          <CmsTableSkeleton rows={8} cols={6} />
+          <CmsTableSkeleton rows={8} cols={8} />
         ) : (
           <DataTable
-            columns={ARTICLE_COLUMNS}
-            minWidth="1080px"
+            columns={tableColumns}
+            minWidth="1280px"
+            stickyHeader
             footer={
               <CmsPagination
                 page={page}
                 pageSize={PAGE_SIZE}
-                total={filtered.length}
+                total={sorted.length}
                 onPageChange={setPage}
               />
             }
           >
             {!pageRows.length ? (
               <DataTableEmpty
-                colSpan={ARTICLE_COLUMNS.length}
+                colSpan={tableColumns.length}
                 title="No matching articles"
                 description={
                   hasFilters
@@ -392,143 +665,52 @@ export function ArticlesListPanel({
             ) : (
               <>
                 <DataTableRow className="bg-muted/20 hover:bg-muted/20">
-                  <DataTableCell>
-                    <input
-                      type="checkbox"
-                      checked={allVisibleSelected}
-                      onChange={(event) =>
-                        setSelected(
-                          event.target.checked
-                            ? [...new Set([...selected, ...pageRows.map((article) => article.id)])]
-                            : selected.filter((id) => !pageRows.some((article) => article.id === id)),
-                        )
-                      }
-                      aria-label="Select all visible articles"
-                    />
-                  </DataTableCell>
-                  <DataTableCell colSpan={ARTICLE_COLUMNS.length - 1}>
+                  {visibility.select ? (
+                    <DataTableCell>
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={(event) =>
+                          setSelected(
+                            event.target.checked
+                              ? [...new Set([...selected, ...pageRows.map((article) => article.id)])]
+                              : selected.filter(
+                                  (id) => !pageRows.some((article) => article.id === id),
+                                ),
+                          )
+                        }
+                        aria-label="Select all visible articles"
+                      />
+                    </DataTableCell>
+                  ) : null}
+                  <DataTableCell colSpan={Math.max(tableColumns.length - (visibility.select ? 1 : 0), 1)}>
                     <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      {filtered.length} matching · page {page}
+                      {sorted.length} matching · page {page}
                       {bulk.isPending ? " · Applying bulk action…" : ""}
                     </span>
                   </DataTableCell>
                 </DataTableRow>
                 {pageRows.map((article) => (
-                  <DataTableRow key={article.id} selected={selected.includes(article.id)}>
-                    <DataTableCell>
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(article.id)}
-                        onChange={(event) =>
-                          setSelected((current) =>
-                            event.target.checked
-                              ? [...current, article.id]
-                              : current.filter((id) => id !== article.id),
-                          )
-                        }
-                        aria-label={`Select ${article.title}`}
-                      />
-                    </DataTableCell>
-                    <DataTableCell className="max-w-md">
-                      <Link
-                        to="/admin/articles/$id"
-                        params={{ id: article.id }}
-                        className="block truncate font-semibold text-foreground cms-transition hover:text-cat-blue"
-                      >
-                        {article.title}
-                      </Link>
-                      <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
-                        /article/{article.slug}
-                      </div>
-                    </DataTableCell>
-                    <DataTableCell className="text-xs text-muted-foreground">
-                      {authorName(article.author) || "Unknown"}
-                    </DataTableCell>
-                    <DataTableCell className="text-xs text-muted-foreground">
-                      {sectionName(article.sections)}
-                    </DataTableCell>
-                    <DataTableCell>
-                      <CmsStatus tone={statusTone(article.status)}>
-                        {statusLabel(article.status)}
-                      </CmsStatus>
-                      {article.status === "scheduled" && article.scheduled_at ? (
-                        <div className="mt-1 font-mono text-[10px] text-muted-foreground">
-                          {new Date(article.scheduled_at).toLocaleString()}
-                        </div>
-                      ) : null}
-                    </DataTableCell>
-                    <DataTableCell mono className="text-xs text-muted-foreground">
-                      {new Date(article.updated_at).toLocaleString()}
-                    </DataTableCell>
-                    <DataTableCell align="right">
-                      <div className="flex justify-end gap-0.5">
-                        <Link
-                          to="/admin/articles/$id"
-                          params={{ id: article.id }}
-                          className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
-                          title="Edit article"
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Link>
-                        <Link
-                          to="/admin/articles/revisions/$articleId"
-                          params={{ articleId: article.id }}
-                          className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
-                          title="Revision history"
-                        >
-                          <History className="h-4 w-4" />
-                        </Link>
-                        <Link
-                          to="/admin/articles/preview/$articleId"
-                          params={{ articleId: article.id }}
-                          className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
-                          title="Preview"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Link>
-                        {canCreate ? (
-                          <button
-                            type="button"
-                            className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
-                            onClick={() => duplicate.mutate(article.id)}
-                            title="Duplicate article"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                        {canPublish && article.status !== "published" ? (
-                          <button
-                            type="button"
-                            className="p-2 text-muted-foreground cms-transition hover:bg-cat-green/10 hover:text-cat-green"
-                            onClick={() => runBulk("publish", [article.id])}
-                            title="Publish article"
-                          >
-                            <Send className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                        {canPublish && article.status !== "archived" ? (
-                          <button
-                            type="button"
-                            className="p-2 text-muted-foreground cms-transition hover:bg-gold/10 hover:text-gold"
-                            onClick={() => runBulk("archive", [article.id])}
-                            title="Archive article"
-                          >
-                            <Archive className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                        {canDelete ? (
-                          <button
-                            type="button"
-                            className="p-2 text-muted-foreground cms-transition hover:bg-crimson/10 hover:text-crimson"
-                            onClick={() => runBulk("delete", [article.id])}
-                            title="Delete article"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                      </div>
-                    </DataTableCell>
-                  </DataTableRow>
+                  <ArticleTableRow
+                    key={article.id}
+                    article={article}
+                    visibility={visibility}
+                    selected={selected.includes(article.id)}
+                    onSelect={(checked) =>
+                      setSelected((current) =>
+                        checked
+                          ? [...current, article.id]
+                          : current.filter((id) => id !== article.id),
+                      )
+                    }
+                    canCreate={canCreate}
+                    canPublish={canPublish}
+                    canDelete={canDelete}
+                    onDuplicate={() => duplicate.mutate(article.id)}
+                    onPublish={() => runBulk("publish", [article.id])}
+                    onArchive={() => runBulk("archive", [article.id])}
+                    onDelete={() => runBulk("delete", [article.id])}
+                  />
                 ))}
               </>
             )}
@@ -536,6 +718,219 @@ export function ArticlesListPanel({
         )}
       </CmsPanel>
     </div>
+  );
+}
+
+function ArticleTableRow({
+  article,
+  visibility,
+  selected,
+  onSelect,
+  canCreate,
+  canPublish,
+  canDelete,
+  onDuplicate,
+  onPublish,
+  onArchive,
+  onDelete,
+}: {
+  article: AdminArticle & {
+    views: number;
+    comments: number;
+    seoScore: number;
+    contentScore: number;
+    tags?: Array<{ id: string; name: string; slug: string }>;
+    hero_image_url?: string | null;
+  };
+  visibility: Record<ArticlesTableColumnKey, boolean>;
+  selected: boolean;
+  onSelect: (checked: boolean) => void;
+  canCreate: boolean;
+  canPublish: boolean;
+  canDelete: boolean;
+  onDuplicate: () => void;
+  onPublish: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DataTableRow selected={selected}>
+      {visibility.select ? (
+        <DataTableCell>
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={(event) => onSelect(event.target.checked)}
+            aria-label={`Select ${article.title}`}
+          />
+        </DataTableCell>
+      ) : null}
+      {visibility.thumbnail ? (
+        <DataTableCell>
+          {article.hero_image_url ? (
+            <img
+              src={article.hero_image_url}
+              alt=""
+              className="h-12 w-16 object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="flex h-12 w-16 items-center justify-center bg-muted text-muted-foreground">
+              <ImageIcon className="h-4 w-4" />
+            </div>
+          )}
+        </DataTableCell>
+      ) : null}
+      {visibility.title ? (
+        <DataTableCell className="max-w-sm">
+          <Link
+            to="/admin/articles/$id"
+            params={{ id: article.id }}
+            className="block truncate font-semibold text-foreground cms-transition hover:text-cat-blue"
+          >
+            {article.title}
+          </Link>
+          <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+            /article/{article.slug}
+          </div>
+        </DataTableCell>
+      ) : null}
+      {visibility.author ? (
+        <DataTableCell className="text-xs text-muted-foreground">
+          {authorName(article.author) || "Unknown"}
+        </DataTableCell>
+      ) : null}
+      {visibility.category ? (
+        <DataTableCell className="text-xs text-muted-foreground">
+          {sectionName(article.sections)}
+        </DataTableCell>
+      ) : null}
+      {visibility.tags ? (
+        <DataTableCell>
+          <div className="flex max-w-[160px] flex-wrap gap-1">
+            {(article.tags ?? []).slice(0, 3).map((tag) => (
+              <span
+                key={tag.id}
+                className="bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+              >
+                {tag.name}
+              </span>
+            ))}
+            {(article.tags?.length ?? 0) > 3 ? (
+              <span className="text-[10px] text-muted-foreground">+{(article.tags?.length ?? 0) - 3}</span>
+            ) : null}
+            {!article.tags?.length ? (
+              <span className="text-[11px] text-muted-foreground">—</span>
+            ) : null}
+          </div>
+        </DataTableCell>
+      ) : null}
+      {visibility.seo ? (
+        <DataTableCell align="right">
+          <CmsStatus tone={scoreTone(article.seoScore)}>{article.seoScore}</CmsStatus>
+        </DataTableCell>
+      ) : null}
+      {visibility.content ? (
+        <DataTableCell align="right">
+          <CmsStatus tone={scoreTone(article.contentScore)}>{article.contentScore}</CmsStatus>
+        </DataTableCell>
+      ) : null}
+      {visibility.views ? (
+        <DataTableCell align="right" mono className="text-xs">
+          {article.views.toLocaleString()}
+        </DataTableCell>
+      ) : null}
+      {visibility.comments ? (
+        <DataTableCell align="right" mono className="text-xs">
+          {article.comments.toLocaleString()}
+        </DataTableCell>
+      ) : null}
+      {visibility.status ? (
+        <DataTableCell>
+          <CmsStatus tone={statusTone(article.status)}>{statusLabel(article.status)}</CmsStatus>
+          {article.status === "scheduled" && article.scheduled_at ? (
+            <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+              {new Date(article.scheduled_at).toLocaleString()}
+            </div>
+          ) : null}
+        </DataTableCell>
+      ) : null}
+      {visibility.updated ? (
+        <DataTableCell mono className="text-xs text-muted-foreground">
+          {new Date(article.updated_at).toLocaleString()}
+        </DataTableCell>
+      ) : null}
+      {visibility.actions ? (
+        <DataTableCell align="right">
+          <div className="flex justify-end gap-0.5">
+            <Link
+              to="/admin/articles/$id"
+              params={{ id: article.id }}
+              className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
+              title="Edit article"
+            >
+              <Pencil className="h-4 w-4" />
+            </Link>
+            <Link
+              to="/admin/articles/revisions/$articleId"
+              params={{ articleId: article.id }}
+              className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
+              title="Revision history"
+            >
+              <History className="h-4 w-4" />
+            </Link>
+            <Link
+              to="/admin/articles/preview/$articleId"
+              params={{ articleId: article.id }}
+              className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
+              title="Preview"
+            >
+              <Eye className="h-4 w-4" />
+            </Link>
+            {canCreate ? (
+              <button
+                type="button"
+                className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
+                onClick={onDuplicate}
+                title="Duplicate article"
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+            ) : null}
+            {canPublish && article.status !== "published" ? (
+              <button
+                type="button"
+                className="p-2 text-muted-foreground cms-transition hover:bg-cat-green/10 hover:text-cat-green"
+                onClick={onPublish}
+                title="Publish article"
+              >
+                <Send className="h-4 w-4" />
+              </button>
+            ) : null}
+            {canPublish && article.status !== "archived" ? (
+              <button
+                type="button"
+                className="p-2 text-muted-foreground cms-transition hover:bg-gold/10 hover:text-gold"
+                onClick={onArchive}
+                title="Archive article"
+              >
+                <Archive className="h-4 w-4" />
+              </button>
+            ) : null}
+            {canDelete ? (
+              <button
+                type="button"
+                className="p-2 text-muted-foreground cms-transition hover:bg-crimson/10 hover:text-crimson"
+                onClick={onDelete}
+                title="Delete article"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
+        </DataTableCell>
+      ) : null}
+    </DataTableRow>
   );
 }
 

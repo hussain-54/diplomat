@@ -108,13 +108,18 @@ export const listAdminArticles = async () => {
   await requirePermission("articles:view");
   const enrich = <T extends Record<string, unknown>>(rows: T[]) =>
     rows.map((row) => {
-      const tagRows = (row.article_tags as Array<{ tag_id?: string; tags?: { id: string } | { id: string }[] | null }> | null) ?? [];
-      const tag_ids = tagRows
+      const tagRows =
+        (row.article_tags as Array<{
+          tag_id?: string;
+          tags?: { id: string; name?: string; slug?: string } | { id: string; name?: string; slug?: string }[] | null;
+        }> | null) ?? [];
+      const tags = tagRows
         .map((entry) => {
           const tag = Array.isArray(entry.tags) ? entry.tags[0] : entry.tags;
-          return tag?.id ?? entry.tag_id;
+          if (!tag?.id) return null;
+          return { id: tag.id, name: tag.name ?? "Tag", slug: tag.slug ?? tag.id };
         })
-        .filter((id): id is string => Boolean(id));
+        .filter((tag): tag is { id: string; name: string; slug: string } => Boolean(tag));
       const { article_tags: _tags, ...rest } = row as T & { article_tags?: unknown };
       return {
         ...rest,
@@ -127,12 +132,15 @@ export const listAdminArticles = async () => {
         is_featured: Boolean(row.is_featured),
         google_news: Boolean(row.google_news),
         google_discover: Boolean(row.google_discover),
-        tag_ids,
+        hero_image_url: (row.hero_image_url as string | null | undefined) ?? null,
+        deck: (row.deck as string | null | undefined) ?? null,
+        tag_ids: tags.map((tag) => tag.id),
+        tags,
       };
     });
 
   const selectFull =
-    "id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,created_at,section_id,author_id,is_featured,google_news,google_discover,language,schema_type,seo_title,meta_description,focus_keyword,robots_index, article_tags(tag_id, tags(id,name,slug)), sections(name,slug), author:profiles!articles_author_id_fkey(id,name)";
+    "id,slug,title,deck,status,badge_type,hero_image_url,published_at,scheduled_at,updated_at,created_at,section_id,author_id,is_featured,google_news,google_discover,language,schema_type,seo_title,meta_description,focus_keyword,robots_index, article_tags(tag_id, tags(id,name,slug)), sections(name,slug), author:profiles!articles_author_id_fkey(id,name)";
   const { data, error } = await supabase
     .from("articles")
     .select(selectFull)
@@ -141,7 +149,11 @@ export const listAdminArticles = async () => {
 
   if (!error) return enrich(data ?? []);
 
-  if (!/language|schema_type|seo_title|article_tags|is_featured|google_news|google_discover|schema cache|PGRST/i.test(error.message)) {
+  if (
+    !/language|schema_type|seo_title|article_tags|is_featured|google_news|google_discover|hero_image_url|deck|schema cache|PGRST/i.test(
+      error.message,
+    )
+  ) {
     throw toAppError(error);
   }
 
@@ -165,6 +177,8 @@ export const listAdminArticles = async () => {
       meta_description: null,
       focus_keyword: null,
       robots_index: true,
+      hero_image_url: null,
+      deck: null,
       article_tags: [],
     })),
   );
@@ -183,6 +197,83 @@ export const getArticleViewTotals = async () => {
     totals[row.article_id] = (totals[row.article_id] ?? 0) + (row.views ?? 0);
   }
   return totals;
+};
+
+/** Comment counts keyed by article id (Phase 6 table) */
+export const getArticleCommentCounts = async () => {
+  await requirePermission("articles:view");
+  const { data, error } = await supabase.from("comments").select("article_id");
+  if (error) {
+    if (/comments|schema cache|PGRST/i.test(error.message)) return {} as Record<string, number>;
+    throw toAppError(error);
+  }
+  const totals: Record<string, number> = {};
+  for (const row of data ?? []) {
+    totals[row.article_id] = (totals[row.article_id] ?? 0) + 1;
+  }
+  return totals;
+};
+
+/** CSV import → draft articles (Phase 6). Columns: title, slug, deck, section */
+export const importArticlesCsv = async ({
+  data,
+}: {
+  data: {
+    rows: Array<{
+      title: string;
+      slug?: string;
+      deck?: string;
+      section?: string;
+    }>;
+  };
+}) => {
+  await requirePermission("articles:create");
+  const rows = data.rows.filter((row) => row.title?.trim()).slice(0, 50);
+  if (!rows.length) throw new Error("No importable rows found. Include a title column.");
+
+  const { data: sections, error: sectionsError } = await supabase
+    .from("sections")
+    .select("id,name,slug");
+  if (sectionsError) throw toAppError(sectionsError);
+
+  const findSection = (value?: string) => {
+    if (!value?.trim()) return sections?.[0]?.id ?? null;
+    const needle = value.trim().toLowerCase();
+    return (
+      sections?.find(
+        (section) =>
+          section.slug.toLowerCase() === needle || section.name.toLowerCase() === needle,
+      )?.id ?? null
+    );
+  };
+
+  let created = 0;
+  const errors: string[] = [];
+  for (const row of rows) {
+    const section_id = findSection(row.section);
+    if (!section_id) {
+      errors.push(`Skipped “${row.title}”: no matching category.`);
+      continue;
+    }
+    try {
+      await upsertArticle({
+        data: {
+          title: row.title.trim(),
+          slug: row.slug?.trim() || undefined,
+          deck: row.deck?.trim() || undefined,
+          section_id,
+          status: "draft",
+        },
+      });
+      created += 1;
+    } catch (error) {
+      errors.push(
+        `“${row.title}”: ${error instanceof Error ? error.message : "failed to import"}`,
+      );
+    }
+  }
+
+  return { created, errors };
 };
 
 export type ArticlesLibraryTab =
