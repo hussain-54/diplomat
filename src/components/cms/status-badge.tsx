@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { CmsStatus } from "@/components/cms-ui";
+import { CmsStatus, type CmsStatusTone } from "@/components/cms-ui";
 
-export type StatusTone = "neutral" | "success" | "warning" | "danger" | "info";
+export type StatusTone = CmsStatusTone;
 
 const WORKFLOW_TONES: Record<string, StatusTone> = {
   published: "success",
@@ -15,10 +15,11 @@ const WORKFLOW_TONES: Record<string, StatusTone> = {
   invited: "info",
   draft: "neutral",
   rejected: "neutral",
-  archived: "danger",
+  archived: "accent",
   spam: "danger",
   suspended: "danger",
   failed: "danger",
+  breaking: "danger",
 };
 
 export function statusToneFor(status: string): StatusTone {
@@ -34,6 +35,11 @@ export function StatusBadge({
   tone?: StatusTone;
   status?: string;
 }) {
-  const resolved = tone ?? (status ? statusToneFor(status) : "neutral");
-  return <CmsStatus tone={resolved}>{children ?? status}</CmsStatus>;
+  const key = status?.toLowerCase();
+  const resolved = tone ?? (key ? statusToneFor(key) : "neutral");
+  return (
+    <CmsStatus tone={resolved} status={key}>
+      {children ?? status}
+    </CmsStatus>
+  );
 }

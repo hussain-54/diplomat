@@ -182,7 +182,7 @@ export function FloatingQuickActions({
   return (
     <div className="fixed bottom-5 right-5 z-40 flex flex-col items-end gap-3">
       {open ? (
-        <div className="w-[min(100vw-2rem,20rem)] border border-border bg-card p-3 shadow-[var(--cms-shadow-hover)]">
+        <div className="w-[min(100vw-2rem,20rem)] rounded-2xl border border-border/80 bg-card/95 p-3 shadow-[var(--cms-shadow-hover)] backdrop-blur-xl">
           <div className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Quick actions
           </div>
@@ -192,7 +192,7 @@ export function FloatingQuickActions({
       <button
         type="button"
         onClick={onToggle}
-        className={cn(cmsButton, "h-11 w-11 rounded-none p-0 shadow-[var(--cms-shadow-hover)]")}
+        className={cn(cmsButton, "h-12 w-12 rounded-2xl p-0 text-lg shadow-[var(--cms-shadow-hover)]")}
         aria-expanded={open}
         aria-label={open ? "Close quick actions" : "Open quick actions"}
       >

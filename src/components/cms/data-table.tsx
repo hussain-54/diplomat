@@ -48,7 +48,7 @@ export function DataTable({
         <table className="w-full text-left text-sm" style={{ minWidth }}>
           <thead
             className={cn(
-              "z-10 border-b border-border bg-muted/80 text-[10px] uppercase tracking-[0.1em] text-muted-foreground backdrop-blur",
+              "z-10 border-b border-border/80 bg-muted/90 text-[10px] uppercase tracking-[0.1em] text-muted-foreground backdrop-blur-md",
               stickyHeader && "sticky top-0",
             )}
           >
@@ -123,8 +123,8 @@ export function DataTableRow({
   return (
     <tr
       className={cn(
-        "cms-transition hover:bg-accent/60",
-        selected && "bg-accent/80",
+        "cms-transition hover:bg-primary/[0.04]",
+        selected && "bg-primary/[0.07]",
         onClick && "cursor-pointer",
         className,
       )}

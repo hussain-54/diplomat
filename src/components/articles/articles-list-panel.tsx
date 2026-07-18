@@ -807,7 +807,9 @@ function ArticleTableRow({
       ) : null}
       {visibility.status ? (
         <DataTableCell>
-          <CmsStatus tone={statusTone(article.status)}>{statusLabel(article.status)}</CmsStatus>
+          <CmsStatus tone={statusTone(article.status)} status={article.status}>
+            {statusLabel(article.status)}
+          </CmsStatus>
           {article.status === "scheduled" && article.scheduled_at ? (
             <div className="mt-1 font-mono text-[10px] text-muted-foreground">
               {new Date(article.scheduled_at).toLocaleString()}
@@ -859,10 +861,12 @@ function statusLabel(status: ArticleStatus) {
   return status[0].toUpperCase() + status.slice(1);
 }
 
-function statusTone(status: ArticleStatus): "neutral" | "warning" | "info" | "success" | "danger" {
+function statusTone(
+  status: ArticleStatus,
+): "neutral" | "warning" | "info" | "success" | "danger" | "accent" {
   if (status === "published") return "success";
   if (status === "review") return "warning";
   if (status === "scheduled") return "info";
-  if (status === "archived") return "danger";
+  if (status === "archived") return "accent";
   return "neutral";
 }

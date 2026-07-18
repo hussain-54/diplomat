@@ -24,19 +24,25 @@ export function CmsPageSkeleton({
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: metrics }).map((_, index) => (
-          <div key={index} className="space-y-3 border border-border bg-card p-4">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="h-8 w-16" />
-            <Skeleton className="h-3 w-32" />
+          <div
+            key={index}
+            className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--cms-shadow)]"
+          >
+            <Skeleton className="h-3 w-24 rounded-md" />
+            <Skeleton className="h-8 w-16 rounded-md" />
+            <Skeleton className="h-3 w-32 rounded-md" />
           </div>
         ))}
       </div>
       <div className={cn("grid gap-6", panels > 1 && "xl:grid-cols-2")}>
         {Array.from({ length: panels }).map((_, index) => (
-          <div key={index} className="space-y-3 border border-border bg-card p-5">
-            <Skeleton className="h-4 w-36" />
+          <div
+            key={index}
+            className="space-y-3 rounded-xl border border-border/80 bg-card p-5 shadow-[var(--cms-shadow)]"
+          >
+            <Skeleton className="h-4 w-36 rounded-md" />
             {Array.from({ length: 5 }).map((__, row) => (
-              <Skeleton key={row} className="h-11 w-full" />
+              <Skeleton key={row} className="h-11 w-full rounded-lg" />
             ))}
           </div>
         ))}
@@ -55,16 +61,22 @@ export function CmsTableSkeleton({
   className?: string;
 }) {
   return (
-    <div className={cn("space-y-0 border border-border bg-card", className)} aria-busy="true">
-      <div className="flex gap-3 border-b border-border bg-muted/40 px-4 py-3">
+    <div
+      className={cn(
+        "space-y-0 overflow-hidden rounded-xl border border-border/80 bg-card shadow-[var(--cms-shadow)]",
+        className,
+      )}
+      aria-busy="true"
+    >
+      <div className="flex gap-3 border-b border-border/70 bg-muted/40 px-4 py-3">
         {Array.from({ length: cols }).map((_, index) => (
-          <Skeleton key={index} className="h-3 flex-1" />
+          <Skeleton key={index} className="h-3 flex-1 rounded-md" />
         ))}
       </div>
       {Array.from({ length: rows }).map((_, row) => (
-        <div key={row} className="flex gap-3 border-b border-border px-4 py-4 last:border-0">
+        <div key={row} className="flex gap-3 border-b border-border/60 px-4 py-4 last:border-0">
           {Array.from({ length: cols }).map((__, col) => (
-            <Skeleton key={col} className="h-4 flex-1" />
+            <Skeleton key={col} className="h-4 flex-1 rounded-md" />
           ))}
         </div>
       ))}

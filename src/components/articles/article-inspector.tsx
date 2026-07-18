@@ -318,7 +318,7 @@ export function ArticleInspector({
                             <MetaRow
                               label="Status"
                               value={
-                                <CmsStatus tone={statusTone(article.status)}>
+                                <CmsStatus tone={statusTone(article.status)} status={article.status}>
                                   {statusLabel(article.status)}
                                 </CmsStatus>
                               }
@@ -586,10 +586,10 @@ function statusLabel(status: ArticleStatus) {
   return status[0].toUpperCase() + status.slice(1);
 }
 
-function statusTone(status: ArticleStatus): "neutral" | "warning" | "info" | "success" | "danger" {
+function statusTone(status: ArticleStatus): "neutral" | "warning" | "info" | "success" | "danger" | "accent" {
   if (status === "published") return "success";
   if (status === "review") return "warning";
   if (status === "scheduled") return "info";
-  if (status === "archived") return "danger";
+  if (status === "archived") return "accent";
   return "neutral";
 }

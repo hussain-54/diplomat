@@ -965,7 +965,9 @@ function EditArticle() {
                     </Field>
                     <div className="flex items-center justify-between border-t border-border pt-4">
                       <span className="text-xs font-semibold text-foreground">Current state</span>
-                      <CmsStatus tone={statusTone(form.status)}>{form.status}</CmsStatus>
+                      <CmsStatus tone={statusTone(form.status)} status={form.status}>
+                        {form.status}
+                      </CmsStatus>
                     </div>
                     {!isNew && !readOnly ? (
                       <WorkflowActions
@@ -1227,7 +1229,9 @@ function EditArticle() {
                   <div className="space-y-3 p-4 text-sm">
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-muted-foreground">Status</span>
-                      <CmsStatus tone={statusTone(form.status)}>{form.status}</CmsStatus>
+                      <CmsStatus tone={statusTone(form.status)} status={form.status}>
+                        {form.status}
+                      </CmsStatus>
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-muted-foreground">Slug</span>
@@ -1619,7 +1623,7 @@ function statusTone(status: ArticleStatus) {
       : status === "scheduled"
         ? ("info" as const)
         : status === "archived"
-          ? ("danger" as const)
+          ? ("accent" as const)
           : ("neutral" as const);
 }
 
