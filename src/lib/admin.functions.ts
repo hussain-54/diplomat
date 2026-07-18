@@ -108,11 +108,119 @@ export const listAdminArticles = async () => {
   await requirePermission("articles:view");
   const { data, error } = await supabase
     .from("articles")
-    .select("id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,created_at,section_id,author_id, sections(name,slug), author:profiles!articles_author_id_fkey(id,name)")
+    .select(
+      "id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,created_at,section_id,author_id,is_featured,google_news,google_discover, sections(name,slug), author:profiles!articles_author_id_fkey(id,name)",
+    )
     .order("updated_at", { ascending: false })
     .limit(200);
-  if (error) throw toAppError(error);
+  if (error) {
+    if (/is_featured|google_news|google_discover|schema cache|PGRST/i.test(error.message)) {
+      const legacy = await supabase
+        .from("articles")
+        .select(
+          "id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,created_at,section_id,author_id, sections(name,slug), author:profiles!articles_author_id_fkey(id,name)",
+        )
+        .order("updated_at", { ascending: false })
+        .limit(200);
+      if (legacy.error) throw toAppError(legacy.error);
+      return (legacy.data ?? []).map((row) => ({
+        ...row,
+        is_featured: false,
+        google_news: false,
+        google_discover: false,
+      }));
+    }
+    throw toAppError(error);
+  }
   return data ?? [];
+};
+
+export type ArticlesLibraryTab =
+  | "all"
+  | "published"
+  | "draft"
+  | "review"
+  | "scheduled"
+  | "archived"
+  | "breaking"
+  | "featured"
+  | "google_news"
+  | "discover";
+
+/** Exact tab counts for All Articles library (Phase 4) */
+export const getArticlesLibraryCounts = async () => {
+  await requirePermission("articles:view");
+
+  const countEq = async (column: string, value: string | boolean) => {
+    let query = supabase.from("articles").select("id", { count: "exact", head: true });
+    query = query.eq(column, value);
+    const { count, error } = await query;
+    if (error) throw error;
+    return count ?? 0;
+  };
+
+  try {
+    const [all, published, draft, review, scheduled, archived, breaking, featured, googleNews, discover] =
+      await Promise.all([
+        supabase.from("articles").select("id", { count: "exact", head: true }).then((r) => {
+          if (r.error) throw r.error;
+          return r.count ?? 0;
+        }),
+        countEq("status", "published"),
+        countEq("status", "draft"),
+        countEq("status", "review"),
+        countEq("status", "scheduled"),
+        countEq("status", "archived"),
+        countEq("badge_type", "breaking"),
+        countEq("is_featured", true),
+        countEq("google_news", true),
+        countEq("google_discover", true),
+      ]);
+
+    return {
+      all,
+      published,
+      draft,
+      review,
+      scheduled,
+      archived,
+      breaking,
+      featured,
+      google_news: googleNews,
+      discover,
+    } satisfies Record<ArticlesLibraryTab, number>;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/is_featured|google_news|google_discover|schema cache|PGRST/i.test(message)) {
+      throw toAppError(error);
+    }
+
+    const [all, published, draft, review, scheduled, archived, breaking] = await Promise.all([
+      supabase.from("articles").select("id", { count: "exact", head: true }).then((r) => {
+        if (r.error) throw toAppError(r.error);
+        return r.count ?? 0;
+      }),
+      countEq("status", "published"),
+      countEq("status", "draft"),
+      countEq("status", "review"),
+      countEq("status", "scheduled"),
+      countEq("status", "archived"),
+      countEq("badge_type", "breaking"),
+    ]);
+
+    return {
+      all,
+      published,
+      draft,
+      review,
+      scheduled,
+      archived,
+      breaking,
+      featured: 0,
+      google_news: 0,
+      discover: 0,
+    } satisfies Record<ArticlesLibraryTab, number>;
+  }
 };
 
 export const listDashboardArticles = async () => {

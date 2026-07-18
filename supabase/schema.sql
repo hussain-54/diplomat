@@ -149,6 +149,9 @@ CREATE TABLE IF NOT EXISTS public.articles (
   rss_inclusion BOOLEAN NOT NULL DEFAULT true,
   hreflang JSONB NOT NULL DEFAULT '{}'::jsonb
     CHECK (jsonb_typeof(hreflang) = 'object'),
+  is_featured BOOLEAN NOT NULL DEFAULT false,
+  google_news BOOLEAN NOT NULL DEFAULT false,
+  google_discover BOOLEAN NOT NULL DEFAULT false,
   published_at TIMESTAMPTZ,
   scheduled_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -156,6 +159,10 @@ CREATE TABLE IF NOT EXISTS public.articles (
 );
 CREATE INDEX IF NOT EXISTS articles_section_idx ON public.articles(section_id);
 CREATE INDEX IF NOT EXISTS articles_status_pub_idx ON public.articles(status, published_at DESC);
+CREATE INDEX IF NOT EXISTS articles_is_featured_idx ON public.articles (is_featured) WHERE is_featured = true;
+CREATE INDEX IF NOT EXISTS articles_google_news_idx ON public.articles (google_news) WHERE google_news = true;
+CREATE INDEX IF NOT EXISTS articles_google_discover_idx ON public.articles (google_discover) WHERE google_discover = true;
+CREATE INDEX IF NOT EXISTS articles_badge_type_idx ON public.articles (badge_type) WHERE badge_type <> 'none';
 
 -- Article Tags
 CREATE TABLE IF NOT EXISTS public.article_tags (

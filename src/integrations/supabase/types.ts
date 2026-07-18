@@ -169,9 +169,12 @@ export type Database = {
           created_at: string
           deck: string | null
           focus_keyword: string | null
+          google_discover: boolean
+          google_news: boolean
           hero_image_url: string | null
           hreflang: Json
           id: string
+          is_featured: boolean
           meta_description: string | null
           og_description: string | null
           og_image_url: string | null
@@ -202,9 +205,12 @@ export type Database = {
           created_at?: string
           deck?: string | null
           focus_keyword?: string | null
+          google_discover?: boolean
+          google_news?: boolean
           hero_image_url?: string | null
           hreflang?: Json
           id?: string
+          is_featured?: boolean
           meta_description?: string | null
           og_description?: string | null
           og_image_url?: string | null
@@ -235,9 +241,12 @@ export type Database = {
           created_at?: string
           deck?: string | null
           focus_keyword?: string | null
+          google_discover?: boolean
+          google_news?: boolean
           hero_image_url?: string | null
           hreflang?: Json
           id?: string
+          is_featured?: boolean
           meta_description?: string | null
           og_description?: string | null
           og_image_url?: string | null

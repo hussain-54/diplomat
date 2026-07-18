@@ -15,10 +15,16 @@ import { useEffect, useMemo, useState } from "react";
 import {
   bulkManageArticles,
   duplicateArticle,
+  getArticlesLibraryCounts,
   getMe,
   listAdminArticles,
+  type ArticlesLibraryTab,
 } from "@/lib/admin.functions";
 import { getSections } from "@/lib/content.functions";
+import {
+  ARTICLES_LIBRARY_TABS,
+  matchesLibraryTab,
+} from "@/components/articles/library-tabs";
 import {
   CmsAlert,
   CmsPageHeader,
@@ -37,6 +43,7 @@ import {
   cmsSecondaryButton,
 } from "@/components/cms";
 import { hasPermission } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
@@ -69,6 +76,9 @@ export function ArticlesListPanel({
   eyebrow = "Articles",
   lockedStatus,
   badgeFilter,
+  libraryMode = false,
+  libraryTab = "all",
+  onLibraryTabChange,
 }: {
   title: string;
   description: string;
@@ -77,16 +87,26 @@ export function ArticlesListPanel({
   lockedStatus?: ArticleStatus;
   /** Filter by badge_type when provided */
   badgeFilter?: Database["public"]["Enums"]["badge_type"];
+  /** Phase 4 — tabbed All Articles library with live counts */
+  libraryMode?: boolean;
+  libraryTab?: ArticlesLibraryTab;
+  onLibraryTabChange?: (tab: ArticlesLibraryTab) => void;
 }) {
   const queryClient = useQueryClient();
   const articles = useQuery({ queryKey: ["admin-articles"], queryFn: listAdminArticles });
+  const counts = useQuery({
+    queryKey: ["articles-library-counts"],
+    queryFn: getArticlesLibraryCounts,
+    enabled: libraryMode,
+    staleTime: 20_000,
+  });
   const me = useQuery({ queryKey: ["me"], queryFn: getMe });
   const sections = useQuery({
     queryKey: ["sections", "editorial"],
     queryFn: () => getSections({ includeHidden: true }),
   });
   const [selected, setSelected] = useState<string[]>([]);
-  const [search, setSearch] = useState("");
+  const [searchText, setSearchText] = useState("");
   const [author, setAuthor] = useState("all");
   const [category, setCategory] = useState("all");
   const [status, setStatus] = useState<"all" | ArticleStatus>(lockedStatus ?? "all");
@@ -101,8 +121,10 @@ export function ArticlesListPanel({
   const refresh = () => {
     setSelected([]);
     void queryClient.invalidateQueries({ queryKey: ["admin-articles"] });
+    void queryClient.invalidateQueries({ queryKey: ["articles-library-counts"] });
     void queryClient.invalidateQueries({ queryKey: ["dashboard-articles"] });
     void queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+    void queryClient.invalidateQueries({ queryKey: ["articles-dashboard"] });
   };
 
   const duplicate = useMutation({
@@ -135,13 +157,14 @@ export function ArticlesListPanel({
   }, [articles.data]);
 
   const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = searchText.trim().toLowerCase();
     const from = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
     const to = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
-    const effectiveStatus = lockedStatus ?? status;
+    const effectiveStatus = lockedStatus ?? (libraryMode ? "all" : status);
     return (articles.data ?? []).filter((article) => {
       const updated = new Date(article.updated_at).getTime();
       return (
+        (!libraryMode || matchesLibraryTab(article, libraryTab)) &&
         (!query ||
           article.title.toLowerCase().includes(query) ||
           article.slug.toLowerCase().includes(query)) &&
@@ -160,14 +183,16 @@ export function ArticlesListPanel({
     category,
     dateFrom,
     dateTo,
+    libraryMode,
+    libraryTab,
     lockedStatus,
-    search,
+    searchText,
     status,
   ]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, author, category, status, dateFrom, dateTo, lockedStatus, badgeFilter]);
+  }, [searchText, author, category, status, dateFrom, dateTo, lockedStatus, badgeFilter, libraryTab]);
 
   const pageRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -176,12 +201,12 @@ export function ArticlesListPanel({
 
   const allVisibleSelected =
     pageRows.length > 0 && pageRows.every((article) => selected.includes(article.id));
-  const error = articles.error ?? me.error ?? sections.error ?? duplicate.error ?? bulk.error;
+  const error = articles.error ?? me.error ?? sections.error ?? duplicate.error ?? bulk.error ?? counts.error;
   const hasFilters =
-    Boolean(search || dateFrom || dateTo) ||
+    Boolean(searchText || dateFrom || dateTo) ||
     author !== "all" ||
     category !== "all" ||
-    (!lockedStatus && status !== "all");
+    (!lockedStatus && !libraryMode && status !== "all");
 
   const runBulk = (
     action: Exclude<BulkAction, "reassign_category">,
@@ -195,13 +220,15 @@ export function ArticlesListPanel({
   };
 
   const resetFilters = () => {
-    setSearch("");
+    setSearchText("");
     setAuthor("all");
     setCategory("all");
-    if (!lockedStatus) setStatus("all");
+    if (!lockedStatus && !libraryMode) setStatus("all");
     setDateFrom("");
     setDateTo("");
   };
+
+  const tabCounts = counts.data;
 
   return (
     <div className="space-y-6">
@@ -220,6 +247,49 @@ export function ArticlesListPanel({
 
       {error ? <CmsAlert>{error.message}</CmsAlert> : null}
 
+      {libraryMode ? (
+        <div className="overflow-x-auto border border-border bg-card">
+          <div
+            className="flex min-w-max gap-0 border-b border-border"
+            role="tablist"
+            aria-label="Article library tabs"
+          >
+            {ARTICLES_LIBRARY_TABS.map((tab) => {
+              const active = libraryTab === tab.id;
+              const count = tabCounts?.[tab.id];
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => onLibraryTabChange?.(tab.id)}
+                  className={cn(
+                    "relative flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-semibold cms-transition",
+                    active
+                      ? "bg-background text-foreground"
+                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                  )}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={cn(
+                      "cms-metric rounded-sm px-1.5 py-0.5 text-[11px] font-semibold",
+                      active ? "bg-foreground text-background" : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {count == null ? "—" : count.toLocaleString()}
+                  </span>
+                  {active ? (
+                    <span className="absolute inset-x-0 bottom-0 h-0.5 bg-gold" aria-hidden />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
       <CmsPanel>
         <FilterBar onClear={hasFilters ? resetFilters : undefined}>
           <FilterField label="Search">
@@ -227,8 +297,8 @@ export function ArticlesListPanel({
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <input
                 className={`${cmsInput} pl-9`}
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
                 placeholder="Title or slug"
               />
             </div>
@@ -257,7 +327,7 @@ export function ArticlesListPanel({
               ))}
             </select>
           </FilterField>
-          {!lockedStatus ? (
+          {!lockedStatus && !libraryMode ? (
             <FilterField label="Status">
               <select
                 className={cmsInput}
