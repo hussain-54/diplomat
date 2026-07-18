@@ -11,7 +11,7 @@ export type RichEditorProps = {
   emptyHint?: ReactNode;
 };
 
-/** Newsroom block editor: Medium-like canvas with slash commands, formatting toolbar, lists, pullquotes, HTML. */
+/** Newsroom block editor: Medium-like canvas with slash commands, formatting toolbar, media library, lists, pullquotes, HTML, newsletter CTA, and ads. */
 export function RichEditor({
   value,
   onChange,

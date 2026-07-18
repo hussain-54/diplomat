@@ -6,6 +6,8 @@ export type BlockType =
   | "heading"
   | "image"
   | "video"
+  | "audio"
+  | "file"
   | "quote"
   | "pullquote"
   | "list"
@@ -15,12 +17,15 @@ export type BlockType =
   | "table"
   | "code"
   | "live"
-  | "html";
+  | "html"
+  | "newsletter"
+  | "ad";
 
 export type GalleryImage = { url: string; alt: string };
 export type ListStyle = "bullet" | "numbered" | "check";
 export type ListItem = { text: string; checked?: boolean };
 export type ImageAlign = "left" | "center" | "right" | "full";
+export type ImageSize = "small" | "medium" | "large" | "full";
 export type HeadingLevel = 1 | 2 | 3 | 4;
 
 export type BlockData = {
@@ -32,8 +37,11 @@ export type BlockData = {
     caption: string;
     credit: string;
     align: ImageAlign;
+    size: ImageSize;
   };
   video: { url: string; caption: string };
+  audio: { url: string; title: string; caption: string };
+  file: { url: string; title: string; fileName: string; fileType: string };
   quote: { text: string; attribution: string };
   pullquote: { text: string; attribution: string };
   list: { style: ListStyle; items: ListItem[] };
@@ -44,6 +52,18 @@ export type BlockData = {
   code: { language: string; code: string };
   live: { time: string; title: string; text: string };
   html: { code: string };
+  newsletter: {
+    heading: string;
+    body: string;
+    buttonLabel: string;
+    buttonUrl: string;
+  };
+  ad: {
+    label: string;
+    imageUrl: string;
+    linkUrl: string;
+    html: string;
+  };
 };
 
 export type Block = {
@@ -57,6 +77,8 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   heading: "Heading",
   image: "Image",
   video: "Video",
+  audio: "Audio",
+  file: "File",
   quote: "Quote",
   pullquote: "Pull Quote",
   list: "List",
@@ -67,6 +89,8 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   code: "Code Block",
   live: "Live Blog Entry",
   html: "Custom HTML",
+  newsletter: "Newsletter CTA",
+  ad: "Advertisement",
 };
 
 /** Types that can be converted between while preserving text where possible. */
@@ -94,9 +118,17 @@ export function createBlock(type: BlockType): Block {
     case "heading":
       return { id, type, data: { text: "", level: 2 } };
     case "image":
-      return { id, type, data: { url: "", alt: "", caption: "", credit: "", align: "full" } };
+      return {
+        id,
+        type,
+        data: { url: "", alt: "", caption: "", credit: "", align: "full", size: "large" },
+      };
     case "video":
       return { id, type, data: { url: "", caption: "" } };
+    case "audio":
+      return { id, type, data: { url: "", title: "", caption: "" } };
+    case "file":
+      return { id, type, data: { url: "", title: "", fileName: "", fileType: "" } };
     case "quote":
       return { id, type, data: { text: "", attribution: "" } };
     case "pullquote":
@@ -138,6 +170,23 @@ export function createBlock(type: BlockType): Block {
       };
     case "html":
       return { id, type, data: { code: "" } };
+    case "newsletter":
+      return {
+        id,
+        type,
+        data: {
+          heading: "Stay informed",
+          body: "Get diplomacy briefings in your inbox.",
+          buttonLabel: "Subscribe",
+          buttonUrl: "/newsletter",
+        },
+      };
+    case "ad":
+      return {
+        id,
+        type,
+        data: { label: "Advertisement", imageUrl: "", linkUrl: "", html: "" },
+      };
   }
 }
 
@@ -238,6 +287,7 @@ function normalizeBlock(raw: unknown): Block | null {
     const img = data as BlockData["image"];
     img.credit = typeof img.credit === "string" ? img.credit : "";
     img.align = (["left", "center", "right", "full"].includes(img.align) ? img.align : "full") as ImageAlign;
+    img.size = (["small", "medium", "large", "full"].includes(img.size) ? img.size : "large") as ImageSize;
   }
   if (type === "list") {
     const list = data as BlockData["list"];

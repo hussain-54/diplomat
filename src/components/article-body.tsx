@@ -1,5 +1,12 @@
 import { InlineRichText } from "@/components/inline-rich-text";
-import { parseBody, embedSrc, isDirectVideoFile, type Block, type HeadingLevel } from "@/lib/blocks";
+import {
+  parseBody,
+  embedSrc,
+  isDirectVideoFile,
+  type Block,
+  type HeadingLevel,
+  type ImageSize,
+} from "@/lib/blocks";
 
 export function ArticleBody({ body }: { body: string | null | undefined }) {
   const blocks = parseBody(body);
@@ -27,6 +34,13 @@ const HEADING_CLASS: Record<HeadingLevel, string> = {
   4: "mb-2 mt-5 font-serif text-lg font-medium text-ink",
 };
 
+const IMAGE_SIZE_CLASS: Record<ImageSize, string> = {
+  small: "max-w-sm",
+  medium: "max-w-xl",
+  large: "max-w-3xl",
+  full: "w-full",
+};
+
 function BlockView({ block }: { block: Block }) {
   switch (block.type) {
     case "paragraph":
@@ -49,16 +63,18 @@ function BlockView({ block }: { block: Block }) {
     case "image": {
       if (!block.data.url) return null;
       const align = block.data.align ?? "full";
-      const figureClass =
+      const size = block.data.size ?? "large";
+      const sizeClass = IMAGE_SIZE_CLASS[size];
+      const alignClass =
         align === "left"
-          ? "my-8 mr-auto max-w-md"
+          ? "mr-auto"
           : align === "right"
-            ? "my-8 ml-auto max-w-md"
+            ? "ml-auto"
             : align === "center"
-              ? "mx-auto my-8 max-w-2xl"
-              : "my-8";
+              ? "mx-auto"
+              : "";
       return (
-        <figure className={figureClass}>
+        <figure className={`my-8 ${sizeClass} ${alignClass}`.trim()}>
           <img
             src={block.data.url}
             alt={block.data.alt}
@@ -105,6 +121,44 @@ function BlockView({ block }: { block: Block }) {
             <figcaption className="mt-2 text-xs text-muted-foreground">{block.data.caption}</figcaption>
           )}
         </figure>
+      );
+    }
+    case "audio": {
+      if (!block.data.url) return null;
+      return (
+        <figure className="my-8">
+          {block.data.title ? (
+            <p className="mb-2 font-serif text-lg font-medium text-ink">{block.data.title}</p>
+          ) : null}
+          <audio controls src={block.data.url} className="w-full" preload="metadata">
+            <a href={block.data.url}>Download audio</a>
+          </audio>
+          {block.data.caption ? (
+            <figcaption className="mt-2 text-xs text-muted-foreground">{block.data.caption}</figcaption>
+          ) : null}
+        </figure>
+      );
+    }
+    case "file": {
+      if (!block.data.url) return null;
+      const label = block.data.title || block.data.fileName || "Download file";
+      return (
+        <div className="my-8">
+          <a
+            href={block.data.url}
+            download={block.data.fileName || undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 border border-border bg-secondary px-4 py-2 text-sm font-medium text-ink hover:border-foreground/30"
+          >
+            {label}
+            {block.data.fileName && block.data.title ? (
+              <span className="text-xs font-normal text-muted-foreground">
+                ({block.data.fileName})
+              </span>
+            ) : null}
+          </a>
+        </div>
       );
     }
     case "quote":
@@ -301,6 +355,63 @@ function BlockView({ block }: { block: Block }) {
             </p>
           )}
         </div>
+      );
+    }
+    case "newsletter": {
+      if (!block.data.heading.trim() && !block.data.body.trim()) return null;
+      return (
+        <aside className="my-10 border border-border bg-secondary p-6 text-center">
+          {block.data.heading ? (
+            <h3 className="font-serif text-xl font-semibold text-ink">{block.data.heading}</h3>
+          ) : null}
+          {block.data.body ? (
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{block.data.body}</p>
+          ) : null}
+          {block.data.buttonLabel && block.data.buttonUrl ? (
+            <a
+              href={block.data.buttonUrl}
+              className="mt-4 inline-flex items-center bg-crimson px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            >
+              {block.data.buttonLabel}
+            </a>
+          ) : null}
+        </aside>
+      );
+    }
+    case "ad": {
+      if (block.data.html.trim()) {
+        const safe = sanitizeHtml(block.data.html);
+        return (
+          <aside className="my-8" aria-label={block.data.label || "Advertisement"}>
+            <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+              {block.data.label || "Advertisement"}
+            </p>
+            <div dangerouslySetInnerHTML={{ __html: safe }} />
+          </aside>
+        );
+      }
+      if (!block.data.imageUrl) return null;
+      const img = (
+        <img
+          src={block.data.imageUrl}
+          alt={block.data.label || "Advertisement"}
+          className="mx-auto max-h-48 object-contain"
+          loading="lazy"
+        />
+      );
+      return (
+        <aside className="my-8 text-center" aria-label={block.data.label || "Advertisement"}>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            {block.data.label || "Advertisement"}
+          </p>
+          {block.data.linkUrl ? (
+            <a href={block.data.linkUrl} target="_blank" rel="noopener noreferrer sponsored">
+              {img}
+            </a>
+          ) : (
+            img
+          )}
+        </aside>
       );
     }
   }

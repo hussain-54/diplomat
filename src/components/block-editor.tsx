@@ -9,7 +9,11 @@ import {
   ChevronDown,
   Code2,
   Copy,
+  File,
+  FileCode2,
+  FolderOpen,
   GripVertical,
+  Headphones,
   Heading2,
   Image as ImageIcon,
   Images,
@@ -17,7 +21,9 @@ import {
   Link2,
   List,
   ListOrdered,
+  Mail,
   Maximize2,
+  Megaphone,
   Minus,
   Plus,
   Quote,
@@ -31,7 +37,6 @@ import {
   Video,
   ArrowUp,
   ArrowDown,
-  FileCode2,
 } from "lucide-react";
 import {
   BLOCK_LABELS,
@@ -44,6 +49,7 @@ import {
   type BlockType,
   type HeadingLevel,
   type ImageAlign,
+  type ImageSize,
   type ListStyle,
 } from "@/lib/blocks";
 import {
@@ -51,6 +57,7 @@ import {
   selectionBubblePos,
   type BubblePos,
 } from "@/components/editor-bubble-toolbar";
+import { DamAssetPicker } from "@/components/articles/dam-asset-picker";
 import {
   clipboardToEditorText,
   looksLikeRichHtml,
@@ -76,6 +83,8 @@ const BLOCK_ICONS: Record<BlockType, typeof AlignLeft> = {
   heading: Heading2,
   image: ImageIcon,
   video: Video,
+  audio: Headphones,
+  file: File,
   quote: Quote,
   pullquote: Quote,
   list: List,
@@ -86,6 +95,8 @@ const BLOCK_ICONS: Record<BlockType, typeof AlignLeft> = {
   code: Braces,
   live: Radio,
   html: FileCode2,
+  newsletter: Mail,
+  ad: Megaphone,
 };
 
 const BLOCK_MENU: BlockType[] = [
@@ -93,17 +104,28 @@ const BLOCK_MENU: BlockType[] = [
   "heading",
   "image",
   "video",
+  "audio",
+  "file",
+  "gallery",
   "quote",
   "pullquote",
   "list",
   "divider",
   "embed",
-  "gallery",
   "table",
   "code",
   "live",
   "html",
+  "newsletter",
+  "ad",
 ];
+
+const IMAGE_SIZE_PREVIEW: Record<ImageSize, string> = {
+  small: "max-w-xs",
+  medium: "max-w-sm",
+  large: "max-w-md",
+  full: "w-full max-w-full",
+};
 
 type Props = {
   value: Block[];
@@ -307,6 +329,11 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
     updateBlock(focusedBlock.id, { ...focusedBlock.data, align });
   };
 
+  const setImageSize = (size: ImageSize) => {
+    if (!focusedBlock || focusedBlock.type !== "image") return;
+    updateBlock(focusedBlock.id, { ...focusedBlock.data, size });
+  };
+
   const filteredSlash = (() => {
     if (!slashAt) return [];
     const q = slashAt.query.toLowerCase();
@@ -446,6 +473,25 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
                 onClick={() => setImageAlign(align)}
               >
                 <Icon className="h-3.5 w-3.5" />
+              </ToolButton>
+            ))}
+            <ToolbarSep />
+            {(
+              [
+                ["small", "S"],
+                ["medium", "M"],
+                ["large", "L"],
+                ["full", "Full"],
+              ] as const
+            ).map(([size, label]) => (
+              <ToolButton
+                key={size}
+                title={`Size ${size}`}
+                active={focusedBlock.data.size === size}
+                disabled={readOnly}
+                onClick={() => setImageSize(size)}
+              >
+                <span className="text-[11px] font-bold">{label}</span>
               </ToolButton>
             ))}
           </>
@@ -827,6 +873,8 @@ function BlockFields({
   onSelectField?: () => void;
   onSlashQuery: (query: string | null) => void;
 }) {
+  const [damOpen, setDamOpen] = useState(false);
+
   const common = {
     disabled: readOnly,
     onKeyDown,
@@ -857,7 +905,7 @@ function BlockFields({
         onReplaceBlock({
           id: block.id,
           type: "image",
-          data: { url, alt: "", caption: "", credit: "", align: "full" },
+          data: { url, alt: "", caption: "", credit: "", align: "full", size: "large" },
         });
       }
     } catch {
@@ -984,22 +1032,53 @@ function BlockFields({
               src={block.data.url}
               alt={block.data.alt}
               className={`max-h-72 border border-border/50 object-contain ${
+                IMAGE_SIZE_PREVIEW[block.data.size ?? "large"]
+              } ${
                 block.data.align === "left"
                   ? "mr-auto"
                   : block.data.align === "right"
                     ? "ml-auto"
                     : block.data.align === "center"
                       ? "mx-auto"
-                      : "w-full"
+                      : ""
               }`}
             />
           )}
-          <MediaUrlInput
-            readOnly={readOnly}
-            url={block.data.url}
-            onUrl={(url) => onChange({ ...block.data, url })}
-            onUploadImage={onUploadImage}
-            placeholder="Image URL or paste image"
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <MediaUrlInput
+                readOnly={readOnly}
+                url={block.data.url}
+                onUrl={(url) => onChange({ ...block.data, url })}
+                onUploadImage={onUploadImage}
+                placeholder="Image URL or paste image"
+              />
+            </div>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setDamOpen(true)}
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <FolderOpen className="h-3.5 w-3.5" /> Library
+              </button>
+            )}
+          </div>
+          <DamAssetPicker
+            open={damOpen}
+            onClose={() => setDamOpen(false)}
+            assetType="image"
+            title="Pick image"
+            onPick={(asset) => {
+              onChange({
+                ...block.data,
+                url: asset.url,
+                alt: asset.alt || block.data.alt,
+                caption: asset.caption || block.data.caption,
+                credit: asset.credit || block.data.credit,
+              });
+              setDamOpen(false);
+            }}
           />
           <div className="grid gap-2 sm:grid-cols-2">
             <input
@@ -1036,18 +1115,52 @@ function BlockFields({
               <option value="left">Left</option>
               <option value="right">Right</option>
             </select>
+            <select
+              disabled={readOnly}
+              value={block.data.size ?? "large"}
+              onChange={(e) =>
+                onChange({ ...block.data, size: e.target.value as ImageSize })
+              }
+              className="h-8 rounded-sm border-0 bg-transparent px-1 text-xs text-muted-foreground hover:bg-accent"
+            >
+              <option value="small">Size S</option>
+              <option value="medium">Size M</option>
+              <option value="large">Size L</option>
+              <option value="full">Size Full</option>
+            </select>
           </div>
         </div>
       );
     case "video":
       return (
         <div className="space-y-2">
-          <input
-            {...common}
-            value={block.data.url}
-            placeholder="Video URL (YouTube, Vimeo, or direct .mp4)"
-            onChange={(e) => onChange({ ...block.data, url: e.target.value })}
-            className={`${canvasField} text-xs`}
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              {...common}
+              value={block.data.url}
+              placeholder="Video URL (YouTube, Vimeo, or direct .mp4)"
+              onChange={(e) => onChange({ ...block.data, url: e.target.value })}
+              className={`${canvasField} min-w-0 flex-1 text-xs`}
+            />
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setDamOpen(true)}
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <FolderOpen className="h-3.5 w-3.5" /> Library
+              </button>
+            )}
+          </div>
+          <DamAssetPicker
+            open={damOpen}
+            onClose={() => setDamOpen(false)}
+            assetType="video"
+            title="Pick video"
+            onPick={(asset) => {
+              onChange({ ...block.data, url: asset.url });
+              setDamOpen(false);
+            }}
           />
           <VideoPreview url={block.data.url} />
           <input
@@ -1057,6 +1170,134 @@ function BlockFields({
             onChange={(e) => onChange({ ...block.data, caption: e.target.value })}
             className={`${canvasField} text-xs`}
           />
+        </div>
+      );
+    case "audio":
+      return (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              {...common}
+              value={block.data.url}
+              placeholder="Audio URL"
+              onChange={(e) => onChange({ ...block.data, url: e.target.value })}
+              className={`${canvasField} min-w-0 flex-1 text-xs`}
+            />
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setDamOpen(true)}
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <FolderOpen className="h-3.5 w-3.5" /> Library
+              </button>
+            )}
+          </div>
+          <DamAssetPicker
+            open={damOpen}
+            onClose={() => setDamOpen(false)}
+            assetType="audio"
+            title="Pick audio"
+            onPick={(asset) => {
+              onChange({
+                ...block.data,
+                url: asset.url,
+                title: block.data.title || asset.fileName,
+                caption: asset.caption || block.data.caption,
+              });
+              setDamOpen(false);
+            }}
+          />
+          {block.data.url ? (
+            <audio controls src={block.data.url} className="w-full" preload="metadata" />
+          ) : null}
+          <input
+            {...common}
+            value={block.data.title}
+            placeholder="Title"
+            onChange={(e) => onChange({ ...block.data, title: e.target.value })}
+            className={`${canvasField} text-xs`}
+          />
+          <input
+            {...common}
+            value={block.data.caption}
+            placeholder="Caption (optional)"
+            onChange={(e) => onChange({ ...block.data, caption: e.target.value })}
+            className={`${canvasField} text-xs`}
+          />
+        </div>
+      );
+    case "file":
+      return (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              {...common}
+              value={block.data.url}
+              placeholder="File URL"
+              onChange={(e) => onChange({ ...block.data, url: e.target.value })}
+              className={`${canvasField} min-w-0 flex-1 text-xs`}
+            />
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setDamOpen(true)}
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <FolderOpen className="h-3.5 w-3.5" /> Library
+              </button>
+            )}
+          </div>
+          <DamAssetPicker
+            open={damOpen}
+            onClose={() => setDamOpen(false)}
+            assetType="document"
+            title="Pick file"
+            onPick={(asset) => {
+              onChange({
+                ...block.data,
+                url: asset.url,
+                title: block.data.title || asset.fileName,
+                fileName: asset.fileName,
+                fileType: asset.mimeType || block.data.fileType,
+              });
+              setDamOpen(false);
+            }}
+          />
+          <input
+            {...common}
+            value={block.data.title}
+            placeholder="Title"
+            onChange={(e) => onChange({ ...block.data, title: e.target.value })}
+            className={`${canvasField} text-xs`}
+          />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input
+              {...common}
+              value={block.data.fileName}
+              placeholder="File name"
+              onChange={(e) => onChange({ ...block.data, fileName: e.target.value })}
+              className={`${canvasField} text-xs`}
+            />
+            <input
+              {...common}
+              value={block.data.fileType}
+              placeholder="File type (e.g. application/pdf)"
+              onChange={(e) => onChange({ ...block.data, fileType: e.target.value })}
+              className={`${canvasField} text-xs`}
+            />
+          </div>
+          {block.data.url ? (
+            <a
+              href={block.data.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-crimson hover:underline"
+            >
+              <File className="h-3.5 w-3.5" />
+              {block.data.title || block.data.fileName || "Download file"}
+            </a>
+          ) : null}
         </div>
       );
     case "quote":
@@ -1307,17 +1548,43 @@ function BlockFields({
             </div>
           )}
           {!readOnly && (
-            <MediaUrlInput
-              readOnly={readOnly}
-              url=""
-              clearAfterAdd
-              onUrl={(url) => {
-                if (url) onChange({ images: [...block.data.images, { url, alt: "" }] });
-              }}
-              onUploadImage={onUploadImage}
-              placeholder="Add image URL and press Enter"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <MediaUrlInput
+                  readOnly={readOnly}
+                  url=""
+                  clearAfterAdd
+                  onUrl={(url) => {
+                    if (url) onChange({ images: [...block.data.images, { url, alt: "" }] });
+                  }}
+                  onUploadImage={onUploadImage}
+                  placeholder="Add image URL and press Enter"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setDamOpen(true)}
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <FolderOpen className="h-3.5 w-3.5" /> Library
+              </button>
+            </div>
           )}
+          <DamAssetPicker
+            open={damOpen}
+            onClose={() => setDamOpen(false)}
+            assetType="image"
+            title="Add gallery image"
+            onPick={(asset) => {
+              onChange({
+                images: [
+                  ...block.data.images,
+                  { url: asset.url, alt: asset.alt || "" },
+                ],
+              });
+              setDamOpen(false);
+            }}
+          />
         </div>
       );
     case "table": {
@@ -1563,6 +1830,108 @@ function BlockFields({
             placeholder="What just happened…"
             onChange={(text) => onChange({ ...block.data, text })}
             className={`${canvasField} text-sm leading-6`}
+          />
+        </div>
+      );
+    case "newsletter":
+      return (
+        <div className="space-y-2 rounded-sm border border-border bg-muted/20 p-4">
+          <input
+            {...common}
+            value={block.data.heading}
+            placeholder="Heading"
+            onChange={(e) => onChange({ ...block.data, heading: e.target.value })}
+            className={`${canvasField} font-serif text-lg font-semibold`}
+          />
+          <AutoTextarea
+            {...common}
+            value={block.data.body}
+            placeholder="Supporting text"
+            onChange={(text) => onChange({ ...block.data, body: text })}
+            className={`${canvasField} text-sm leading-6`}
+          />
+          <div className="grid gap-2 sm:grid-cols-2">
+            <input
+              {...common}
+              value={block.data.buttonLabel}
+              placeholder="Button label"
+              onChange={(e) => onChange({ ...block.data, buttonLabel: e.target.value })}
+              className={`${canvasField} text-xs`}
+            />
+            <input
+              {...common}
+              value={block.data.buttonUrl}
+              placeholder="Button URL"
+              onChange={(e) => onChange({ ...block.data, buttonUrl: e.target.value })}
+              className={`${canvasField} text-xs`}
+            />
+          </div>
+          {block.data.buttonLabel ? (
+            <span className="inline-flex items-center rounded-sm bg-crimson px-3 py-1.5 text-xs font-semibold text-white">
+              {block.data.buttonLabel}
+            </span>
+          ) : null}
+        </div>
+      );
+    case "ad":
+      return (
+        <div className="space-y-2">
+          <input
+            {...common}
+            value={block.data.label}
+            placeholder="Label (e.g. Advertisement)"
+            onChange={(e) => onChange({ ...block.data, label: e.target.value })}
+            className={`${canvasField} text-xs`}
+          />
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              {...common}
+              value={block.data.imageUrl}
+              placeholder="Image URL"
+              onChange={(e) => onChange({ ...block.data, imageUrl: e.target.value })}
+              className={`${canvasField} min-w-0 flex-1 text-xs`}
+            />
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={() => setDamOpen(true)}
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <FolderOpen className="h-3.5 w-3.5" /> Library
+              </button>
+            )}
+          </div>
+          <DamAssetPicker
+            open={damOpen}
+            onClose={() => setDamOpen(false)}
+            assetType="image"
+            title="Pick ad image"
+            onPick={(asset) => {
+              onChange({ ...block.data, imageUrl: asset.url });
+              setDamOpen(false);
+            }}
+          />
+          {block.data.imageUrl ? (
+            <img
+              src={block.data.imageUrl}
+              alt={block.data.label || "Advertisement"}
+              className="max-h-40 border border-border/50 object-contain"
+            />
+          ) : null}
+          <input
+            {...common}
+            value={block.data.linkUrl}
+            placeholder="Link URL"
+            onChange={(e) => onChange({ ...block.data, linkUrl: e.target.value })}
+            className={`${canvasField} text-xs`}
+          />
+          <textarea
+            {...common}
+            value={block.data.html}
+            placeholder="Custom ad HTML (optional — overrides image)"
+            rows={4}
+            onChange={(e) => onChange({ ...block.data, html: e.target.value })}
+            className={`${canvasField} font-mono text-xs leading-5 text-muted-foreground`}
           />
         </div>
       );
