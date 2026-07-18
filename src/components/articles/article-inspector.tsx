@@ -1,8 +1,10 @@
 import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   Archive,
+  ChevronDown,
   Copy,
   ExternalLink,
   Eye,
@@ -42,6 +44,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { cn } from "@/lib/utils";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
+type InspectorSection = "overview" | "seo" | "analytics" | "social" | "workflow";
 
 type ListArticle = {
   id: string;
@@ -78,6 +81,14 @@ const WORKFLOW_STAGE: Record<ArticleStatus, string> = {
   archived: "Archived",
 };
 
+const SECTIONS: Array<{ id: InspectorSection; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "seo", label: "SEO" },
+  { id: "analytics", label: "Analytics" },
+  { id: "social", label: "Social" },
+  { id: "workflow", label: "Workflow" },
+];
+
 export function ArticleInspector({
   articleId,
   seed,
@@ -97,6 +108,12 @@ export function ArticleInspector({
   onDuplicate?: () => void;
   onArchive?: () => void;
 }) {
+  const [section, setSection] = useState<InspectorSection>("overview");
+
+  useEffect(() => {
+    if (open) setSection("overview");
+  }, [open, articleId]);
+
   const detail = useQuery({
     queryKey: ["admin-article", articleId],
     queryFn: () => getAdminArticle({ data: { id: articleId! } }),
@@ -210,6 +227,10 @@ export function ArticleInspector({
     ? (comments.data?.[articleId] ?? article?.comments ?? 0)
     : 0;
 
+  const toggleSection = (id: InspectorSection) => {
+    setSection((current) => (current === id ? current : id));
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -250,104 +271,218 @@ export function ArticleInspector({
               )}
             </div>
 
-            <div className="space-y-5 px-5 py-5">
-              <div>
-                <h3 className="text-lg font-semibold leading-snug tracking-tight">
-                  {article.title}
-                </h3>
-                <a
-                  href={publicUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-flex max-w-full items-center gap-1 truncate font-mono text-[11px] text-cat-blue hover:underline"
-                >
-                  {publicUrl}
-                  <ExternalLink className="h-3 w-3 shrink-0" />
-                </a>
-              </div>
+            <div className="space-y-1 px-5 py-4">
+              <h3 className="text-lg font-semibold leading-snug tracking-tight">
+                {article.title}
+              </h3>
+              <a
+                href={publicUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex max-w-full items-center gap-1 truncate font-mono text-[11px] text-cat-blue hover:underline"
+              >
+                {publicUrl}
+                <ExternalLink className="h-3 w-3 shrink-0" />
+              </a>
+            </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <ScoreTile label="SEO score" value={seoScore} />
-                <ScoreTile label="Content score" value={contentScore} />
-              </div>
+            <div className="border-t border-border px-2 py-2">
+              {SECTIONS.map((item) => {
+                const openSection = section === item.id;
+                return (
+                  <div key={item.id} className="border-b border-border/60 last:border-b-0">
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm font-semibold cms-transition",
+                        openSection ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                      )}
+                      aria-expanded={openSection}
+                      onClick={() => toggleSection(item.id)}
+                    >
+                      {item.label}
+                      <ChevronDown
+                        className={cn(
+                          "h-4 w-4 shrink-0 opacity-60 transition-transform",
+                          openSection && "rotate-180",
+                        )}
+                      />
+                    </button>
+                    {openSection ? (
+                      <div className="space-y-3 px-3 pb-4">
+                        {item.id === "overview" ? (
+                          <dl className="space-y-3 text-sm">
+                            <MetaRow label="Title" value={article.title} />
+                            <MetaRow label="Author" value={author} />
+                            <MetaRow label="Category" value={category} />
+                            <MetaRow
+                              label="Status"
+                              value={
+                                <CmsStatus tone={statusTone(article.status)}>
+                                  {statusLabel(article.status)}
+                                </CmsStatus>
+                              }
+                            />
+                            <MetaRow label="Language" value={languageLabel} />
+                            <MetaRow
+                              label="Tags"
+                              value={
+                                tagList.length ? (
+                                  <div className="flex flex-wrap justify-end gap-1">
+                                    {tagList.map((tag: { id: string; name: string }) => (
+                                      <span
+                                        key={tag.id}
+                                        className="bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                                      >
+                                        {tag.name}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  "—"
+                                )
+                              }
+                            />
+                            <MetaRow
+                              label="Published"
+                              value={
+                                article.published_at
+                                  ? new Date(article.published_at).toLocaleString()
+                                  : "—"
+                              }
+                            />
+                            <MetaRow
+                              label="Updated"
+                              value={new Date(article.updated_at).toLocaleString()}
+                            />
+                            <MetaRow
+                              label="Hero"
+                              value={article.hero_image_url ? "Set" : "Missing"}
+                            />
+                          </dl>
+                        ) : null}
 
-              <dl className="space-y-3 text-sm">
-                <MetaRow label="Author" value={author} />
-                <MetaRow label="Category" value={category} />
-                <MetaRow
-                  label="Status"
-                  value={
-                    <CmsStatus tone={statusTone(article.status)}>
-                      {statusLabel(article.status)}
-                    </CmsStatus>
-                  }
-                />
-                <MetaRow label="Language" value={languageLabel} />
-                <MetaRow
-                  label="Tags"
-                  value={
-                    tagList.length ? (
-                      <div className="flex flex-wrap justify-end gap-1">
-                        {tagList.map((tag: { id: string; name: string }) => (
-                          <span
-                            key={tag.id}
-                            className="bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-                          >
-                            {tag.name}
-                          </span>
-                        ))}
+                        {item.id === "seo" ? (
+                          <dl className="space-y-3 text-sm">
+                            <div className="grid grid-cols-2 gap-3">
+                              <ScoreTile label="SEO score" value={seoScore} />
+                              <ScoreTile label="Content score" value={contentScore} />
+                            </div>
+                            <MetaRow
+                              label="Focus keyword"
+                              value={article.focus_keyword?.trim() || "—"}
+                            />
+                            <MetaRow
+                              label="SEO title"
+                              value={article.seo_title?.trim() || "—"}
+                            />
+                            <MetaRow
+                              label="Meta description"
+                              value={article.meta_description?.trim() || "—"}
+                            />
+                            <MetaRow
+                              label="Robots index"
+                              value={
+                                <CmsStatus
+                                  tone={article.robots_index === false ? "warning" : "success"}
+                                >
+                                  {article.robots_index === false ? "Noindex" : "Index"}
+                                </CmsStatus>
+                              }
+                            />
+                          </dl>
+                        ) : null}
+
+                        {item.id === "analytics" ? (
+                          <dl className="space-y-3 text-sm">
+                            <MetaRow label="Views" value={viewCount.toLocaleString()} mono />
+                            <MetaRow label="Comments" value={commentCount.toLocaleString()} mono />
+                            <MetaRow label="Shares" value="—" hint="Not instrumented yet" />
+                            <MetaRow
+                              label="Reading time"
+                              value={readingTime != null ? `${readingTime} min` : "—"}
+                              mono
+                            />
+                            <MetaRow
+                              label="Word count"
+                              value={wordCount != null ? wordCount.toLocaleString() : "—"}
+                              mono
+                            />
+                          </dl>
+                        ) : null}
+
+                        {item.id === "social" ? (
+                          <dl className="space-y-3 text-sm">
+                            <MetaRow
+                              label="Google News"
+                              value={
+                                <CmsStatus tone={article.google_news ? "success" : "neutral"}>
+                                  {article.google_news ? "Eligible" : "Off"}
+                                </CmsStatus>
+                              }
+                            />
+                            <MetaRow
+                              label="Google Discover"
+                              value={
+                                <CmsStatus tone={article.google_discover ? "success" : "neutral"}>
+                                  {article.google_discover ? "Enabled" : "Off"}
+                                </CmsStatus>
+                              }
+                            />
+                          </dl>
+                        ) : null}
+
+                        {item.id === "workflow" ? (
+                          <div className="space-y-4">
+                            <dl className="space-y-3 text-sm">
+                              <MetaRow
+                                label="Workflow stage"
+                                value={WORKFLOW_STAGE[article.status] ?? article.status}
+                              />
+                            </dl>
+                            <div className="grid grid-cols-2 gap-2">
+                              <Link
+                                to="/admin/articles/$id"
+                                params={{ id: article.id }}
+                                className={cn(cmsButton, "justify-center")}
+                              >
+                                <Pencil className="h-3.5 w-3.5" /> Edit
+                              </Link>
+                              <Link
+                                to="/admin/articles/preview/$articleId"
+                                params={{ articleId: article.id }}
+                                className={cn(cmsSecondaryButton, "justify-center")}
+                              >
+                                <Eye className="h-3.5 w-3.5" /> Preview
+                              </Link>
+                              {canCreate ? (
+                                <button
+                                  type="button"
+                                  className={cn(cmsSecondaryButton, "justify-center")}
+                                  onClick={onDuplicate}
+                                >
+                                  <Copy className="h-3.5 w-3.5" /> Duplicate
+                                </button>
+                              ) : (
+                                <span />
+                              )}
+                              {canPublish && article.status !== "archived" ? (
+                                <button
+                                  type="button"
+                                  className={cn(cmsSecondaryButton, "justify-center")}
+                                  onClick={onArchive}
+                                >
+                                  <Archive className="h-3.5 w-3.5" /> Archive
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
-                    ) : (
-                      "—"
-                    )
-                  }
-                />
-                <MetaRow
-                  label="Published"
-                  value={
-                    article.published_at
-                      ? new Date(article.published_at).toLocaleString()
-                      : "—"
-                  }
-                />
-                <MetaRow
-                  label="Updated"
-                  value={new Date(article.updated_at).toLocaleString()}
-                />
-                <MetaRow label="Views" value={viewCount.toLocaleString()} mono />
-                <MetaRow label="Comments" value={commentCount.toLocaleString()} mono />
-                <MetaRow label="Shares" value="—" hint="Not instrumented yet" />
-                <MetaRow
-                  label="Reading time"
-                  value={readingTime != null ? `${readingTime} min` : "—"}
-                  mono
-                />
-                <MetaRow
-                  label="Word count"
-                  value={wordCount != null ? wordCount.toLocaleString() : "—"}
-                  mono
-                />
-                <MetaRow
-                  label="Google News"
-                  value={
-                    <CmsStatus tone={article.google_news ? "success" : "neutral"}>
-                      {article.google_news ? "Eligible" : "Off"}
-                    </CmsStatus>
-                  }
-                />
-                <MetaRow
-                  label="Google Discover"
-                  value={
-                    <CmsStatus tone={article.google_discover ? "success" : "neutral"}>
-                      {article.google_discover ? "Enabled" : "Off"}
-                    </CmsStatus>
-                  }
-                />
-                <MetaRow
-                  label="Workflow stage"
-                  value={WORKFLOW_STAGE[article.status] ?? article.status}
-                />
-              </dl>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="sticky bottom-0 mt-auto space-y-2 border-t border-border bg-card/95 px-5 py-4 backdrop-blur">
@@ -399,7 +534,7 @@ export function ArticleInspector({
 
 function ScoreTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="border border-border bg-background px-3 py-3">
+    <div className="border border-border/70 bg-background px-3 py-3">
       <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </div>
@@ -425,7 +560,7 @@ function MetaRow({
   hint?: string;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-border/70 pb-2.5">
+    <div className="flex items-start justify-between gap-4 border-b border-border/50 pb-2.5 last:border-b-0">
       <dt className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
         {hint ? (

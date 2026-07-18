@@ -6,9 +6,8 @@ export const Route = createFileRoute("/_authenticated/admin/articles/archived")(
   beforeLoad: ({ context }) => requirePermissionRoute(context.roles, "articles:view"),
   component: () => (
     <ArticlesListPanel
-      eyebrow="Articles · Queue"
       title="Archived"
-      description="Retired stories. Restore flows deepen in Phase 16."
+      description="Retired stories."
       lockedStatus="archived"
     />
   ),

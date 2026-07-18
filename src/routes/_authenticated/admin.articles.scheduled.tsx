@@ -6,9 +6,8 @@ export const Route = createFileRoute("/_authenticated/admin/articles/scheduled")
   beforeLoad: ({ context }) => requirePermissionRoute(context.roles, "articles:view"),
   component: () => (
     <ArticlesListPanel
-      eyebrow="Articles · Queue"
       title="Scheduled"
-      description="Timed publications. Calendar month/week/day views deepen in Phase 14."
+      description="Timed publications."
       lockedStatus="scheduled"
     />
   ),

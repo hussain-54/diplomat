@@ -6,9 +6,8 @@ export const Route = createFileRoute("/_authenticated/admin/articles/review")({
   beforeLoad: ({ context }) => requirePermissionRoute(context.roles, "articles:view"),
   component: () => (
     <ArticlesListPanel
-      eyebrow="Articles · Queue"
       title="Pending Review"
-      description="Editorial review queue. Approve / reject / request-changes actions deepen in Phase 12."
+      description="Stories awaiting editorial review."
       lockedStatus="review"
     />
   ),

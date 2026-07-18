@@ -2,13 +2,11 @@ import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
+  ChevronDown,
   Columns3,
-  Copy,
   Download,
   Eye,
-  History,
   ImageIcon,
-  PanelRight,
   Pencil,
   Plus,
   Send,
@@ -19,16 +17,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArticlesAdvancedFilters } from "@/components/articles/articles-advanced-filters";
 import { ArticleInspector } from "@/components/articles/article-inspector";
 import {
+  CategoryPill,
+  TagOverflow,
+} from "@/components/articles/articles-ui-bits";
+import {
   DEFAULT_ARTICLES_FILTERS,
   computeArticleSeoScore,
   isArticlesFilterActive,
   matchesArticlesFilters,
   type ArticlesFilterState,
 } from "@/components/articles/articles-filters";
-import {
-  ARTICLES_LIBRARY_TABS,
-  matchesLibraryTab,
-} from "@/components/articles/library-tabs";
+import { matchesLibraryTab } from "@/components/articles/library-tabs";
 import {
   ARTICLES_TABLE_COLUMNS,
   computeArticleContentScore,
@@ -42,8 +41,6 @@ import {
 } from "@/components/articles/articles-table";
 import {
   CmsAlert,
-  CmsPageHeader,
-  CmsPanel,
   CmsPagination,
   CmsStatus,
   CmsTableSkeleton,
@@ -57,11 +54,16 @@ import {
   cmsSecondaryButton,
 } from "@/components/cms";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   bulkManageArticles,
   duplicateArticle,
   getArticleCommentCounts,
   getArticleViewTotals,
-  getArticlesLibraryCounts,
   getMe,
   importArticlesCsv,
   listAdminArticles,
@@ -81,16 +83,14 @@ const PAGE_SIZE = 25;
 
 export function ArticlesListPanel({
   title,
-  description,
-  eyebrow = "Articles",
+  description = "",
   lockedStatus,
   badgeFilter,
   libraryMode = false,
   libraryTab = "all",
-  onLibraryTabChange,
 }: {
   title: string;
-  description: string;
+  description?: string;
   eyebrow?: string;
   lockedStatus?: ArticleStatus;
   badgeFilter?: Database["public"]["Enums"]["badge_type"];
@@ -112,12 +112,6 @@ export function ArticlesListPanel({
     staleTime: 60_000,
   });
   const tags = useQuery({ queryKey: ["tags"], queryFn: listTags, staleTime: 60_000 });
-  const counts = useQuery({
-    queryKey: ["articles-library-counts"],
-    queryFn: getArticlesLibraryCounts,
-    enabled: libraryMode,
-    staleTime: 20_000,
-  });
   const me = useQuery({ queryKey: ["me"], queryFn: getMe });
   const sections = useQuery({
     queryKey: ["sections", "editorial"],
@@ -284,7 +278,6 @@ export function ArticlesListPanel({
     comments.error ??
     duplicate.error ??
     bulk.error ??
-    counts.error ??
     importer.error;
   const hasFilters = isArticlesFilterActive(filters, { ignoreStatus: ignoreStatusInFilters });
 
@@ -423,7 +416,7 @@ export function ArticlesListPanel({
       case "updated":
         return { key: column.key, header: "Updated", width: "150px", ...sortProps("updated") };
       case "actions":
-        return { key: column.key, header: "Actions", align: "right" as const, width: "200px" };
+        return { key: column.key, header: "", align: "right" as const, width: "88px" };
       default:
         return { key: column.key, header: column.label };
     }
@@ -434,121 +427,64 @@ export function ArticlesListPanel({
     [inspectId, sorted],
   );
 
-  const tabCounts = counts.data;
-
   return (
-    <div className="space-y-6">
-      <CmsPageHeader
-        eyebrow={eyebrow}
-        title={title}
-        description={description}
-        actions={
-          canCreate ? (
-            <Link to="/admin/articles/$id" params={{ id: "new" }} className={cmsButton}>
-              <Plus className="h-4 w-4" /> Create article
-            </Link>
-          ) : null
-        }
-      />
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <h1 className="text-lg font-semibold tracking-tight text-foreground">
+          {title}
+        </h1>
+        {description ? (
+          <p className="text-sm text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
 
       {error ? <CmsAlert>{error.message}</CmsAlert> : null}
       {importMessage ? <CmsAlert>{importMessage}</CmsAlert> : null}
 
-      {libraryMode ? (
-        <div className="overflow-x-auto border border-border bg-card">
-          <div
-            className="flex min-w-max gap-0 border-b border-border"
-            role="tablist"
-            aria-label="Article library tabs"
-          >
-            {ARTICLES_LIBRARY_TABS.map((tab) => {
-              const active = libraryTab === tab.id;
-              const count = tabCounts?.[tab.id];
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => onLibraryTabChange?.(tab.id)}
-                  className={cn(
-                    "relative flex items-center gap-2 whitespace-nowrap px-4 py-3 text-sm font-semibold cms-transition",
-                    active
-                      ? "bg-background text-foreground"
-                      : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
-                  )}
-                >
-                  <span>{tab.label}</span>
-                  <span
-                    className={cn(
-                      "cms-metric rounded-sm px-1.5 py-0.5 text-[11px] font-semibold",
-                      active ? "bg-foreground text-background" : "bg-muted text-muted-foreground",
-                    )}
-                  >
-                    {count == null ? "—" : count.toLocaleString()}
-                  </span>
-                  {active ? (
-                    <span className="absolute inset-x-0 bottom-0 h-0.5 bg-gold" aria-hidden />
-                  ) : null}
-                </button>
-              );
-            })}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2 gap-y-3">
+          <div className="min-w-0 flex-1">
+            <ArticlesAdvancedFilters
+              filters={filters}
+              onChange={setFilters}
+              onClear={resetFilters}
+              authors={authorOptions}
+              categories={(sections.data ?? []).map((section) => ({
+                id: section.id,
+                name: section.name,
+              }))}
+              tags={(tags.data ?? []).map((tag) => ({ id: tag.id, name: tag.name }))}
+              showStatus={showStatusFilter}
+            />
           </div>
-        </div>
-      ) : null}
 
-      <CmsPanel>
-        <ArticlesAdvancedFilters
-          filters={filters}
-          onChange={setFilters}
-          onClear={resetFilters}
-          authors={authorOptions}
-          categories={(sections.data ?? []).map((section) => ({
-            id: section.id,
-            name: section.name,
-          }))}
-          tags={(tags.data ?? []).map((tag) => ({ id: tag.id, name: tag.name }))}
-          showStatus={showStatusFilter}
-        />
+          <div className="relative flex shrink-0 items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className={cmsSecondaryButton}>
+                  Actions <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onSelect={() => exportRows()}>
+                  <Download className="h-3.5 w-3.5" /> Export CSV
+                </DropdownMenuItem>
+                {canCreate ? (
+                  <DropdownMenuItem
+                    disabled={importer.isPending}
+                    onSelect={() => fileInputRef.current?.click()}
+                  >
+                    <Upload className="h-3.5 w-3.5" /> Import CSV
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onSelect={() => setColumnsOpen(true)}>
+                  <Columns3 className="h-3.5 w-3.5" /> Manage columns
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-background px-4 py-3">
-          <button type="button" className={cmsSecondaryButton} onClick={exportRows}>
-            <Download className="h-3.5 w-3.5" /> Export CSV
-          </button>
-          {canCreate ? (
-            <>
-              <button
-                type="button"
-                className={cmsSecondaryButton}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={importer.isPending}
-              >
-                <Upload className="h-3.5 w-3.5" /> Import CSV
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void onImportFile(file);
-                  event.target.value = "";
-                }}
-              />
-            </>
-          ) : null}
-          <div className="relative">
-            <button
-              type="button"
-              className={cmsSecondaryButton}
-              onClick={() => setColumnsOpen((open) => !open)}
-              aria-expanded={columnsOpen}
-            >
-              <Columns3 className="h-3.5 w-3.5" /> Columns
-            </button>
             {columnsOpen ? (
-              <div className="absolute left-0 z-20 mt-1 w-56 border border-border bg-card p-3 shadow-[var(--cms-shadow-hover)]">
+              <div className="absolute right-0 top-full z-20 mt-1 w-56 border border-border bg-card p-3 shadow-md">
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                   Column visibility
                 </div>
@@ -573,20 +509,38 @@ export function ArticlesListPanel({
                 </button>
               </div>
             ) : null}
+
+            <span className="text-xs text-muted-foreground">
+              {sorted.length.toLocaleString()} articles
+            </span>
           </div>
-          <span className="ml-auto cms-metric text-[11px] text-muted-foreground">
-            {sorted.length.toLocaleString()} rows
-          </span>
+
+          {canCreate ? (
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void onImportFile(file);
+                event.target.value = "";
+              }}
+            />
+          ) : null}
         </div>
 
         {selected.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-4 py-3">
-            <span className="mr-2 cms-metric text-xs font-semibold">{selected.length} selected</span>
+          <div className="flex flex-wrap items-center gap-2 rounded-sm bg-muted/30 px-3 py-2">
+            <span className="mr-1 text-xs text-muted-foreground">
+              {selected.length} selected
+              {bulk.isPending ? " · Applying…" : ""}
+            </span>
             {canPublish ? (
               <>
                 <button
                   type="button"
-                  className={cmsSecondaryButton}
+                  className={cmsGhostButton}
                   onClick={() => runBulk("publish")}
                   disabled={bulk.isPending}
                 >
@@ -594,7 +548,7 @@ export function ArticlesListPanel({
                 </button>
                 <button
                   type="button"
-                  className={cmsSecondaryButton}
+                  className={cmsGhostButton}
                   onClick={() => runBulk("archive")}
                   disabled={bulk.isPending}
                 >
@@ -605,7 +559,7 @@ export function ArticlesListPanel({
             {canDelete ? (
               <button
                 type="button"
-                className={cmsSecondaryButton}
+                className={cmsGhostButton}
                 onClick={() => runBulk("delete")}
                 disabled={bulk.isPending}
               >
@@ -614,7 +568,7 @@ export function ArticlesListPanel({
             ) : null}
             {canReassign ? (
               <select
-                className={`${cmsInput} w-auto min-w-48`}
+                className={`${cmsInput} h-8 w-auto min-w-44 text-xs`}
                 value=""
                 disabled={bulk.isPending}
                 onChange={(event) => {
@@ -642,8 +596,9 @@ export function ArticlesListPanel({
         ) : (
           <DataTable
             columns={tableColumns}
-            minWidth="1280px"
+            minWidth="1100px"
             stickyHeader
+            className="border-t border-border/50"
             footer={
               <CmsPagination
                 page={page}
@@ -672,7 +627,7 @@ export function ArticlesListPanel({
               />
             ) : (
               <>
-                <DataTableRow className="bg-muted/20 hover:bg-muted/20">
+                <DataTableRow className="bg-transparent hover:bg-transparent">
                   {visibility.select ? (
                     <DataTableCell>
                       <input
@@ -692,8 +647,8 @@ export function ArticlesListPanel({
                     </DataTableCell>
                   ) : null}
                   <DataTableCell colSpan={Math.max(tableColumns.length - (visibility.select ? 1 : 0), 1)}>
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                      {sorted.length} matching · page {page}
+                    <span className="text-[11px] text-muted-foreground">
+                      Page {page}
                       {bulk.isPending ? " · Applying bulk action…" : ""}
                     </span>
                   </DataTableCell>
@@ -713,20 +668,13 @@ export function ArticlesListPanel({
                       )
                     }
                     onInspect={() => setInspectId(article.id)}
-                    canCreate={canCreate}
-                    canPublish={canPublish}
-                    canDelete={canDelete}
-                    onDuplicate={() => duplicate.mutate(article.id)}
-                    onPublish={() => runBulk("publish", [article.id])}
-                    onArchive={() => runBulk("archive", [article.id])}
-                    onDelete={() => runBulk("delete", [article.id])}
                   />
                 ))}
               </>
             )}
           </DataTable>
         )}
-      </CmsPanel>
+      </div>
 
       <ArticleInspector
         articleId={inspectId}
@@ -755,13 +703,6 @@ function ArticleTableRow({
   inspecting,
   onSelect,
   onInspect,
-  canCreate,
-  canPublish,
-  canDelete,
-  onDuplicate,
-  onPublish,
-  onArchive,
-  onDelete,
 }: {
   article: AdminArticle & {
     views: number;
@@ -776,19 +717,16 @@ function ArticleTableRow({
   inspecting: boolean;
   onSelect: (checked: boolean) => void;
   onInspect: () => void;
-  canCreate: boolean;
-  canPublish: boolean;
-  canDelete: boolean;
-  onDuplicate: () => void;
-  onPublish: () => void;
-  onArchive: () => void;
-  onDelete: () => void;
 }) {
   return (
     <DataTableRow
       selected={selected || inspecting}
       onClick={onInspect}
-      className={inspecting ? "bg-accent/50" : undefined}
+      className={cn(
+        "hover:bg-muted/40",
+        inspecting && "bg-muted/50",
+        selected && !inspecting && "bg-muted/30",
+      )}
     >
       {visibility.select ? (
         <DataTableCell>
@@ -807,12 +745,12 @@ function ArticleTableRow({
             <img
               src={article.hero_image_url}
               alt=""
-              className="h-12 w-16 object-cover"
+              className="h-10 w-14 object-cover"
               loading="lazy"
             />
           ) : (
-            <div className="flex h-12 w-16 items-center justify-center bg-muted text-muted-foreground">
-              <ImageIcon className="h-4 w-4" />
+            <div className="flex h-10 w-14 items-center justify-center bg-muted/60 text-muted-foreground">
+              <ImageIcon className="h-3.5 w-3.5" />
             </div>
           )}
         </DataTableCell>
@@ -822,12 +760,12 @@ function ArticleTableRow({
           <Link
             to="/admin/articles/$id"
             params={{ id: article.id }}
-            className="block truncate font-semibold text-foreground cms-transition hover:text-cat-blue"
+            className="block truncate font-medium text-foreground cms-transition hover:text-cat-blue"
             onClick={(event) => event.stopPropagation()}
           >
             {article.title}
           </Link>
-          <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+          <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">
             /article/{article.slug}
           </div>
         </DataTableCell>
@@ -838,28 +776,13 @@ function ArticleTableRow({
         </DataTableCell>
       ) : null}
       {visibility.category ? (
-        <DataTableCell className="text-xs text-muted-foreground">
-          {sectionName(article.sections)}
+        <DataTableCell>
+          <CategoryPill name={sectionName(article.sections)} />
         </DataTableCell>
       ) : null}
       {visibility.tags ? (
         <DataTableCell>
-          <div className="flex max-w-[160px] flex-wrap gap-1">
-            {(article.tags ?? []).slice(0, 3).map((tag) => (
-              <span
-                key={tag.id}
-                className="bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-              >
-                {tag.name}
-              </span>
-            ))}
-            {(article.tags?.length ?? 0) > 3 ? (
-              <span className="text-[10px] text-muted-foreground">+{(article.tags?.length ?? 0) - 3}</span>
-            ) : null}
-            {!article.tags?.length ? (
-              <span className="text-[11px] text-muted-foreground">—</span>
-            ) : null}
-          </div>
+          <TagOverflow tags={article.tags ?? []} max={2} />
         </DataTableCell>
       ) : null}
       {visibility.seo ? (
@@ -900,14 +823,6 @@ function ArticleTableRow({
       {visibility.actions ? (
         <DataTableCell align="right">
           <div className="flex justify-end gap-0.5" onClick={(event) => event.stopPropagation()}>
-            <button
-              type="button"
-              className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
-              onClick={onInspect}
-              title="Inspect article"
-            >
-              <PanelRight className="h-4 w-4" />
-            </button>
             <Link
               to="/admin/articles/$id"
               params={{ id: article.id }}
@@ -917,14 +832,6 @@ function ArticleTableRow({
               <Pencil className="h-4 w-4" />
             </Link>
             <Link
-              to="/admin/articles/revisions/$articleId"
-              params={{ articleId: article.id }}
-              className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
-              title="Revision history"
-            >
-              <History className="h-4 w-4" />
-            </Link>
-            <Link
               to="/admin/articles/preview/$articleId"
               params={{ articleId: article.id }}
               className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
@@ -932,46 +839,6 @@ function ArticleTableRow({
             >
               <Eye className="h-4 w-4" />
             </Link>
-            {canCreate ? (
-              <button
-                type="button"
-                className="p-2 text-muted-foreground cms-transition hover:bg-accent hover:text-foreground"
-                onClick={onDuplicate}
-                title="Duplicate article"
-              >
-                <Copy className="h-4 w-4" />
-              </button>
-            ) : null}
-            {canPublish && article.status !== "published" ? (
-              <button
-                type="button"
-                className="p-2 text-muted-foreground cms-transition hover:bg-cat-green/10 hover:text-cat-green"
-                onClick={onPublish}
-                title="Publish article"
-              >
-                <Send className="h-4 w-4" />
-              </button>
-            ) : null}
-            {canPublish && article.status !== "archived" ? (
-              <button
-                type="button"
-                className="p-2 text-muted-foreground cms-transition hover:bg-gold/10 hover:text-gold"
-                onClick={onArchive}
-                title="Archive article"
-              >
-                <Archive className="h-4 w-4" />
-              </button>
-            ) : null}
-            {canDelete ? (
-              <button
-                type="button"
-                className="p-2 text-muted-foreground cms-transition hover:bg-crimson/10 hover:text-crimson"
-                onClick={onDelete}
-                title="Delete article"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            ) : null}
           </div>
         </DataTableCell>
       ) : null}

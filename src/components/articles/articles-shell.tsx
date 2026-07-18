@@ -1,10 +1,22 @@
 import { Link, Outlet, useLocation } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Menu, X } from "lucide-react";
+import { ChevronDown, Menu, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getMe } from "@/lib/admin.functions";
 import { hasPermission } from "@/lib/permissions";
-import { ARTICLES_NAV } from "@/components/articles/nav";
+import {
+  ARTICLES_MORE_ITEMS,
+  ARTICLES_PRIMARY_TABS,
+  isArticlesNavActive,
+} from "@/components/articles/nav";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cmsButton } from "@/components/cms";
 import { cn } from "@/lib/utils";
 
 export function ArticlesLayout() {
@@ -20,101 +32,131 @@ function ArticlesShell({ children }: { children: React.ReactNode }) {
   const me = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
   const roles = me.data?.roles;
   const [mobileOpen, setMobileOpen] = useState(false);
+  const canCreate = hasPermission(roles, "articles:create");
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
-  const groups = useMemo(
-    () =>
-      ARTICLES_NAV.map((group) => ({
-        ...group,
-        items: group.items.filter((item) => hasPermission(roles, item.permission)),
-      })).filter((group) => group.items.length > 0),
+  const primary = useMemo(
+    () => ARTICLES_PRIMARY_TABS.filter((item) => hasPermission(roles, item.permission)),
     [roles],
   );
-
-  const nav = (
-    <nav className="space-y-5" aria-label="Articles navigation">
-      {groups.map((group) => (
-        <div key={group.label}>
-          <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-            {group.label}
-          </div>
-          <ul className="space-y-0.5">
-            {group.items.map((item) => {
-              const active = item.exact
-                ? location.pathname === "/admin/articles" ||
-                  location.pathname === "/admin/articles/"
-                : item.params
-                  ? location.pathname.includes("/new") && item.label === "Create Article"
-                  : location.pathname === item.to ||
-                    location.pathname.startsWith(`${item.to}/`);
-              const Icon = item.icon;
-              return (
-                <li key={`${item.to}-${item.label}`}>
-                  <Link
-                    to={item.to}
-                    params={item.params}
-                    className={cn(
-                      "flex items-center gap-2.5 px-2.5 py-2 text-[13px] font-medium cms-transition",
-                      active
-                        ? "bg-foreground text-background"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0 opacity-80" />
-                    <span className="flex-1 truncate">{item.label}</span>
-                    {item.phaseHint ? (
-                      <span
-                        className={cn(
-                          "text-[9px] font-semibold uppercase tracking-wide",
-                          active ? "text-background/70" : "text-muted-foreground/70",
-                        )}
-                      >
-                        soon
-                      </span>
-                    ) : null}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
-    </nav>
+  const more = useMemo(
+    () => ARTICLES_MORE_ITEMS.filter((item) => hasPermission(roles, item.permission)),
+    [roles],
   );
+  const moreActive = more.some((item) => isArticlesNavActive(location.pathname, item));
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between border border-border bg-card px-4 py-3 lg:hidden">
-        <div>
-          <div className="eyebrow text-[9px]">Content</div>
-          <div className="text-sm font-semibold">Articles</div>
-        </div>
-        <button
-          type="button"
-          className="p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
-          onClick={() => setMobileOpen((v) => !v)}
-          aria-expanded={mobileOpen}
-          aria-label="Toggle articles menu"
-        >
-          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
-      </div>
-
-      {mobileOpen ? (
-        <div className="border border-border bg-card p-3 lg:hidden">{nav}</div>
-      ) : null}
-
-      <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)]">
-        <aside className="hidden border border-border bg-card p-3 lg:block lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
-          <div className="mb-4 border-b border-border px-2 pb-3">
-            <div className="eyebrow text-[9px]">Content</div>
-            <div className="text-sm font-semibold tracking-tight">Articles</div>
+    <div className="space-y-6">
+      <header className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="font-serif text-3xl font-semibold tracking-tight text-foreground">
+              Articles
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Write, review, and publish — without the clutter.
+            </p>
           </div>
-          {nav}
-        </aside>
-        <div className="min-w-0">{children}</div>
-      </div>
+          <div className="flex items-center gap-2">
+            {canCreate ? (
+              <Link to="/admin/articles/$id" params={{ id: "new" }} className={cmsButton}>
+                <Plus className="h-4 w-4" /> New article
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              className="p-2 text-muted-foreground hover:bg-accent hover:text-foreground lg:hidden"
+              onClick={() => setMobileOpen((v) => !v)}
+              aria-expanded={mobileOpen}
+              aria-label="Toggle articles menu"
+            >
+              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </button>
+          </div>
+        </div>
+
+        <nav
+          className={cn(
+            "flex flex-wrap items-center gap-1 border-b border-border/60 pb-px",
+            mobileOpen ? "flex" : "hidden lg:flex",
+          )}
+          aria-label="Articles"
+        >
+          {primary.map((item) => {
+            const active = isArticlesNavActive(location.pathname, item);
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  "relative px-3 py-2.5 text-sm font-medium transition-colors",
+                  active
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {item.label}
+                {active ? (
+                  <span className="absolute inset-x-2 bottom-0 h-0.5 bg-foreground" aria-hidden />
+                ) : null}
+              </Link>
+            );
+          })}
+
+          {more.length ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "relative inline-flex items-center gap-1 px-3 py-2.5 text-sm font-medium transition-colors outline-none",
+                    moreActive
+                      ? "text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  More <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+                  {moreActive ? (
+                    <span className="absolute inset-x-2 bottom-0 h-0.5 bg-foreground" aria-hidden />
+                  ) : null}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                {more.map((item, index) => {
+                  const Icon = item.icon;
+                  const active = isArticlesNavActive(location.pathname, item);
+                  return (
+                    <div key={`${item.to}-${item.label}`}>
+                      {index === 3 ? <DropdownMenuSeparator /> : null}
+                      <DropdownMenuItem asChild>
+                        <Link
+                          to={item.to}
+                          params={item.params}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2",
+                            active && "bg-accent",
+                          )}
+                        >
+                          <Icon className="h-4 w-4 opacity-70" />
+                          <span className="flex-1">{item.label}</span>
+                          {item.phaseHint ? (
+                            <span className="text-[9px] uppercase tracking-wide text-muted-foreground">
+                              soon
+                            </span>
+                          ) : null}
+                        </Link>
+                      </DropdownMenuItem>
+                    </div>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
+        </nav>
+      </header>
+
+      <div className="min-w-0">{children}</div>
     </div>
   );
 }

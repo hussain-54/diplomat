@@ -37,17 +37,17 @@ export const ARTICLES_TABLE_COLUMNS: Array<{
   { key: "title", label: "Title", hideable: false, defaultVisible: true },
   { key: "author", label: "Author", hideable: true, defaultVisible: true },
   { key: "category", label: "Category", hideable: true, defaultVisible: true },
-  { key: "tags", label: "Tags", hideable: true, defaultVisible: true },
-  { key: "seo", label: "SEO Score", hideable: true, defaultVisible: true },
-  { key: "content", label: "Content Score", hideable: true, defaultVisible: true },
+  { key: "tags", label: "Tags", hideable: true, defaultVisible: false },
+  { key: "seo", label: "SEO", hideable: true, defaultVisible: true },
+  { key: "content", label: "Content Score", hideable: true, defaultVisible: false },
   { key: "views", label: "Views", hideable: true, defaultVisible: true },
-  { key: "comments", label: "Comments", hideable: true, defaultVisible: true },
+  { key: "comments", label: "Comments", hideable: true, defaultVisible: false },
   { key: "status", label: "Status", hideable: true, defaultVisible: true },
   { key: "updated", label: "Updated", hideable: true, defaultVisible: true },
   { key: "actions", label: "Actions", hideable: false, defaultVisible: true },
 ];
 
-const VISIBILITY_KEY = "diplomacy.articles.tableColumns.v1";
+const VISIBILITY_KEY = "diplomacy.articles.tableColumns.v2";
 
 export function defaultColumnVisibility(): Record<ArticlesTableColumnKey, boolean> {
   return Object.fromEntries(
