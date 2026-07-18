@@ -294,6 +294,51 @@ CREATE TABLE IF NOT EXISTS public.comment_blocks (
   CONSTRAINT comment_blocks_email_unique UNIQUE (email)
 );
 
+CREATE TABLE IF NOT EXISTS public.newsroom_settings (
+  id boolean PRIMARY KEY DEFAULT true CHECK (id),
+  publication_name text NOT NULL DEFAULT 'Diplomacy Lens',
+  short_name text NOT NULL DEFAULT 'DL',
+  tagline text NOT NULL DEFAULT 'Global affairs. Clear perspective.',
+  contact_email text,
+  timezone text NOT NULL DEFAULT 'UTC',
+  default_article_status public.article_status NOT NULL DEFAULT 'draft',
+  comments_enabled boolean NOT NULL DEFAULT true,
+  seo_defaults jsonb NOT NULL DEFAULT '{}'::jsonb,
+  integrations jsonb NOT NULL DEFAULT '{}'::jsonb,
+  notification_prefs jsonb NOT NULL DEFAULT '{}'::jsonb,
+  updated_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.admin_audit_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  action text NOT NULL,
+  entity_type text NOT NULL,
+  entity_id text,
+  summary text,
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.admin_ip_whitelist (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  cidr text NOT NULL,
+  label text,
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT admin_ip_whitelist_cidr_unique UNIQUE (cidr)
+);
+
+CREATE TABLE IF NOT EXISTS public.admin_backup_records (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  label text NOT NULL DEFAULT 'Manual checkpoint',
+  notes text,
+  status text NOT NULL DEFAULT 'recorded',
+  created_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- ============ SECURITY HELPER FUNCTIONS ============
 
 CREATE OR REPLACE FUNCTION app_hidden.has_role(_user_id uuid, _role public.app_role)

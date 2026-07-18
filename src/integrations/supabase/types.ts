@@ -610,7 +610,10 @@ export type Database = {
           contact_email: string | null
           default_article_status: Database["public"]["Enums"]["article_status"]
           id: boolean
+          integrations: Json
+          notification_prefs: Json
           publication_name: string
+          seo_defaults: Json
           short_name: string
           tagline: string
           timezone: string
@@ -622,7 +625,10 @@ export type Database = {
           contact_email?: string | null
           default_article_status?: Database["public"]["Enums"]["article_status"]
           id?: boolean
+          integrations?: Json
+          notification_prefs?: Json
           publication_name?: string
+          seo_defaults?: Json
           short_name?: string
           tagline?: string
           timezone?: string
@@ -634,7 +640,10 @@ export type Database = {
           contact_email?: string | null
           default_article_status?: Database["public"]["Enums"]["article_status"]
           id?: boolean
+          integrations?: Json
+          notification_prefs?: Json
           publication_name?: string
+          seo_defaults?: Json
           short_name?: string
           tagline?: string
           timezone?: string
@@ -645,6 +654,114 @@ export type Database = {
           {
             foreignKeyName: "newsroom_settings_updated_by_fkey"
             columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          payload: Json
+          summary: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          payload?: Json
+          summary?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          payload?: Json
+          summary?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_logs_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_ip_whitelist: {
+        Row: {
+          cidr: string
+          created_at: string
+          created_by: string | null
+          id: string
+          label: string | null
+        }
+        Insert: {
+          cidr: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string | null
+        }
+        Update: {
+          cidr?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_ip_whitelist_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      admin_backup_records: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          label: string
+          notes: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string
+          notes?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          label?: string
+          notes?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "admin_backup_records_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

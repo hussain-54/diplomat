@@ -1822,14 +1822,192 @@ export const getNewsroomSettings = async () => {
   return data;
 };
 
+const writeAuditLog = async (entry: {
+  actor_id: string;
+  action: string;
+  entity_type: string;
+  entity_id?: string | null;
+  summary?: string | null;
+  payload?: Database["public"]["Tables"]["admin_audit_logs"]["Insert"]["payload"];
+}) => {
+  const { error } = await supabase.from("admin_audit_logs").insert({
+    actor_id: entry.actor_id,
+    action: entry.action,
+    entity_type: entry.entity_type,
+    entity_id: entry.entity_id ?? null,
+    summary: entry.summary ?? null,
+    payload: entry.payload ?? {},
+  });
+  if (error && !/admin_audit_logs|schema cache|PGRST/i.test(error.message)) {
+    console.error("Audit log write failed", error);
+  }
+};
+
 export const updateNewsroomSettings = async ({
   data,
 }: {
   data: Database["public"]["Tables"]["newsroom_settings"]["Update"];
 }) => {
-  await requirePermission("settings:manage");
+  const { user } = await requirePermission("settings:manage");
   const { id: _id, updated_at: _updatedAt, updated_by: _updatedBy, ...payload } = data;
   const { error } = await supabase.from("newsroom_settings").update(payload).eq("id", true);
-  if (error) throw toAppError(error);
+  if (error) {
+    if (/seo_defaults|integrations|notification_prefs|schema cache|PGRST/i.test(error.message)) {
+      const legacy: Database["public"]["Tables"]["newsroom_settings"]["Update"] = {
+        publication_name: payload.publication_name,
+        short_name: payload.short_name,
+        tagline: payload.tagline,
+        contact_email: payload.contact_email,
+        timezone: payload.timezone,
+        default_article_status: payload.default_article_status,
+        comments_enabled: payload.comments_enabled,
+      };
+      const { error: legacyError } = await supabase
+        .from("newsroom_settings")
+        .update(legacy)
+        .eq("id", true);
+      if (legacyError) throw toAppError(legacyError);
+      throw new Error(
+        "Core settings saved, but SEO/integrations columns are missing. Apply supabase/migrations/20260718110000_newsroom_settings_module.sql.",
+      );
+    }
+    throw toAppError(error);
+  }
+  await writeAuditLog({
+    actor_id: user.id,
+    action: "settings.update",
+    entity_type: "newsroom_settings",
+    entity_id: "singleton",
+    summary: "Newsroom settings updated",
+    payload: { keys: Object.keys(payload) },
+  });
   return { ok: true };
+};
+
+export const listAuditLogs = async () => {
+  await requirePermission("settings:manage");
+  const { data, error } = await supabase
+    .from("admin_audit_logs")
+    .select("*, profiles(name, email)")
+    .order("created_at", { ascending: false })
+    .limit(100);
+  if (error) {
+    if (/admin_audit_logs|schema cache|PGRST/i.test(error.message)) return [];
+    throw toAppError(error);
+  }
+  return data ?? [];
+};
+
+export const listIpWhitelist = async () => {
+  await requirePermission("settings:manage");
+  const { data, error } = await supabase
+    .from("admin_ip_whitelist")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) {
+    if (/admin_ip_whitelist|schema cache|PGRST/i.test(error.message)) return [];
+    throw toAppError(error);
+  }
+  return data ?? [];
+};
+
+export const addIpWhitelistEntry = async ({
+  data,
+}: {
+  data: { cidr: string; label?: string | null };
+}) => {
+  const { user } = await requirePermission("settings:manage");
+  const cidr = data.cidr.trim();
+  if (!cidr) throw new Error("Enter an IP address or CIDR range.");
+  const { error } = await supabase.from("admin_ip_whitelist").insert({
+    cidr,
+    label: data.label?.trim() || null,
+    created_by: user.id,
+  });
+  if (error) {
+    if (/admin_ip_whitelist|schema cache|PGRST/i.test(error.message)) {
+      throw new Error(
+        "IP whitelist is not installed. Apply supabase/migrations/20260718110000_newsroom_settings_module.sql.",
+      );
+    }
+    throw toAppError(error);
+  }
+  await writeAuditLog({
+    actor_id: user.id,
+    action: "security.ip_whitelist.add",
+    entity_type: "admin_ip_whitelist",
+    summary: `Added IP rule ${cidr}`,
+    payload: { cidr, label: data.label ?? null },
+  });
+  return { ok: true };
+};
+
+export const removeIpWhitelistEntry = async ({ data }: { data: { id: string } }) => {
+  const { user } = await requirePermission("settings:manage");
+  const { error } = await supabase.from("admin_ip_whitelist").delete().eq("id", data.id);
+  if (error) throw toAppError(error);
+  await writeAuditLog({
+    actor_id: user.id,
+    action: "security.ip_whitelist.remove",
+    entity_type: "admin_ip_whitelist",
+    entity_id: data.id,
+    summary: "Removed IP whitelist entry",
+  });
+  return { ok: true };
+};
+
+export const listBackupRecords = async () => {
+  await requirePermission("settings:manage");
+  const { data, error } = await supabase
+    .from("admin_backup_records")
+    .select("*, profiles(name)")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) {
+    if (/admin_backup_records|schema cache|PGRST/i.test(error.message)) return [];
+    throw toAppError(error);
+  }
+  return data ?? [];
+};
+
+export const recordBackupCheckpoint = async ({
+  data,
+}: {
+  data: { label?: string; notes?: string | null; status?: "recorded" | "verified" | "failed" };
+}) => {
+  const { user } = await requirePermission("settings:manage");
+  const { error } = await supabase.from("admin_backup_records").insert({
+    label: data.label?.trim() || "Manual checkpoint",
+    notes: data.notes?.trim() || null,
+    status: data.status ?? "recorded",
+    created_by: user.id,
+  });
+  if (error) {
+    if (/admin_backup_records|schema cache|PGRST/i.test(error.message)) {
+      throw new Error(
+        "Backup records are not installed. Apply supabase/migrations/20260718110000_newsroom_settings_module.sql.",
+      );
+    }
+    throw toAppError(error);
+  }
+  await writeAuditLog({
+    actor_id: user.id,
+    action: "security.backup.record",
+    entity_type: "admin_backup_records",
+    summary: data.label?.trim() || "Manual checkpoint",
+  });
+  return { ok: true };
+};
+
+export const getAdminSessionInfo = async () => {
+  const { user } = await requirePermission("settings:manage");
+  const { data } = await supabase.auth.getSession();
+  return {
+    userId: user.id,
+    email: user.email ?? null,
+    expiresAt: data.session?.expires_at
+      ? new Date(data.session.expires_at * 1000).toISOString()
+      : null,
+    accessTokenPresent: !!data.session?.access_token,
+  };
 };
