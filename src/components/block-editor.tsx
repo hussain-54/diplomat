@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlignLeft,
+  Braces,
   Code2,
   GripVertical,
   Heading2,
@@ -11,6 +12,7 @@ import {
   Quote,
   Radio,
   Redo2,
+  Table2,
   Trash2,
   Undo2,
   Video,
@@ -36,6 +38,8 @@ const BLOCK_ICONS: Record<BlockType, typeof AlignLeft> = {
   divider: Minus,
   embed: Code2,
   gallery: Images,
+  table: Table2,
+  code: Braces,
   live: Radio,
 };
 
@@ -48,6 +52,8 @@ const BLOCK_MENU: BlockType[] = [
   "divider",
   "embed",
   "gallery",
+  "table",
+  "code",
   "live",
 ];
 
@@ -578,6 +584,120 @@ function BlockFields({
               placeholder="Add image URL and press Enter"
             />
           )}
+        </div>
+      );
+    case "table": {
+      const colCount = Math.max(block.data.headers.length, 1);
+      return (
+        <div className="space-y-2 overflow-x-auto">
+          <table className="w-full min-w-[480px] border-collapse text-sm">
+            <thead>
+              <tr>
+                {block.data.headers.map((header, col) => (
+                  <th key={col} className="border border-border bg-muted/40 p-1">
+                    <input
+                      {...common}
+                      value={header}
+                      placeholder={`Header ${col + 1}`}
+                      onChange={(e) =>
+                        onChange({
+                          ...block.data,
+                          headers: block.data.headers.map((cell, i) =>
+                            i === col ? e.target.value : cell,
+                          ),
+                        })
+                      }
+                      className={`${fieldClass} border-0 bg-transparent px-2 py-1 text-xs font-semibold`}
+                    />
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.data.rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {Array.from({ length: colCount }, (_, col) => (
+                    <td key={col} className="border border-border p-1">
+                      <input
+                        {...common}
+                        value={row[col] ?? ""}
+                        placeholder="—"
+                        onChange={(e) =>
+                          onChange({
+                            ...block.data,
+                            rows: block.data.rows.map((cells, r) =>
+                              r === rowIndex
+                                ? Array.from({ length: colCount }, (_, c) =>
+                                    c === col ? e.target.value : (cells[c] ?? ""),
+                                  )
+                                : cells,
+                            ),
+                          })
+                        }
+                        className={`${fieldClass} border-0 bg-transparent px-2 py-1 text-xs`}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!readOnly ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="border border-input px-2 py-1 text-[11px] font-semibold hover:bg-accent"
+                onClick={() =>
+                  onChange({
+                    ...block.data,
+                    rows: [...block.data.rows, Array.from({ length: colCount }, () => "")],
+                  })
+                }
+              >
+                Add row
+              </button>
+              <button
+                type="button"
+                className="border border-input px-2 py-1 text-[11px] font-semibold hover:bg-accent"
+                onClick={() =>
+                  onChange({
+                    headers: [...block.data.headers, `Column ${colCount + 1}`],
+                    rows: block.data.rows.map((row) => [...row, ""]),
+                  })
+                }
+              >
+                Add column
+              </button>
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+    case "code":
+      return (
+        <div className="space-y-2">
+          <select
+            disabled={readOnly}
+            value={block.data.language}
+            onChange={(e) => onChange({ ...block.data, language: e.target.value })}
+            className="h-8 border border-input bg-background px-2 text-xs"
+          >
+            {["text", "javascript", "typescript", "json", "html", "css", "sql", "bash"].map(
+              (lang) => (
+                <option key={lang} value={lang}>
+                  {lang}
+                </option>
+              ),
+            )}
+          </select>
+          <textarea
+            {...common}
+            value={block.data.code}
+            placeholder="// Code…"
+            rows={8}
+            onChange={(e) => onChange({ ...block.data, code: e.target.value })}
+            className={`${fieldClass} font-mono text-xs leading-5`}
+          />
         </div>
       );
     case "live":

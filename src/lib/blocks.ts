@@ -10,6 +10,8 @@ export type BlockType =
   | "divider"
   | "embed"
   | "gallery"
+  | "table"
+  | "code"
   | "live";
 
 export type GalleryImage = { url: string; alt: string };
@@ -23,6 +25,8 @@ export type BlockData = {
   divider: Record<string, never>;
   embed: { url: string; caption: string };
   gallery: { images: GalleryImage[] };
+  table: { headers: string[]; rows: string[][] };
+  code: { language: string; code: string };
   live: { time: string; title: string; text: string };
 };
 
@@ -41,6 +45,8 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   divider: "Divider",
   embed: "Embed",
   gallery: "Gallery",
+  table: "Table",
+  code: "Code Block",
   live: "Live Blog Entry",
 };
 
@@ -69,6 +75,20 @@ export function createBlock(type: BlockType): Block {
       return { id, type, data: { url: "", caption: "" } };
     case "gallery":
       return { id, type, data: { images: [] } };
+    case "table":
+      return {
+        id,
+        type,
+        data: {
+          headers: ["Column 1", "Column 2", "Column 3"],
+          rows: [
+            ["", "", ""],
+            ["", "", ""],
+          ],
+        },
+      };
+    case "code":
+      return { id, type, data: { language: "text", code: "" } };
     case "live":
       return {
         id,
@@ -131,6 +151,12 @@ export function blocksToPlainText(blocks: Block[]): string {
           return b.data.text;
         case "live":
           return `${b.data.title} ${b.data.text}`.trim();
+        case "table":
+          return [b.data.headers.join(" | "), ...b.data.rows.map((row) => row.join(" | "))].join(
+            "\n",
+          );
+        case "code":
+          return b.data.code;
         default:
           return "";
       }

@@ -18,9 +18,10 @@ import { getSections } from "@/lib/content.functions";
 import { useState, useEffect, useCallback } from "react";
 import type { Database } from "@/integrations/supabase/types";
 import { CmsPageHeader, CmsPanel, CmsStatus, cmsButton, cmsInput } from "@/components/cms-ui";
+import { MediaUploader, RichEditor, SEOForm } from "@/components/cms";
+import { ArticleAiAssistantPanel } from "@/components/articles/ai-assistant-panel";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermissionRoute } from "@/lib/route-guards";
-import { BlockEditor } from "@/components/block-editor";
 import { parseBody, serializeBlocks, type Block } from "@/lib/blocks";
 import { parseHreflang, seoLengthTone, siteUrl } from "@/lib/seo";
 import { ARTICLES_STATIC_SEGMENTS } from "@/components/articles/nav";
@@ -365,7 +366,11 @@ function EditArticle() {
       <CmsPageHeader
         eyebrow="Editorial workspace"
         title={isNew ? "Create article" : "Edit article"}
-        description={isNew ? "Draft a new story for the newsroom." : `Editing ${articleQ.data?.slug ?? "article"}`}
+        description={
+          isNew
+            ? "Title and subtitle on the left · Publishing, SEO, Social, and AI on the right."
+            : `Editing ${articleQ.data?.slug ?? "article"}`
+        }
         actions={
           <div className="flex items-center gap-3">
             <SaveIndicator saving={save.isPending} dirty={dirty} lastSavedAt={lastSavedAt} autosave={autosaveEligible || (!isNew && ["draft", "review"].includes(form.status))} />
@@ -409,7 +414,7 @@ function EditArticle() {
                 disabled={readOnly}
                 value={form.title}
                 onChange={(e) => patchForm({ title: e.target.value })}
-                placeholder="Headline"
+                placeholder="Title"
                 className="w-full border-0 border-b border-input bg-transparent pb-2 font-serif text-3xl text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-ring"
               />
               <textarea
@@ -417,13 +422,16 @@ function EditArticle() {
                 value={form.deck}
                 onChange={(e) => patchForm({ deck: e.target.value })}
                 rows={2}
-                placeholder="Summary / deck — one or two sentences shown under the headline"
+                placeholder="Subtitle — one or two sentences under the title"
                 className="w-full resize-none border-0 bg-transparent font-serif text-lg leading-relaxed text-muted-foreground outline-none placeholder:text-muted-foreground/50"
               />
             </div>
           </CmsPanel>
-          <CmsPanel title="Story content" description="Compose with blocks — drag to reorder, Ctrl+Enter for a new paragraph">
-            <BlockEditor
+          <CmsPanel
+            title="Content editor"
+            description="Blocks: paragraph, heading, image, video, quote, embed, gallery, table, code, live"
+          >
+            <RichEditor
               value={blocks}
               onChange={changeBlocks}
               readOnly={readOnly}
@@ -513,234 +521,51 @@ function EditArticle() {
             </div>
           </CmsPanel>
 
-          <CmsPanel title="SEO" description="Search metadata, robots, schema, and international targeting">
-            <div className="space-y-5 p-5">
-              <Field label="SEO title" hint={`${(seo.seo_title || form.title).length}/60`}>
-                <input
-                  value={seo.seo_title ?? ""}
-                  disabled={readOnly}
-                  maxLength={120}
-                  onChange={(e) => patchSeo({ seo_title: e.target.value })}
-                  placeholder={form.title || "Custom search title"}
-                  className={cmsInput}
-                />
-                <LengthGuide
-                  length={(seo.seo_title || form.title).length}
-                  min={30}
-                  max={60}
-                />
-              </Field>
-              <Field
-                label="Meta description"
-                hint={`${(seo.meta_description || form.deck).length}/160`}
-              >
-                <textarea
-                  value={seo.meta_description ?? ""}
-                  disabled={readOnly}
-                  maxLength={320}
-                  rows={3}
-                  onChange={(e) => patchSeo({ meta_description: e.target.value })}
-                  placeholder={form.deck || "Describe this story for search results"}
-                  className={`${cmsInput} h-auto py-2`}
-                />
-                <LengthGuide
-                  length={(seo.meta_description || form.deck).length}
-                  min={120}
-                  max={160}
-                />
-              </Field>
-              <Field label="Focus keyword">
-                <input
-                  value={seo.focus_keyword ?? ""}
-                  disabled={readOnly}
-                  onChange={(e) => patchSeo({ focus_keyword: e.target.value })}
-                  placeholder="e.g. UN Security Council"
-                  className={cmsInput}
-                />
-              </Field>
-              <Field label="URL slug" hint="auto-generated if blank">
-                <input
-                  value={form.slug}
-                  disabled={readOnly}
-                  onChange={(e) => patchForm({ slug: e.target.value })}
-                  className={cmsInput}
-                />
-              </Field>
-              <Field label="Canonical URL" hint="leave blank to use article URL">
-                <input
-                  type="url"
-                  value={seo.canonical_url ?? ""}
-                  disabled={readOnly}
-                  onChange={(e) => patchSeo({ canonical_url: e.target.value })}
-                  placeholder={`${siteUrl()}/article/${form.slug || slugPreview(form.title)}`}
-                  className={cmsInput}
-                />
-              </Field>
+          <SEOForm
+            value={seo}
+            onChange={(patch) => {
+              patchSeo(patch);
+              setDirty(true);
+            }}
+            slug={form.slug}
+            onSlugChange={(slug) => {
+              patchForm({ slug });
+              setDirty(true);
+            }}
+            titleFallback={form.title}
+            deckFallback={form.deck}
+            heroImageUrl={form.hero_image_url}
+            hreflangRows={hreflangRows}
+            onHreflangChange={(rows) => {
+              setHreflangRows(rows);
+              setDirty(true);
+            }}
+            readOnly={readOnly}
+            showSocial
+          />
 
-              <GoogleSerpPreview
-                title={seo.seo_title || form.title}
-                description={seo.meta_description || form.deck}
-                url={
-                  seo.canonical_url ||
-                  `${siteUrl()}/article/${form.slug || slugPreview(form.title)}`
-                }
-                keyword={seo.focus_keyword || ""}
-              />
-
-              <div className="border-t border-border pt-4">
-                <div className="mb-3 text-xs font-semibold text-foreground">Robots</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <BinaryChoice
-                    label="Search index"
-                    value={seo.robots_index}
-                    trueLabel="Index"
-                    falseLabel="NoIndex"
-                    disabled={readOnly}
-                    onChange={(value) => patchSeo({ robots_index: value })}
-                  />
-                  <BinaryChoice
-                    label="Link crawling"
-                    value={seo.robots_follow}
-                    trueLabel="Follow"
-                    falseLabel="NoFollow"
-                    disabled={readOnly}
-                    onChange={(value) => patchSeo({ robots_follow: value })}
-                  />
-                </div>
-              </div>
-
-              <Field label="Schema type">
-                <select
-                  value={seo.schema_type}
-                  disabled={readOnly}
-                  onChange={(e) =>
-                    patchSeo({ schema_type: e.target.value as ArticleSeoInput["schema_type"] })
-                  }
-                  className={cmsInput}
-                >
-                  <option value="NewsArticle">NewsArticle</option>
-                  <option value="Article">Article</option>
-                  <option value="Review">Review</option>
-                  <option value="Report">Report</option>
-                </select>
-              </Field>
-
-              <div className="border-t border-border pt-4">
-                <div className="mb-3 text-xs font-semibold text-foreground">
-                  Distribution
-                </div>
-                <label className="flex items-center justify-between gap-3 border border-border p-3">
-                  <span>
-                    <span className="block text-xs font-semibold text-foreground">
-                      RSS inclusion
-                    </span>
-                    <span className="block text-[11px] text-muted-foreground">
-                      Include this story in the public RSS feed
-                    </span>
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={seo.rss_inclusion}
-                    disabled={readOnly}
-                    onChange={(e) => patchSeo({ rss_inclusion: e.target.checked })}
-                  />
-                </label>
-              </div>
-
-              <HreflangEditor
-                rows={hreflangRows}
-                readOnly={readOnly}
-                onChange={(rows) => {
-                  setHreflangRows(rows);
-                  setDirty(true);
-                }}
-              />
-            </div>
-          </CmsPanel>
-
-          <CmsPanel title="Social" description="Open Graph and Twitter card overrides">
-            <div className="space-y-4 p-5">
-              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                Open Graph
-              </div>
-              <Field label="OG title" hint="falls back to SEO title">
-                <input
-                  value={seo.og_title ?? ""}
-                  disabled={readOnly}
-                  onChange={(e) => patchSeo({ og_title: e.target.value })}
-                  className={cmsInput}
-                />
-              </Field>
-              <Field label="OG description" hint="falls back to meta description">
-                <textarea
-                  value={seo.og_description ?? ""}
-                  disabled={readOnly}
-                  rows={2}
-                  onChange={(e) => patchSeo({ og_description: e.target.value })}
-                  className={`${cmsInput} h-auto py-2`}
-                />
-              </Field>
-              <Field label="OG image URL" hint="falls back to lead image">
-                <input
-                  value={seo.og_image_url ?? ""}
-                  disabled={readOnly}
-                  onChange={(e) => patchSeo({ og_image_url: e.target.value })}
-                  className={cmsInput}
-                />
-              </Field>
-
-              <div className="border-t border-border pt-4 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                Twitter / X
-              </div>
-              <Field label="Card type">
-                <select
-                  value={seo.twitter_card}
-                  disabled={readOnly}
-                  onChange={(e) =>
-                    patchSeo({
-                      twitter_card: e.target.value as ArticleSeoInput["twitter_card"],
-                    })
-                  }
-                  className={cmsInput}
-                >
-                  <option value="summary_large_image">Large image</option>
-                  <option value="summary">Summary</option>
-                </select>
-              </Field>
-              <Field label="Twitter title" hint="falls back to OG title">
-                <input
-                  value={seo.twitter_title ?? ""}
-                  disabled={readOnly}
-                  onChange={(e) => patchSeo({ twitter_title: e.target.value })}
-                  className={cmsInput}
-                />
-              </Field>
-              <Field label="Twitter description">
-                <textarea
-                  value={seo.twitter_description ?? ""}
-                  disabled={readOnly}
-                  rows={2}
-                  onChange={(e) => patchSeo({ twitter_description: e.target.value })}
-                  className={`${cmsInput} h-auto py-2`}
-                />
-              </Field>
-              <Field label="Twitter image URL">
-                <input
-                  value={seo.twitter_image_url ?? ""}
-                  disabled={readOnly}
-                  onChange={(e) => patchSeo({ twitter_image_url: e.target.value })}
-                  className={cmsInput}
-                />
-              </Field>
-              <SocialPreview
-                title={seo.og_title || seo.seo_title || form.title}
-                description={
-                  seo.og_description || seo.meta_description || form.deck
-                }
-                image={seo.og_image_url || form.hero_image_url}
-              />
-            </div>
-          </CmsPanel>
+          <ArticleAiAssistantPanel
+            title={form.title}
+            deck={form.deck}
+            blocks={blocks}
+            readOnly={readOnly}
+            onApplyTitle={(next) => {
+              patchForm({ title: next });
+              setDirty(true);
+            }}
+            onApplyDeck={(next) => {
+              patchForm({ deck: next });
+              setDirty(true);
+            }}
+            onApplyMeta={(patch) => {
+              patchSeo(patch);
+              setDirty(true);
+            }}
+            onInsertSummaryBlock={(next) => {
+              changeBlocks(next);
+              setDirty(true);
+            }}
+          />
 
           <CmsPanel title="Categories" description="Section placement for this story">
             <div className="p-5">
@@ -822,25 +647,25 @@ function EditArticle() {
 
           <CmsPanel title="Media" description="Lead image · JPEG, PNG, WebP, or GIF · max 5 MB">
             <div className="space-y-3 p-5">
-              {form.hero_image_url && (
+              {mayUploadMedia && !readOnly ? (
+                <MediaUploader
+                  previewUrl={form.hero_image_url || null}
+                  busy={uploadBusy}
+                  progress={uploadBusy ? "Uploading…" : null}
+                  onFiles={(files) => {
+                    const file = files[0];
+                    if (file) void uploadHero(file);
+                  }}
+                >
+                  Upload lead image
+                </MediaUploader>
+              ) : form.hero_image_url ? (
                 <img
                   src={form.hero_image_url}
                   alt={form.title || "Article hero"}
                   className="aspect-video w-full border border-border object-cover"
                 />
-              )}
-              {mayUploadMedia && !readOnly && (
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) uploadHero(f);
-                  }}
-                  className="w-full text-xs text-muted-foreground"
-                />
-              )}
-              {uploadBusy && <div className="text-xs text-muted-foreground">Uploading…</div>}
+              ) : null}
               {uploadError && <div className="text-xs text-crimson">{uploadError}</div>}
               <input
                 value={form.hero_image_url}

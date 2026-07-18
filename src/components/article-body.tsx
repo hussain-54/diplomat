@@ -93,6 +93,47 @@ function BlockView({ block }: { block: Block }) {
           ))}
         </div>
       );
+    case "table": {
+      if (!block.data.headers.length && !block.data.rows.length) return null;
+      return (
+        <div className="my-8 overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            {block.data.headers.some((cell) => cell.trim()) ? (
+              <thead>
+                <tr>
+                  {block.data.headers.map((header, i) => (
+                    <th
+                      key={i}
+                      className="border border-border bg-secondary px-3 py-2 text-left font-semibold"
+                    >
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+            ) : null}
+            <tbody>
+              {block.data.rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {row.map((cell, col) => (
+                    <td key={col} className="border border-border px-3 py-2 align-top">
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    case "code":
+      if (!block.data.code.trim()) return null;
+      return (
+        <pre className="my-8 overflow-x-auto border border-border bg-secondary p-4 text-xs leading-6">
+          <code data-language={block.data.language}>{block.data.code}</code>
+        </pre>
+      );
     case "live": {
       if (!block.data.title.trim() && !block.data.text.trim()) return null;
       const time = new Date(block.data.time);
