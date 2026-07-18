@@ -5,6 +5,7 @@ import { FileText } from "lucide-react";
 import {
   getAnalyticsOverview,
   getDashboardMetrics,
+  getDashboardPerformance,
   getDashboardSettingsSnapshot,
   getMe,
   listDashboardArticles,
@@ -54,6 +55,10 @@ function Overview() {
   const metrics = useQuery({
     queryKey: ["dashboard-metrics"],
     queryFn: getDashboardMetrics,
+  });
+  const performance = useQuery({
+    queryKey: ["dashboard-performance"],
+    queryFn: getDashboardPerformance,
   });
   const analytics = useQuery({
     queryKey: ["cms-analytics"],
@@ -127,15 +132,23 @@ function Overview() {
   const integrations = parseIntegrations(
     (settings.data as { integrations?: unknown } | null)?.integrations,
   );
+  const adManagerConfigured = Boolean(integrations.google_ad_manager_network_code?.trim());
 
   const isLoading =
     me.isLoading ||
     articles.isLoading ||
     alerts.isLoading ||
     metrics.isLoading ||
+    performance.isLoading ||
     (canViewAnalytics && analytics.isLoading);
   const error =
-    me.error ?? articles.error ?? alerts.error ?? metrics.error ?? analytics.error ?? settings.error;
+    me.error ??
+    articles.error ??
+    alerts.error ??
+    metrics.error ??
+    performance.error ??
+    analytics.error ??
+    settings.error;
 
   const dateLabel = new Intl.DateTimeFormat("en", {
     weekday: "long",
@@ -143,7 +156,7 @@ function Overview() {
     month: "long",
   }).format(new Date());
 
-  if (isLoading) return <CmsPageSkeleton metrics={6} panels={2} />;
+  if (isLoading) return <CmsPageSkeleton metrics={8} panels={2} />;
 
   return (
     <div className="space-y-6">
@@ -185,10 +198,15 @@ function Overview() {
       {view === "overview" && (
         <OverviewView
           metrics={{
+            totalArticles: metrics.data?.totalArticles ?? 0,
+            publishedTotal: metrics.data?.publishedTotal ?? 0,
             publishedToday: metrics.data?.publishedToday ?? 0,
             pendingReview: metrics.data?.pendingReview ?? 0,
             drafts: metrics.data?.drafts ?? 0,
             scheduled: metrics.data?.scheduled ?? 0,
+            activeAuthors: metrics.data?.activeAuthors ?? 0,
+            monthlyViews: metrics.data?.monthlyViews ?? 0,
+            archived: metrics.data?.archived ?? 0,
           }}
           liveVisitors={presenceConnected ? liveVisitors : "—"}
           presenceConnected={presenceConnected}
@@ -199,6 +217,9 @@ function Overview() {
           realtimeConnected={realtimeConnected}
           canViewArticles={canViewArticles}
           canCreateArticles={canCreateArticles}
+          adManagerConfigured={adManagerConfigured}
+          dailyRows={performance.data?.dailyRows ?? analyticsModel.dailyRows}
+          topStories={performance.data?.topStories ?? analyticsModel.topStories}
         />
       )}
 
@@ -230,8 +251,8 @@ function Overview() {
       {view === "revenue" && (
         <RevenueView
           adManagerCode={integrations.google_ad_manager_network_code}
-          totalViews={analyticsModel.totalViews}
-          published={analyticsModel.published}
+          totalViews={metrics.data?.monthlyViews ?? analyticsModel.totalViews}
+          published={metrics.data?.publishedTotal ?? analyticsModel.published}
         />
       )}
 

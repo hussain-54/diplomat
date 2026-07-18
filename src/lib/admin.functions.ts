@@ -179,15 +179,25 @@ export const getDashboardMetrics = async () => {
   await requirePermission("dashboard:view");
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
+  const monthAgo = new Date();
+  monthAgo.setUTCDate(monthAgo.getUTCDate() - 29);
+  const monthDate = monthAgo.toISOString().slice(0, 10);
+
   const [
-    publishedRes,
+    totalRes,
+    publishedTotalRes,
+    publishedTodayRes,
     reviewRes,
     draftRes,
     scheduledRes,
     archivedRes,
     commentsPendingRes,
     commentsFlaggedRes,
+    authorsRes,
+    monthlyViewsRes,
   ] = await Promise.all([
+    supabase.from("articles").select("id", { count: "exact", head: true }),
+    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "published"),
     supabase
       .from("articles")
       .select("id", { count: "exact", head: true })
@@ -199,22 +209,101 @@ export const getDashboardMetrics = async () => {
     supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "archived"),
     supabase.from("comments").select("id", { count: "exact", head: true }).eq("status", "pending"),
     supabase.from("comments").select("id", { count: "exact", head: true }).eq("status", "flagged"),
+    supabase
+      .from("articles")
+      .select("author_id")
+      .not("author_id", "is", null)
+      .neq("status", "archived")
+      .limit(2000),
+    supabase.from("article_daily_metrics").select("views").gte("metric_date", monthDate),
   ]);
 
-  for (const result of [publishedRes, reviewRes, draftRes, scheduledRes, archivedRes]) {
+  for (const result of [
+    totalRes,
+    publishedTotalRes,
+    publishedTodayRes,
+    reviewRes,
+    draftRes,
+    scheduledRes,
+    archivedRes,
+  ]) {
     if (result.error) throw toAppError(result.error);
   }
 
+  const activeAuthors = new Set(
+    (authorsRes.error ? [] : authorsRes.data ?? [])
+      .map((row) => row.author_id)
+      .filter(Boolean),
+  ).size;
+
+  const monthlyViews = monthlyViewsRes.error
+    ? 0
+    : (monthlyViewsRes.data ?? []).reduce((sum, row) => sum + (row.views ?? 0), 0);
+
   return {
-    publishedToday: publishedRes.count ?? 0,
+    totalArticles: totalRes.count ?? 0,
+    publishedTotal: publishedTotalRes.count ?? 0,
+    publishedToday: publishedTodayRes.count ?? 0,
     pendingReview: reviewRes.count ?? 0,
     drafts: draftRes.count ?? 0,
     scheduled: scheduledRes.count ?? 0,
     archived: archivedRes.count ?? 0,
+    activeAuthors,
+    monthlyViews,
     pendingComments: commentsPendingRes.error ? 0 : (commentsPendingRes.count ?? 0),
     flaggedComments: commentsFlaggedRes.error ? 0 : (commentsFlaggedRes.count ?? 0),
   };
 };
+
+export const getDashboardPerformance = async () => {
+  await requirePermission("dashboard:view");
+  const since = new Date();
+  since.setUTCDate(since.getUTCDate() - 29);
+  const date = since.toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from("article_daily_metrics")
+    .select("article_id,metric_date,views,articles(id,title)")
+    .gte("metric_date", date)
+    .order("metric_date");
+
+  if (error) {
+    if (/article_daily_metrics|schema cache|PGRST/i.test(error.message)) {
+      return { dailyRows: emptyDailyRows(), topStories: [] as Array<{ title: string; views: number }> };
+    }
+    throw toAppError(error);
+  }
+
+  const daily = new Map<string, number>();
+  for (const [key] of emptyDailyRows()) daily.set(key, 0);
+  const storyTotals = new Map<string, { title: string; views: number }>();
+
+  for (const metric of data ?? []) {
+    daily.set(metric.metric_date, (daily.get(metric.metric_date) ?? 0) + metric.views);
+    const article = Array.isArray(metric.articles) ? metric.articles[0] : metric.articles;
+    const current = storyTotals.get(metric.article_id) ?? {
+      title: article?.title ?? "Unknown article",
+      views: 0,
+    };
+    current.views += metric.views;
+    storyTotals.set(metric.article_id, current);
+  }
+
+  return {
+    dailyRows: [...daily.entries()] as Array<[string, number]>,
+    topStories: [...storyTotals.values()].sort((a, b) => b.views - a.views).slice(0, 8),
+  };
+};
+
+function emptyDailyRows(): Array<[string, number]> {
+  const rows: Array<[string, number]> = [];
+  for (let offset = 29; offset >= 0; offset -= 1) {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - offset);
+    rows.push([date.toISOString().slice(0, 10), 0]);
+  }
+  return rows;
+}
 
 export const getAdminArticle = async ({ data }: { data: { id: string } }) => {
   await requirePermission("articles:view");
