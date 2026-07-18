@@ -21,6 +21,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { ArticlesSidebarMenu } from "@/components/articles/articles-sidebar-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { getDashboardMetrics, getMe } from "@/lib/admin.functions";
 import {
@@ -55,10 +56,12 @@ const NAV_GROUPS: Array<{
     permission: Permission;
     exact?: boolean;
     badgeKey?: "review" | "comments";
+    /** Rendered as expandable Articles accordion instead of a flat link */
+    expandableArticles?: boolean;
   }>;
 }> = [
   {
-    label: "Workspace",
+    label: "Content",
     items: [
       {
         to: "/admin",
@@ -73,6 +76,7 @@ const NAV_GROUPS: Array<{
         icon: FileText,
         permission: "articles:view",
         badgeKey: "review",
+        expandableArticles: true,
       },
       {
         to: "/admin/media",
@@ -295,6 +299,16 @@ export function AdminShell({ children }: { children: ReactNode }) {
             ) : null}
             <ul className="space-y-0.5">
               {group.items.map((item) => {
+                if (item.expandableArticles) {
+                  return (
+                    <ArticlesSidebarMenu
+                      key={item.to}
+                      collapsed={collapsed}
+                      roles={roles}
+                    />
+                  );
+                }
+
                 const active = item.exact
                   ? location.pathname === item.to
                   : location.pathname.startsWith(item.to);
@@ -307,19 +321,24 @@ export function AdminShell({ children }: { children: ReactNode }) {
                       "group relative flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-[13px] font-medium cms-transition",
                       collapsed && "justify-center px-0",
                       active
-                        ? "bg-primary/10 text-primary shadow-[inset_3px_0_0_0_var(--color-primary)]"
+                        ? "bg-primary text-primary-foreground shadow-[0_0_0_1px_var(--cms-glow),0_6px_16px_var(--cms-glow)]"
                         : "text-muted-foreground hover:bg-accent/80 hover:text-foreground",
                     )}
                   >
                     <Icon
                       className={cn(
                         "h-4 w-4 shrink-0",
-                        active ? "text-primary" : "opacity-75 group-hover:opacity-100",
+                        active ? "text-primary-foreground" : "opacity-75 group-hover:opacity-100",
                       )}
                     />
                     {!collapsed ? <span className="flex-1 truncate">{item.label}</span> : null}
                     {!collapsed && badge > 0 ? (
-                      <span className="cms-metric min-w-5 rounded-md bg-cat-rose px-1.5 py-0.5 text-center text-[10px] font-bold text-white">
+                      <span
+                        className={cn(
+                          "cms-metric min-w-5 rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold",
+                          active ? "bg-white/20 text-primary-foreground" : "bg-cat-rose text-white",
+                        )}
+                      >
                         {badge > 99 ? "99+" : badge}
                       </span>
                     ) : null}

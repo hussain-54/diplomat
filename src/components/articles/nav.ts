@@ -4,15 +4,20 @@ import {
   Bot,
   CalendarClock,
   CheckCircle2,
+  ClipboardCheck,
   ClipboardList,
   Eye,
+  FileEdit,
   FilePenLine,
   FileText,
   Gauge,
   GitBranch,
+  Globe,
   History,
+  LayoutDashboard,
   Link2,
   List,
+  PlusSquare,
   Search,
   Settings2,
   Sparkles,
@@ -29,7 +34,102 @@ export type ArticlesNavItem = {
   exact?: boolean;
   params?: Record<string, string>;
   phaseHint?: string;
+  /** Badge key from articles library / metrics counts */
+  countKey?:
+    | "all"
+    | "draft"
+    | "review"
+    | "approved"
+    | "scheduled"
+    | "published"
+    | "archived"
+    | "trash";
 };
+
+/** Main CMS sidebar accordion children (Content → Articles) */
+export const ARTICLES_SIDEBAR_ITEMS: ArticlesNavItem[] = [
+  {
+    to: "/admin/articles",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    permission: "articles:view",
+    exact: true,
+  },
+  {
+    to: "/admin/articles/all",
+    label: "All Articles",
+    icon: FileText,
+    permission: "articles:view",
+    countKey: "all",
+  },
+  {
+    to: "/admin/articles/create",
+    label: "Create Article",
+    icon: PlusSquare,
+    permission: "articles:create",
+  },
+  {
+    to: "/admin/articles/drafts",
+    label: "Drafts",
+    icon: FileEdit,
+    permission: "articles:view",
+    countKey: "draft",
+  },
+  {
+    to: "/admin/articles/review",
+    label: "Pending Review",
+    icon: ClipboardCheck,
+    permission: "articles:view",
+    countKey: "review",
+  },
+  {
+    to: "/admin/articles/approved",
+    label: "Approved",
+    icon: CheckCircle2,
+    permission: "articles:review",
+    countKey: "approved",
+  },
+  {
+    to: "/admin/articles/scheduled",
+    label: "Scheduled",
+    icon: CalendarClock,
+    permission: "articles:view",
+    countKey: "scheduled",
+  },
+  {
+    to: "/admin/articles/published",
+    label: "Published",
+    icon: Globe,
+    permission: "articles:view",
+    countKey: "published",
+  },
+  {
+    to: "/admin/articles/archived",
+    label: "Archived",
+    icon: Archive,
+    permission: "articles:view",
+    countKey: "archived",
+  },
+  {
+    to: "/admin/articles/trash",
+    label: "Trash",
+    icon: Trash2,
+    permission: "articles:delete",
+    countKey: "trash",
+  },
+  {
+    to: "/admin/articles/revisions",
+    label: "Revisions",
+    icon: History,
+    permission: "articles:view",
+  },
+  {
+    to: "/admin/articles/workflow",
+    label: "Workflow",
+    icon: GitBranch,
+    permission: "articles:review",
+  },
+];
 
 /** Primary status tabs — always visible in the Articles top bar */
 export const ARTICLES_PRIMARY_TABS: ArticlesNavItem[] = [
@@ -177,6 +277,13 @@ export function isArticlesPrimaryPath(pathname: string): boolean {
 export function isArticlesNavActive(pathname: string, item: ArticlesNavItem): boolean {
   if (item.exact) {
     return pathname === "/admin/articles" || pathname === "/admin/articles/";
+  }
+  if (item.to === "/admin/articles/create") {
+    return (
+      pathname === "/admin/articles/create" ||
+      pathname === "/admin/articles/new" ||
+      pathname.startsWith("/admin/articles/new/")
+    );
   }
   if (item.params) {
     return pathname.includes("/new") && item.label === "Create Article";
