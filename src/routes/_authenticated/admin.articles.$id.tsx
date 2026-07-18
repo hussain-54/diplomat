@@ -1,6 +1,6 @@
-import { createFileRoute, useNavigate, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, History, Loader2, RotateCcw, Wifi, X } from "lucide-react";
+import { History, ImagePlus, RotateCcw, X } from "lucide-react";
 import {
   applyArticleWorkflowAction,
   duplicateArticle,
@@ -22,7 +22,7 @@ import {
 import { getSections } from "@/lib/content.functions";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { Database } from "@/integrations/supabase/types";
-import { CmsPageHeader, CmsPanel, CmsStatus, cmsButton, cmsInput } from "@/components/cms-ui";
+import { CmsPanel, CmsStatus, cmsButton, cmsInput } from "@/components/cms-ui";
 import { MediaUploader, RichEditor, SEOForm } from "@/components/cms";
 import { ArticleBody } from "@/components/article-body";
 import { ArticleAiAssistantPanel } from "@/components/articles/ai-assistant-panel";
@@ -32,9 +32,10 @@ import {
   WorkflowActions,
 } from "@/components/articles/article-edit-panels";
 import {
-  EditorModeToolbar,
-  type EditorViewMode,
-} from "@/components/articles/editor-mode-toolbar";
+  DocumentEditorBar,
+  type DocumentViewMode,
+} from "@/components/articles/document-editor-chrome";
+import { computeArticleSeoScore } from "@/components/articles/articles-filters";
 import {
   clearArticleDraftCache,
   loadArticleDraftCache,
@@ -144,10 +145,12 @@ function EditArticle() {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [draftRecovery, setDraftRecovery] = useState<ArticleDraftCachePayload | null>(null);
-  const [viewMode, setViewMode] = useState<EditorViewMode>("edit");
+  const [viewMode, setViewMode] = useState<DocumentViewMode>("edit");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarTab, setSidebarTab] = useState("publishing");
   const hydratedRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const cacheKey = isNew ? "new" : id;
 
   const { connected: realtimeConnected, remoteUpdatedAt } = useArticleEditRealtime(
@@ -157,6 +160,16 @@ function EditArticle() {
   const writingStats = useMemo(
     () => computeWritingStats(form.title, form.deck, blocks),
     [form.title, form.deck, blocks],
+  );
+  const seoScore = useMemo(
+    () =>
+      computeArticleSeoScore({
+        seo_title: seo.seo_title,
+        meta_description: seo.meta_description,
+        focus_keyword: seo.focus_keyword,
+        robots_index: seo.robots_index,
+      }),
+    [seo.seo_title, seo.meta_description, seo.focus_keyword, seo.robots_index],
   );
 
   useEffect(() => {
@@ -593,6 +606,37 @@ function EditArticle() {
   const author = articleQ.data
     ? (Array.isArray(articleQ.data.author) ? articleQ.data.author[0] : articleQ.data.author)
     : null;
+  const authorName = isNew
+    ? (meQ.data?.profile?.name ?? "You")
+    : (author?.name ?? "Unknown author");
+  const authorAvatar = isNew
+    ? meQ.data?.profile?.avatar_url
+    : author?.avatar_url;
+  const publicSlug = form.status === "published" && form.slug ? form.slug : undefined;
+  const showSidebar =
+    sidebarOpen && (viewMode === "edit" || viewMode === "reading");
+  const fullscreen = viewMode === "fullscreen";
+  const focusLike = viewMode === "focus" || viewMode === "fullscreen";
+  const saveLabel =
+    form.status === "published"
+      ? articleQ.data?.status === "published"
+        ? "Update"
+        : "Publish"
+      : form.status === "scheduled"
+        ? "Schedule"
+        : isNew
+          ? "Create"
+          : "Save draft";
+
+  const copyShareLink = () => {
+    const url = publicSlug
+      ? `${siteUrl()}/article/${publicSlug}`
+      : !isNew
+        ? `${window.location.origin}/admin/articles/preview/${id}`
+        : null;
+    if (!url) return;
+    void navigator.clipboard.writeText(url).catch(() => undefined);
+  };
 
   if (!isNew && articleQ.isLoading) {
     return <div className="text-sm text-muted-foreground">Loading article…</div>;
@@ -605,226 +649,266 @@ function EditArticle() {
     );
   }
 
+  const tabTriggerClass =
+    "rounded-none border-b-2 border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-muted-foreground shadow-none data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none";
+
   return (
-    <div className="space-y-6">
-      <CmsPageHeader
-        eyebrow="Editorial workspace"
-        title={isNew ? "Create article" : "Edit article"}
-        description={
-          isNew
-            ? "Title and subtitle on the left · Publishing, SEO, Social, and AI on the right."
-            : `Editing ${articleQ.data?.slug ?? "article"}`
-        }
-        actions={
-          <div className="flex items-center gap-3">
-            {!isNew ? (
-              <span
-                className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground"
-                title={
-                  realtimeConnected
-                    ? "Live updates connected"
-                    : "Connecting to live updates…"
-                }
-              >
-                <Wifi
-                  className={`h-3.5 w-3.5 ${realtimeConnected ? "text-emerald-600" : "text-muted-foreground/50"}`}
-                />
-                {realtimeConnected ? "Live" : "Offline"}
-                <CmsStatus tone={statusTone(form.status)}>{form.status}</CmsStatus>
-              </span>
-            ) : null}
-            <SaveIndicator saving={save.isPending} dirty={dirty} lastSavedAt={lastSavedAt} autosave={autosaveEligible || (!isNew && ["draft", "review"].includes(form.status))} />
-            <Link to="/admin/articles" className="text-xs font-semibold text-muted-foreground hover:text-foreground">
-              ← Back to articles
-            </Link>
-          </div>
-        }
+    <div
+      className={cn(
+        "min-h-[calc(100vh-4rem)]",
+        fullscreen && "fixed inset-0 z-50 flex flex-col overflow-hidden bg-background",
+      )}
+    >
+      <DocumentEditorBar
+        title={form.title}
+        statusLabel={form.status}
+        saving={save.isPending}
+        dirty={dirty}
+        lastSavedAt={lastSavedAt}
+        stats={writingStats}
+        seoScore={seoScore}
+        sidebarOpen={sidebarOpen && viewMode === "edit"}
+        onToggleSidebar={() => setSidebarOpen((v) => !v)}
+        mode={viewMode}
+        onModeChange={setViewMode}
+        onSave={() => save.mutate({})}
+        saveLabel={saveLabel}
+        canSave={canSubmit}
+        articleId={id}
+        isNew={isNew}
+        publicSlug={publicSlug}
+        canDuplicate={canDuplicate}
+        canArchive={canArchive && form.status !== "archived"}
+        onDuplicate={() => {
+          if (window.confirm("Duplicate this article as a new draft?")) duplicate.mutate();
+        }}
+        onArchive={() => {
+          if (window.confirm("Move this article to trash (archived)?")) archive.mutate();
+        }}
+        onShare={publicSlug || !isNew ? copyShareLink : undefined}
       />
+
       {draftRecovery ? (
-        <div className="flex flex-col gap-3 border border-gold/40 bg-gold/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="text-sm text-muted-foreground">
-            Unsaved local draft from{" "}
-            <span className="font-semibold text-foreground">
+        <div className="flex flex-col gap-2 border-b border-gold/30 bg-gold/5 px-4 py-2.5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            Local draft from{" "}
+            <span className="font-medium text-foreground">
               {new Date(draftRecovery.savedAt).toLocaleString()}
             </span>{" "}
-            is available. Recover it or discard and keep the server version.
+            available.
           </div>
-          <div className="flex shrink-0 gap-2">
-            <button type="button" className={cmsButton} onClick={applyDraftRecovery}>
-              Recover draft
+          <div className="flex shrink-0 gap-3">
+            <button type="button" className="text-xs font-semibold text-foreground hover:underline" onClick={applyDraftRecovery}>
+              Recover
             </button>
-            <button type="button" className="text-xs font-semibold text-muted-foreground hover:text-foreground" onClick={discardDraftRecovery}>
+            <button type="button" className="text-xs font-medium text-muted-foreground hover:text-foreground" onClick={discardDraftRecovery}>
               Discard
             </button>
           </div>
         </div>
       ) : null}
       {remoteUpdatedAt && dirty ? (
-        <div className="border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          Someone else updated this article at{" "}
-          <span className="font-semibold text-foreground">
+        <div className="border-b border-border/60 bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+          Remote update at{" "}
+          <span className="font-medium text-foreground">
             {new Date(remoteUpdatedAt).toLocaleString()}
           </span>
-          . Save carefully or reload to pick up their changes.
+          {realtimeConnected ? "" : " · offline sync"}
+          . Save carefully or reload.
         </div>
       ) : null}
       {!canPublish && (
-        <div className="border border-gold/30 bg-gold/10 px-4 py-3 text-sm text-muted-foreground">
-          {protectedReadOnly ? (
-            <>This article is read-only in its current workflow state. An editor must make changes.</>
-          ) : (
-            <>
-              Your role can save <strong>draft</strong> or <strong>in review</strong> only. A section
-              editor or super admin must publish.
-            </>
-          )}
+        <div className="border-b border-gold/20 bg-gold/5 px-4 py-2 text-xs text-muted-foreground">
+          {protectedReadOnly
+            ? "Read-only in this workflow state — an editor must make changes."
+            : "You can save draft or in review only. A section editor must publish."}
         </div>
       )}
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
           if (canSubmit) save.mutate({});
         }}
         onKeyDown={(e) => {
-          // Prevent implicit form submission when pressing Enter in text inputs.
           if (e.key === "Enter" && (e.target as HTMLElement).tagName === "INPUT") {
             e.preventDefault();
           }
         }}
         className={cn(
-          viewMode === "fullscreen"
-            ? "fixed inset-0 z-50 overflow-y-auto bg-background p-4 sm:p-8"
-            : "grid gap-6",
-          viewMode === "edit" || viewMode === "reading"
-            ? "xl:grid-cols-[minmax(0,1fr)_380px]"
-            : "",
+          "flex min-h-0",
+          fullscreen ? "flex-1 overflow-hidden" : "min-h-[calc(100vh-8rem)]",
         )}
       >
-        <div
+        <main
           className={cn(
-            "min-w-0",
-            viewMode === "focus" || viewMode === "fullscreen"
-              ? "mx-auto w-full max-w-3xl space-y-4"
-              : "space-y-4",
+            "min-w-0 flex-1 overflow-y-auto bg-muted/20",
+            focusLike ? "px-4 py-8 sm:px-10 sm:py-12" : "px-3 py-6 sm:px-6 sm:py-8",
           )}
         >
-          <EditorModeToolbar
-            mode={viewMode}
-            onModeChange={setViewMode}
-            stats={writingStats}
-            articleId={id}
-            isNew={isNew}
-            publicSlug={form.status === "published" && form.slug ? form.slug : undefined}
-            canDuplicate={canDuplicate}
-            canArchive={canArchive && form.status !== "archived"}
-            onDuplicate={() => {
-              if (window.confirm("Duplicate this article as a new draft?")) duplicate.mutate();
-            }}
-            onArchive={() => {
-              if (window.confirm("Move this article to trash (archived)?")) archive.mutate();
-            }}
-            onSave={() => save.mutate({})}
-            saveLabel={
-              form.status === "published"
-                ? "Update"
-                : form.status === "scheduled"
-                  ? "Schedule"
-                  : isNew
-                    ? "Create"
-                    : "Save"
-            }
-            canSave={canSubmit}
-            saving={save.isPending}
-          />
-
-          {viewMode === "reading" ? (
-            <article className="border border-border bg-card px-6 py-8 sm:px-10">
-              <h1 className="font-serif text-4xl font-semibold tracking-tight">
-                {form.title || "Untitled"}
-              </h1>
-              {form.deck ? (
-                <p className="mt-3 text-lg text-muted-foreground">{form.deck}</p>
-              ) : null}
-              {form.hero_image_url ? (
+          <div
+            className={cn(
+              "mx-auto w-full bg-background shadow-sm",
+              focusLike ? "max-w-[720px]" : "max-w-[850px]",
+              "px-8 py-10 sm:px-14 sm:py-14",
+            )}
+          >
+            {viewMode === "reading" ? (
+              form.hero_image_url ? (
                 <img
                   src={form.hero_image_url}
                   alt=""
-                  className="mt-6 max-h-96 w-full object-cover"
+                  className="-mx-8 mb-8 max-h-80 w-[calc(100%+4rem)] object-cover sm:-mx-14 sm:w-[calc(100%+7rem)]"
                 />
-              ) : null}
-              <ArticleBody body={serializeBlocks(blocks)} />
-            </article>
-          ) : (
-            <>
-              <div className="border border-border bg-card">
-                <div className="space-y-3 px-6 py-8 sm:px-10">
-                  <input
-                    ref={titleInputRef}
-                    required
-                    disabled={readOnly}
-                    value={form.title}
-                    onChange={(e) => patchForm({ title: e.target.value })}
-                    placeholder="Article title"
-                    className="w-full border-0 bg-transparent font-serif text-4xl font-semibold leading-tight tracking-tight text-foreground outline-none placeholder:text-muted-foreground/50"
-                  />
-                  <textarea
-                    disabled={readOnly}
-                    value={form.deck}
-                    onChange={(e) => patchForm({ deck: e.target.value })}
-                    rows={2}
-                    placeholder="Deck — one or two sentences that pull the reader in"
-                    className="w-full resize-none border-0 bg-transparent font-serif text-xl leading-relaxed text-muted-foreground outline-none placeholder:text-muted-foreground/40"
+              ) : null
+            ) : mayUploadMedia && !readOnly ? (
+              <div className="group relative -mx-8 mb-8 sm:-mx-14">
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void uploadHero(file);
+                    e.target.value = "";
+                  }}
+                />
+                {form.hero_image_url ? (
+                  <button
+                    type="button"
+                    onClick={() => coverInputRef.current?.click()}
+                    className="relative block w-full overflow-hidden"
+                  >
+                    <img
+                      src={form.hero_image_url}
+                      alt=""
+                      className="max-h-72 w-full object-cover"
+                    />
+                    <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent px-4 py-3 text-left text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
+                      {uploadBusy ? "Uploading…" : "Change cover"}
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => coverInputRef.current?.click()}
+                    disabled={uploadBusy}
+                    className="flex w-full items-center justify-center gap-2 border border-dashed border-border/70 bg-muted/30 py-10 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/50 hover:text-foreground"
+                  >
+                    <ImagePlus className="h-4 w-4" />
+                    {uploadBusy ? "Uploading…" : "Add cover image"}
+                  </button>
+                )}
+                {uploadError ? (
+                  <p className="mt-2 px-8 text-xs text-crimson sm:px-14">{uploadError}</p>
+                ) : null}
+              </div>
+            ) : form.hero_image_url ? (
+              <img
+                src={form.hero_image_url}
+                alt=""
+                className="-mx-8 mb-8 max-h-72 w-[calc(100%+4rem)] object-cover sm:-mx-14 sm:w-[calc(100%+7rem)]"
+              />
+            ) : null}
+
+            {viewMode === "reading" ? (
+              <article>
+                <h1 className="font-serif text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+                  {form.title || "Untitled"}
+                </h1>
+                {form.deck ? (
+                  <p className="mt-4 font-serif text-xl leading-relaxed text-muted-foreground">
+                    {form.deck}
+                  </p>
+                ) : null}
+                <div className="mt-6 flex items-center gap-3 border-b border-border/40 pb-6">
+                  <AuthorRow name={authorName} avatarUrl={authorAvatar} />
+                </div>
+                <div className="mt-8">
+                  <ArticleBody body={serializeBlocks(blocks)} />
+                </div>
+              </article>
+            ) : (
+              <>
+                <input
+                  ref={titleInputRef}
+                  required
+                  disabled={readOnly}
+                  value={form.title}
+                  onChange={(e) => patchForm({ title: e.target.value })}
+                  placeholder="Article title"
+                  className="w-full border-0 bg-transparent font-serif text-4xl font-semibold leading-tight tracking-tight text-foreground outline-none placeholder:text-muted-foreground/40 sm:text-5xl"
+                />
+                <textarea
+                  disabled={readOnly}
+                  value={form.deck}
+                  onChange={(e) => patchForm({ deck: e.target.value })}
+                  rows={2}
+                  placeholder="Write a subtitle…"
+                  className="mt-4 w-full resize-none border-0 bg-transparent font-serif text-xl leading-relaxed text-muted-foreground outline-none placeholder:text-muted-foreground/35 sm:text-2xl"
+                />
+                <div className="mt-6 flex items-center gap-3 border-b border-border/40 pb-6">
+                  <AuthorRow
+                    name={authorName}
+                    avatarUrl={authorAvatar}
+                    note={
+                      !isNew && articleQ.data?.created_at
+                        ? new Date(articleQ.data.created_at).toLocaleDateString()
+                        : undefined
+                    }
                   />
                 </div>
-              </div>
-              <div className="overflow-hidden border border-border bg-card">
-                <RichEditor
-                  value={blocks}
-                  onChange={changeBlocks}
-                  readOnly={readOnly}
-                  onUploadImage={mayUploadMedia ? uploadImage : undefined}
-                />
-              </div>
-            </>
-          )}
-        </div>
+                <div className="mt-2">
+                  <RichEditor
+                    value={blocks}
+                    onChange={changeBlocks}
+                    readOnly={readOnly}
+                    onUploadImage={mayUploadMedia ? uploadImage : undefined}
+                    className="border-0 bg-transparent"
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        </main>
 
-        {(viewMode === "edit" || viewMode === "reading") && (
-          <aside className="space-y-4">
-            <Tabs value={sidebarTab} onValueChange={setSidebarTab} className="space-y-4">
-              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-none border border-border bg-muted/30 p-1">
-                <TabsTrigger value="publishing" className="rounded-none text-xs">
+        {showSidebar ? (
+          <aside className="hidden w-[300px] shrink-0 overflow-y-auto border-l border-border/60 bg-background lg:block xl:w-[320px]">
+            <Tabs value={sidebarTab} onValueChange={setSidebarTab} className="space-y-0">
+              <TabsList className="sticky top-0 z-10 flex h-auto w-full flex-wrap justify-start gap-0 rounded-none border-b border-border/50 bg-background px-2 py-1">
+                <TabsTrigger value="publishing" className={tabTriggerClass}>
                   Publishing
                 </TabsTrigger>
-                <TabsTrigger value="seo" className="rounded-none text-xs">
+                <TabsTrigger value="seo" className={tabTriggerClass}>
                   SEO
                 </TabsTrigger>
-                <TabsTrigger value="social" className="rounded-none text-xs">
+                <TabsTrigger value="social" className={tabTriggerClass}>
                   Social
                 </TabsTrigger>
-                <TabsTrigger value="categories" className="rounded-none text-xs">
+                <TabsTrigger value="categories" className={tabTriggerClass}>
                   Categories
                 </TabsTrigger>
-                <TabsTrigger value="tags" className="rounded-none text-xs">
+                <TabsTrigger value="tags" className={tabTriggerClass}>
                   Tags
                 </TabsTrigger>
-                <TabsTrigger value="media" className="rounded-none text-xs">
+                <TabsTrigger value="media" className={tabTriggerClass}>
                   Media
                 </TabsTrigger>
-                <TabsTrigger value="author" className="rounded-none text-xs">
+                <TabsTrigger value="author" className={tabTriggerClass}>
                   Author
                 </TabsTrigger>
-                <TabsTrigger value="ai" className="rounded-none text-xs">
+                <TabsTrigger value="ai" className={tabTriggerClass}>
                   AI
                 </TabsTrigger>
-                <TabsTrigger value="settings" className="rounded-none text-xs">
+                <TabsTrigger value="settings" className={tabTriggerClass}>
                   Settings
                 </TabsTrigger>
               </TabsList>
 
               <TabsContent value="publishing" className="mt-0">
-                <CmsPanel title="Publishing" description="Workflow status and distribution">
-                  <div className="space-y-4 p-5">
+                <CmsPanel title="Publishing" description="Workflow and distribution">
+                  <div className="space-y-4 p-4">
                     <Field label="Status">
                       <select
                         value={form.status}
@@ -971,8 +1055,8 @@ function EditArticle() {
               </TabsContent>
 
               <TabsContent value="categories" className="mt-0">
-                <CmsPanel title="Categories" description="Section placement for this story">
-                  <div className="p-5">
+                <CmsPanel title="Categories" description="Section placement">
+                  <div className="p-4">
                     <Field label="Category">
                       <select
                         required
@@ -994,8 +1078,8 @@ function EditArticle() {
               </TabsContent>
 
               <TabsContent value="tags" className="mt-0">
-                <CmsPanel title="Tags" description="Topics for discovery and related coverage">
-                  <div className="space-y-3 p-5">
+                <CmsPanel title="Tags" description="Topics for discovery">
+                  <div className="space-y-3 p-4">
                     {tagNames.length > 0 && (
                       <div className="flex flex-wrap gap-1.5">
                         {tagNames.map((tag) => (
@@ -1056,8 +1140,8 @@ function EditArticle() {
               </TabsContent>
 
               <TabsContent value="media" className="mt-0">
-                <CmsPanel title="Media" description="Lead image · JPEG, PNG, WebP, or GIF · max 5 MB">
-                  <div className="space-y-3 p-5">
+                <CmsPanel title="Media" description="Cover image · max 5 MB">
+                  <div className="space-y-3 p-4">
                     {mayUploadMedia && !readOnly ? (
                       <MediaUploader
                         previewUrl={form.hero_image_url || null}
@@ -1090,8 +1174,8 @@ function EditArticle() {
               </TabsContent>
 
               <TabsContent value="author" className="mt-0">
-                <CmsPanel title="Author" description="Byline for this story">
-                  <div className="flex items-center gap-3 p-5">
+                <CmsPanel title="Author" description="Byline">
+                  <div className="flex items-center gap-3 p-4">
                     {isNew ? (
                       <AuthorRow
                         name={meQ.data?.profile?.name ?? "You"}
@@ -1138,9 +1222,9 @@ function EditArticle() {
                 />
               </TabsContent>
 
-              <TabsContent value="settings" className="mt-0 space-y-4">
-                <CmsPanel title="Settings" description="Quick summary of this article">
-                  <div className="space-y-3 p-5 text-sm">
+              <TabsContent value="settings" className="mt-0 space-y-3 p-3">
+                <CmsPanel title="Settings" description="Article summary">
+                  <div className="space-y-3 p-4 text-sm">
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-muted-foreground">Status</span>
                       <CmsStatus tone={statusTone(form.status)}>{form.status}</CmsStatus>
@@ -1169,120 +1253,95 @@ function EditArticle() {
                       canFactCheck={canWriteFactCheckNotes}
                     />
                     <ArticleApprovalHistoryPanel articleId={id} />
+                    <CmsPanel
+                      title="Version history"
+                      description="Restorable snapshots from each save"
+                      action={
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <History className="h-3.5 w-3.5" />
+                          {revisionsQ.data?.length ?? 0}
+                        </span>
+                      }
+                    >
+                      {revisionsQ.isLoading ? (
+                        <div className="p-4 text-sm text-muted-foreground">Loading…</div>
+                      ) : revisionsQ.isError ? (
+                        <div className="p-4 text-sm text-crimson">{revisionsQ.error.message}</div>
+                      ) : !revisionsQ.data?.length ? (
+                        <div className="p-6 text-center text-xs text-muted-foreground">
+                          History begins after the first update.
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-border/60">
+                          {revisionsQ.data.map((revision) => {
+                            const snapshot = unwrapRevisionSnapshot(revision.snapshot);
+                            const changer = Array.isArray(revision.changer)
+                              ? revision.changer[0]?.name
+                              : revision.changer?.name;
+                            return (
+                              <div
+                                key={revision.id}
+                                className="flex flex-col gap-2 px-4 py-3"
+                              >
+                                <div className="flex items-start gap-2">
+                                  <div className="flex h-7 w-7 shrink-0 items-center justify-center bg-muted text-[10px] font-bold">
+                                    v{revision.version}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-xs font-semibold">
+                                      {snapshot.title ?? "Untitled revision"}
+                                    </div>
+                                    <div className="mt-0.5 text-[10px] text-muted-foreground">
+                                      {new Date(revision.changed_at).toLocaleString()} ·{" "}
+                                      {changer ?? "System"}
+                                    </div>
+                                  </div>
+                                  <CmsStatus
+                                    tone={statusTone(
+                                      (snapshot.status as ArticleStatus) ?? "draft",
+                                    )}
+                                  >
+                                    {snapshot.status ?? "draft"}
+                                  </CmsStatus>
+                                </div>
+                                {!readOnly && (
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-7 items-center justify-center gap-1 border border-input px-2 text-[10px] font-semibold hover:bg-accent"
+                                    disabled={restore.isPending}
+                                    onClick={() => {
+                                      if (
+                                        window.confirm(
+                                          `Restore revision v${revision.version}?`,
+                                        )
+                                      ) {
+                                        restore.mutate(revision.id);
+                                      }
+                                    }}
+                                  >
+                                    <RotateCcw className="h-3 w-3" /> Restore
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {restore.isError && (
+                        <div className="border-t border-border bg-crimson/10 px-4 py-2 text-xs text-crimson">
+                          {restore.error.message}
+                        </div>
+                      )}
+                    </CmsPanel>
                   </>
                 ) : null}
               </TabsContent>
             </Tabs>
           </aside>
-        )}
+        ) : null}
       </form>
-
-      {!isNew && (
-        <CmsPanel
-          title="Version History"
-          description="Every saved change creates a restorable snapshot."
-          action={
-            <span className="flex items-center gap-1 text-xs text-muted-foreground">
-              <History className="h-3.5 w-3.5" />
-              {revisionsQ.data?.length ?? 0} revisions
-            </span>
-          }
-        >
-          {revisionsQ.isLoading ? (
-            <div className="p-5 text-sm text-muted-foreground">Loading revision history…</div>
-          ) : revisionsQ.isError ? (
-            <div className="p-5 text-sm text-crimson">{revisionsQ.error.message}</div>
-          ) : !revisionsQ.data?.length ? (
-            <div className="p-8 text-center text-sm text-muted-foreground">
-              Revision history begins after the first update.
-            </div>
-          ) : (
-            <div className="divide-y divide-border">
-              {revisionsQ.data.map((revision) => {
-                const snapshot = unwrapRevisionSnapshot(revision.snapshot);
-                const changer = Array.isArray(revision.changer)
-                  ? revision.changer[0]?.name
-                  : revision.changer?.name;
-                return (
-                  <div key={revision.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center">
-                    <div className="flex h-8 w-8 items-center justify-center bg-muted text-xs font-bold">
-                      v{revision.version}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-semibold">
-                        {snapshot.title ?? "Untitled revision"}
-                      </div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {new Date(revision.changed_at).toLocaleString()} · {changer ?? "System"}
-                      </div>
-                    </div>
-                    <CmsStatus tone={statusTone((snapshot.status as ArticleStatus) ?? "draft")}>
-                      {snapshot.status ?? "draft"}
-                    </CmsStatus>
-                    {!readOnly && (
-                      <button
-                        type="button"
-                        className="inline-flex h-8 items-center gap-1 border border-input px-2 text-xs font-semibold hover:bg-accent"
-                        disabled={restore.isPending}
-                        onClick={() => {
-                          if (window.confirm(`Restore revision v${revision.version}?`)) {
-                            restore.mutate(revision.id);
-                          }
-                        }}
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" /> Restore
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {restore.isError && (
-            <div className="border-t border-border bg-crimson/10 px-5 py-3 text-xs text-crimson">
-              {restore.error.message}
-            </div>
-          )}
-        </CmsPanel>
-      )}
     </div>
   );
-}
-
-function SaveIndicator({
-  saving,
-  dirty,
-  lastSavedAt,
-  autosave,
-}: {
-  saving: boolean;
-  dirty: boolean;
-  lastSavedAt: Date | null;
-  autosave: boolean;
-}) {
-  if (saving) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
-      </span>
-    );
-  }
-  if (dirty) {
-    return (
-      <span className="text-xs text-gold">
-        Unsaved changes{autosave ? " · autosave on" : ""}
-      </span>
-    );
-  }
-  if (lastSavedAt) {
-    return (
-      <span className="inline-flex items-center gap-1 text-xs text-cat-green">
-        <CheckCircle2 className="h-3.5 w-3.5" /> Saved{" "}
-        {lastSavedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-      </span>
-    );
-  }
-  return null;
 }
 
 function AuthorRow({

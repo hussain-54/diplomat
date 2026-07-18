@@ -405,7 +405,7 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
         />
       )}
       {/* Sticky formatting toolbar */}
-      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-1 border-b border-border/60 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="sticky top-0 z-20 -mx-2 mb-2 flex flex-wrap items-center gap-1 border-b border-border/40 bg-background/90 px-2 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/75">
         <ToolButton
           title="Undo (Ctrl+Z)"
           disabled={readOnly || !past.current.length}
@@ -503,7 +503,7 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
         </div>
       </div>
 
-      <div className="mx-auto max-w-2xl space-y-1 px-4 py-8 sm:px-6">
+      <div className="space-y-1 py-2">
         {isEmptyCanvas && !readOnly && (
           <p className="pointer-events-none mb-2 select-none text-center font-serif text-sm text-muted-foreground/70">
             Type <span className="font-sans font-medium text-muted-foreground">/</span> to insert a block
