@@ -37,3 +37,10 @@ export {
   cmsGhostButton,
   cmsInput,
 } from "@/components/cms-ui";
+
+/** Phase 12 dashboard aliases — reuse existing primitives (no duplicates) */
+export { CmsEmptyState as EmptyState } from "@/components/cms-ui";
+export { MetricCard as StatCard } from "./metric-card";
+export { PageHeader as DashboardHeader } from "./page-header";
+export { CmsPageSkeleton as SkeletonLoader } from "./loading";
+export { NotificationCenter as NotificationPanel } from "./notification-center";
