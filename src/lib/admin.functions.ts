@@ -255,6 +255,214 @@ export const getDashboardMetrics = async () => {
   };
 };
 
+function pctChange(current: number, previous: number) {
+  if (previous <= 0) return current > 0 ? 100 : 0;
+  return ((current - previous) / previous) * 100;
+}
+
+/** Articles module dashboard snapshot (Phase 3) — uses articles:view */
+export const getArticlesDashboardSnapshot = async () => {
+  await requirePermission("articles:view");
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+  const weekAgo = new Date(startOfToday);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  const twoWeeksAgo = new Date(startOfToday);
+  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+  const todayKey = startOfToday.toISOString().slice(0, 10);
+  const yesterdayKey = startOfYesterday.toISOString().slice(0, 10);
+
+  const [
+    publishedTotalRes,
+    publishedTodayRes,
+    publishedYesterdayRes,
+    publishedWeekRes,
+    publishedPrevWeekRes,
+    draftRes,
+    reviewRes,
+    scheduledRes,
+    articlesRes,
+    viewsTodayRes,
+    viewsYesterdayRes,
+    metricsWeekRes,
+    publishWindowRes,
+  ] = await Promise.all([
+    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "published"),
+    supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "published")
+      .gte("published_at", startOfToday.toISOString()),
+    supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "published")
+      .gte("published_at", startOfYesterday.toISOString())
+      .lt("published_at", startOfToday.toISOString()),
+    supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "published")
+      .gte("published_at", weekAgo.toISOString()),
+    supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "published")
+      .gte("published_at", twoWeeksAgo.toISOString())
+      .lt("published_at", weekAgo.toISOString()),
+    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "draft"),
+    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "review"),
+    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "scheduled"),
+    supabase
+      .from("articles")
+      .select(
+        "id,slug,title,status,badge_type,published_at,updated_at,seo_title,meta_description,focus_keyword,robots_index,author:profiles!articles_author_id_fkey(name),sections(name)",
+      )
+      .order("updated_at", { ascending: false })
+      .limit(100),
+    supabase.from("article_daily_metrics").select("views").eq("metric_date", todayKey),
+    supabase.from("article_daily_metrics").select("views").eq("metric_date", yesterdayKey),
+    supabase
+      .from("article_daily_metrics")
+      .select("article_id,views,metric_date,articles(id,title,slug)")
+      .gte("metric_date", weekAgo.toISOString().slice(0, 10)),
+    supabase
+      .from("articles")
+      .select("published_at")
+      .not("published_at", "is", null)
+      .gte("published_at", twoWeeksAgo.toISOString()),
+  ]);
+
+  for (const result of [
+    publishedTotalRes,
+    publishedTodayRes,
+    draftRes,
+    reviewRes,
+    scheduledRes,
+  ]) {
+    if (result.error) throw toAppError(result.error);
+  }
+  if (articlesRes.error) throw toAppError(articlesRes.error);
+
+  const articles = articlesRes.data ?? [];
+  const viewsToday = viewsTodayRes.error
+    ? 0
+    : (viewsTodayRes.data ?? []).reduce((sum, row) => sum + (row.views ?? 0), 0);
+  const viewsYesterday = viewsYesterdayRes.error
+    ? 0
+    : (viewsYesterdayRes.data ?? []).reduce((sum, row) => sum + (row.views ?? 0), 0);
+
+  const seoScores = articles.map((article) => {
+    let score = 0;
+    if (article.seo_title?.trim()) score += 25;
+    if (article.meta_description?.trim()) score += 25;
+    if (article.focus_keyword?.trim()) score += 25;
+    if (article.robots_index !== false) score += 25;
+    return score;
+  });
+  const seoHealth = seoScores.length
+    ? Math.round(seoScores.reduce((a, b) => a + b, 0) / seoScores.length)
+    : 0;
+  const seoStrong = seoScores.filter((s) => s >= 75).length;
+  const seoWeak = seoScores.filter((s) => s < 50).length;
+  const missingMeta = articles.filter(
+    (a) => !a.seo_title?.trim() || !a.meta_description?.trim(),
+  ).length;
+
+  const storyViews = new Map<string, { title: string; slug: string; views: number }>();
+  for (const row of metricsWeekRes.error ? [] : metricsWeekRes.data ?? []) {
+    const article = Array.isArray(row.articles) ? row.articles[0] : row.articles;
+    const current = storyViews.get(row.article_id) ?? {
+      title: article?.title ?? "Unknown",
+      slug: article?.slug ?? "",
+      views: 0,
+    };
+    current.views += row.views ?? 0;
+    storyViews.set(row.article_id, current);
+  }
+  const topPerforming = [...storyViews.entries()]
+    .map(([id, value]) => ({ id, ...value }))
+    .sort((a, b) => b.views - a.views)
+    .slice(0, 6);
+
+  const publishActivity = new Map<string, number>();
+  for (let offset = 13; offset >= 0; offset -= 1) {
+    const date = new Date(startOfToday);
+    date.setDate(date.getDate() - offset);
+    publishActivity.set(date.toISOString().slice(0, 10), 0);
+  }
+  for (const row of publishWindowRes.error ? [] : publishWindowRes.data ?? []) {
+    if (!row.published_at) continue;
+    const key = row.published_at.slice(0, 10);
+    if (publishActivity.has(key)) {
+      publishActivity.set(key, (publishActivity.get(key) ?? 0) + 1);
+    }
+  }
+
+  const publishedToday = publishedTodayRes.count ?? 0;
+  const publishedYesterday = publishedYesterdayRes.error ? 0 : (publishedYesterdayRes.count ?? 0);
+  const drafts = draftRes.count ?? 0;
+  const pendingReview = reviewRes.count ?? 0;
+  const scheduled = scheduledRes.count ?? 0;
+  const publishedWeek = publishedWeekRes.error ? 0 : (publishedWeekRes.count ?? 0);
+  const publishedPrevWeek = publishedPrevWeekRes.error ? 0 : (publishedPrevWeekRes.count ?? 0);
+
+  return {
+    kpis: {
+      published: publishedTotalRes.count ?? 0,
+      publishedChange: pctChange(publishedWeek, publishedPrevWeek),
+      drafts,
+      draftsChange: null as number | null,
+      pendingReview,
+      pendingReviewChange: null as number | null,
+      scheduled,
+      scheduledChange: null as number | null,
+      viewsToday,
+      viewsTodayChange: pctChange(viewsToday, viewsYesterday),
+      seoHealth,
+      seoHealthChange: null as number | null,
+      publishedToday,
+      publishedYesterday,
+    },
+    contentHealth: {
+      seoHealth,
+      seoStrong,
+      seoWeak,
+      missingMeta,
+      totalSampled: articles.length,
+      backlog: drafts + pendingReview + scheduled,
+    },
+    topPerforming,
+    recentlyUpdated: articles.slice(0, 8).map((article) => ({
+      id: article.id,
+      title: article.title,
+      status: article.status,
+      updated_at: article.updated_at,
+      author: Array.isArray(article.author) ? article.author[0]?.name : article.author?.name,
+      section: Array.isArray(article.sections)
+        ? article.sections[0]?.name
+        : article.sections?.name,
+    })),
+    editorialQueue: articles
+      .filter((a) => a.status === "review")
+      .slice(0, 8)
+      .map((article) => ({
+        id: article.id,
+        title: article.title,
+        updated_at: article.updated_at,
+        author: Array.isArray(article.author) ? article.author[0]?.name : article.author?.name,
+        badge_type: article.badge_type,
+      })),
+    publishingActivity: [...publishActivity.entries()].map(([date, count]) => ({
+      date,
+      count,
+    })),
+  };
+};
+
 export const getDashboardPerformance = async () => {
   await requirePermission("dashboard:view");
   const since = new Date();

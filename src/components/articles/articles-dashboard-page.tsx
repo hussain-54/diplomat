@@ -3,39 +3,54 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Archive,
   CalendarClock,
+  CheckCircle2,
   ClipboardList,
+  Eye,
   FilePenLine,
   FilePlus2,
   FileText,
   List,
+  Search,
+  Sparkles,
 } from "lucide-react";
-import { getDashboardMetrics, getMe, listAdminArticles } from "@/lib/admin.functions";
-import { CmsAlert, CmsPageHeader, CmsPanel, MetricCard, cmsButton } from "@/components/cms";
+import { getArticlesDashboardSnapshot, getMe } from "@/lib/admin.functions";
+import {
+  CmsAlert,
+  CmsEmptyState,
+  CmsPageHeader,
+  CmsPanel,
+  CmsPageSkeleton,
+  MetricCard,
+  StatusBadge,
+  cmsButton,
+  cmsSecondaryButton,
+} from "@/components/cms";
+import { BarMetricChart, ChartCard } from "@/components/dashboard/chart-card";
 import { hasPermission } from "@/lib/permissions";
+import { cn } from "@/lib/utils";
 
 export function ArticlesDashboardPage() {
   const me = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
-  const metrics = useQuery({
-    queryKey: ["dashboard-metrics"],
-    queryFn: getDashboardMetrics,
-    staleTime: 30_000,
-  });
-  const articles = useQuery({
-    queryKey: ["admin-articles"],
-    queryFn: listAdminArticles,
-    staleTime: 30_000,
+  const snapshot = useQuery({
+    queryKey: ["articles-dashboard"],
+    queryFn: getArticlesDashboardSnapshot,
+    staleTime: 20_000,
   });
 
   const canCreate = hasPermission(me.data?.roles, "articles:create");
-  const recent = (articles.data ?? []).slice(0, 6);
-  const review = (articles.data ?? []).filter((a) => a.status === "review").slice(0, 5);
+  const data = snapshot.data;
+  const kpis = data?.kpis;
+
+  if (snapshot.isLoading) {
+    return <CmsPageSkeleton metrics={6} panels={3} />;
+  }
 
   return (
     <div className="space-y-6">
       <CmsPageHeader
         eyebrow="Content · Articles"
         title="Articles dashboard"
-        description="Newsroom content overview — queues, output, and quick entry points."
+        description="Publishing health, editorial queues, and content performance across the desk."
         actions={
           canCreate ? (
             <Link to="/admin/articles/$id" params={{ id: "new" }} className={cmsButton}>
@@ -45,70 +60,185 @@ export function ArticlesDashboardPage() {
         }
       />
 
-      {metrics.error ? <CmsAlert>{metrics.error.message}</CmsAlert> : null}
+      {snapshot.error ? <CmsAlert>{snapshot.error.message}</CmsAlert> : null}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <MetricCard
           label="Published"
-          value={metrics.data?.publishedTotal ?? 0}
-          detail={`${metrics.data?.publishedToday ?? 0} today`}
-          trend={metrics.data?.publishedToday ? "up" : "neutral"}
+          value={kpis?.published ?? 0}
+          icon={FileText}
+          changePercent={kpis?.publishedChange}
+          detail={`${kpis?.publishedToday ?? 0} today`}
         />
-        <MetricCard label="Drafts" value={metrics.data?.drafts ?? 0} detail="In progress" />
+        <MetricCard
+          label="Drafts"
+          value={kpis?.drafts ?? 0}
+          icon={FilePenLine}
+          changePercent={kpis?.draftsChange}
+          detail="In progress"
+        />
         <MetricCard
           label="Pending review"
-          value={metrics.data?.pendingReview ?? 0}
+          value={kpis?.pendingReview ?? 0}
+          icon={ClipboardList}
+          changePercent={kpis?.pendingReviewChange}
           detail="Editorial queue"
-          trend={metrics.data?.pendingReview ? "down" : "neutral"}
-        />
-        <MetricCard label="Scheduled" value={metrics.data?.scheduled ?? 0} detail="Timed publishes" />
-        <MetricCard
-          label="Views · 30d"
-          value={(metrics.data?.monthlyViews ?? 0).toLocaleString()}
-          detail="Traffic proxy"
-          trend={metrics.data?.monthlyViews ? "up" : "neutral"}
+          trend={kpis?.pendingReview ? "down" : "neutral"}
         />
         <MetricCard
-          label="Archived"
-          value={metrics.data?.archived ?? 0}
-          detail="Retired stories"
+          label="Scheduled"
+          value={kpis?.scheduled ?? 0}
+          icon={CalendarClock}
+          changePercent={kpis?.scheduledChange}
+          detail="Timed publishes"
+        />
+        <MetricCard
+          label="Views today"
+          value={(kpis?.viewsToday ?? 0).toLocaleString()}
+          icon={Eye}
+          changePercent={kpis?.viewsTodayChange}
+          detail="vs yesterday"
+        />
+        <MetricCard
+          label="SEO health"
+          value={`${kpis?.seoHealth ?? 0}`}
+          icon={Sparkles}
+          changePercent={kpis?.seoHealthChange}
+          detail="Avg metadata score"
+          trend={(kpis?.seoHealth ?? 0) >= 70 ? "up" : "down"}
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          { to: "/admin/articles/all", label: "All Articles", icon: List },
-          { to: "/admin/articles/drafts", label: "Drafts", icon: FilePenLine },
-          { to: "/admin/articles/review", label: "Pending Review", icon: ClipboardList },
-          { to: "/admin/articles/scheduled", label: "Scheduled", icon: CalendarClock },
-          { to: "/admin/articles/published", label: "Published", icon: FileText },
-          { to: "/admin/articles/archived", label: "Archived", icon: Archive },
-        ].map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className="flex items-center gap-3 border border-border bg-card p-4 cms-transition hover:border-foreground/20 hover:shadow-[var(--cms-shadow-hover)]"
-            >
-              <div className="flex h-9 w-9 items-center justify-center bg-muted">
-                <Icon className="h-4 w-4" />
-              </div>
-              <span className="text-sm font-semibold">{item.label}</span>
+      <CmsPanel title="Quick actions" description="Jump into high-frequency desk work">
+        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            { to: "/admin/articles/all", label: "All Articles", icon: List },
+            { to: "/admin/articles/drafts", label: "Drafts", icon: FilePenLine },
+            { to: "/admin/articles/review", label: "Pending Review", icon: ClipboardList },
+            { to: "/admin/articles/scheduled", label: "Scheduled", icon: CalendarClock },
+            { to: "/admin/articles/published", label: "Published", icon: FileText },
+            { to: "/admin/articles/archived", label: "Archived", icon: Archive },
+            { to: "/admin/articles/content-score", label: "Content Score", icon: Search },
+            {
+              to: "/admin/articles/$id",
+              label: "New Article",
+              icon: FilePlus2,
+              params: { id: "new" },
+              createOnly: true,
+            },
+          ].map((item) => {
+            if ("createOnly" in item && item.createOnly && !canCreate) return null;
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.label}
+                to={item.to}
+                params={"params" in item ? item.params : undefined}
+                className="flex items-center gap-3 border border-border bg-background px-3 py-3 cms-transition hover:border-foreground/20 hover:bg-accent/40"
+              >
+                <div className="flex h-9 w-9 items-center justify-center bg-muted">
+                  <Icon className="h-4 w-4" />
+                </div>
+                <span className="text-sm font-semibold">{item.label}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </CmsPanel>
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <ChartCard
+          title="Publishing activity"
+          description="Publishes per day · last 14 days"
+          empty={!data?.publishingActivity.some((d) => d.count > 0)}
+          emptyTitle="No publishes in range"
+          emptyDescription="Scheduled and live output will chart here."
+        >
+          <BarMetricChart
+            data={(data?.publishingActivity ?? []).map((row) => ({
+              label: new Date(`${row.date}T00:00:00`).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              }),
+              value: row.count,
+            }))}
+            config={{ value: { label: "Publishes", color: "var(--color-cat-blue)" } }}
+          />
+        </ChartCard>
+
+        <CmsPanel title="Content health summary" description="Metadata coverage on recent stories">
+          <div className="space-y-4 p-5">
+            <HealthBar
+              label="SEO health"
+              value={data?.contentHealth.seoHealth ?? 0}
+              max={100}
+              tone={(data?.contentHealth.seoHealth ?? 0) >= 70 ? "bg-cat-green" : "bg-gold"}
+            />
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <HealthStat label="Strong (75+)" value={data?.contentHealth.seoStrong ?? 0} />
+              <HealthStat label="Weak (<50)" value={data?.contentHealth.seoWeak ?? 0} />
+              <HealthStat label="Missing meta" value={data?.contentHealth.missingMeta ?? 0} />
+              <HealthStat label="Backlog" value={data?.contentHealth.backlog ?? 0} />
+            </div>
+            <Link to="/admin/articles/content-score" className={cmsSecondaryButton}>
+              <CheckCircle2 className="h-3.5 w-3.5" /> Open content score
             </Link>
-          );
-        })}
+          </div>
+        </CmsPanel>
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <CmsPanel title="Editorial queue" description="Stories waiting in review">
-          <div className="divide-y divide-border">
-            {!review.length ? (
-              <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-                Review queue is clear.
-              </div>
-            ) : (
-              review.map((article) => (
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <CmsPanel
+          title="Top performing articles"
+          description="Views · last 7 days"
+          action={
+            <Link to="/admin/articles/published" className="text-xs font-semibold text-cat-blue">
+              View published
+            </Link>
+          }
+        >
+          {!data?.topPerforming.length ? (
+            <CmsEmptyState
+              title="No traffic leaders yet"
+              description="Pageviews will rank stories here."
+            />
+          ) : (
+            <div className="divide-y divide-border">
+              {data.topPerforming.map((story, index) => (
+                <Link
+                  key={story.id}
+                  to="/admin/articles/$id"
+                  params={{ id: story.id }}
+                  className="flex items-center justify-between gap-3 px-5 py-3.5 cms-transition hover:bg-accent/50"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">
+                      #{index + 1} {story.title}
+                    </div>
+                  </div>
+                  <div className="cms-metric shrink-0 text-sm font-semibold">
+                    {story.views.toLocaleString()}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </CmsPanel>
+
+        <CmsPanel
+          title="Editorial queue"
+          description="Pending review"
+          action={
+            <Link to="/admin/articles/review" className="text-xs font-semibold text-cat-blue">
+              Open queue
+            </Link>
+          }
+        >
+          {!data?.editorialQueue.length ? (
+            <CmsEmptyState title="Queue clear" description="Nothing waiting for review." />
+          ) : (
+            <div className="divide-y divide-border">
+              {data.editorialQueue.map((article) => (
                 <Link
                   key={article.id}
                   to="/admin/articles/$id"
@@ -116,23 +246,24 @@ export function ArticlesDashboardPage() {
                   className="block px-5 py-3.5 cms-transition hover:bg-accent/50"
                 >
                   <div className="truncate text-sm font-semibold">{article.title}</div>
-                  <div className="mt-1 text-[11px] text-muted-foreground">
-                    Updated {new Date(article.updated_at).toLocaleString()}
+                  <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                    <span>{article.author ?? "Unassigned"}</span>
+                    <span className="cms-metric">
+                      {new Date(article.updated_at).toLocaleString()}
+                    </span>
                   </div>
                 </Link>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </CmsPanel>
 
-        <CmsPanel title="Recently updated" description="Latest desk activity">
-          <div className="divide-y divide-border">
-            {!recent.length ? (
-              <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-                No articles yet.
-              </div>
-            ) : (
-              recent.map((article) => (
+        <CmsPanel title="Recently updated" description="Latest desk edits">
+          {!data?.recentlyUpdated.length ? (
+            <CmsEmptyState title="No activity" description="Edits will appear here." />
+          ) : (
+            <div className="divide-y divide-border">
+              {data.recentlyUpdated.map((article) => (
                 <Link
                   key={article.id}
                   to="/admin/articles/$id"
@@ -141,19 +272,55 @@ export function ArticlesDashboardPage() {
                 >
                   <div className="min-w-0">
                     <div className="truncate text-sm font-semibold">{article.title}</div>
-                    <div className="mt-1 text-[11px] capitalize text-muted-foreground">
-                      {article.status}
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      {article.section ?? "Unassigned"} · {article.author ?? "—"}
                     </div>
                   </div>
-                  <div className="cms-metric shrink-0 text-[11px] text-muted-foreground">
-                    {new Date(article.updated_at).toLocaleDateString()}
-                  </div>
+                  <StatusBadge status={article.status}>{article.status}</StatusBadge>
                 </Link>
-              ))
-            )}
-          </div>
+              ))}
+            </div>
+          )}
         </CmsPanel>
       </div>
+    </div>
+  );
+}
+
+function HealthBar({
+  label,
+  value,
+  max,
+  tone,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  tone: string;
+}) {
+  return (
+    <div>
+      <div className="mb-1.5 flex justify-between text-xs">
+        <span className="font-medium">{label}</span>
+        <span className="cms-metric font-semibold">{value}/{max}</span>
+      </div>
+      <div className="h-2 overflow-hidden bg-muted">
+        <div
+          className={cn("h-full cms-transition", tone)}
+          style={{ width: `${Math.max((value / max) * 100, value ? 4 : 0)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function HealthStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="border border-border px-3 py-2.5">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        {label}
+      </div>
+      <div className="cms-metric mt-1 text-lg font-semibold">{value}</div>
     </div>
   );
 }

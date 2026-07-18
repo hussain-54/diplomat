@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { Inbox } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Inbox, Minus, TrendingDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function CmsPageHeader({
@@ -85,14 +86,29 @@ export function CmsStat({
   value,
   detail,
   trend,
+  icon: Icon,
+  changePercent,
   className,
 }: {
   label: string;
   value: string | number;
   detail?: string;
   trend?: "up" | "down" | "neutral";
+  icon?: LucideIcon;
+  /** Period-over-period change, e.g. 12.5 for +12.5% */
+  changePercent?: number | null;
   className?: string;
 }) {
+  const changeTone =
+    changePercent == null || Number.isNaN(changePercent)
+      ? "neutral"
+      : changePercent > 0
+        ? "up"
+        : changePercent < 0
+          ? "down"
+          : "neutral";
+  const resolvedTrend = trend ?? changeTone;
+
   return (
     <div
       className={cn(
@@ -100,22 +116,51 @@ export function CmsStat({
         className,
       )}
     >
-      <div className="eyebrow text-[10px]">{label}</div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="eyebrow text-[10px]">{label}</div>
+        {Icon ? (
+          <div className="flex h-8 w-8 items-center justify-center bg-muted text-muted-foreground group-hover:bg-foreground group-hover:text-background cms-transition">
+            <Icon className="h-4 w-4" />
+          </div>
+        ) : null}
+      </div>
       <div className="cms-metric mt-2.5 text-[1.75rem] font-semibold leading-none text-card-foreground sm:text-[2rem]">
         {value}
       </div>
-      {detail ? (
-        <div
-          className={cn(
-            "mt-2.5 text-[11px] font-medium",
-            trend === "up" && "text-cat-green",
-            trend === "down" && "text-crimson",
-            (!trend || trend === "neutral") && "text-muted-foreground",
-          )}
-        >
-          {detail}
-        </div>
-      ) : null}
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        {changePercent != null && !Number.isNaN(changePercent) ? (
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 text-[11px] font-semibold",
+              changeTone === "up" && "text-cat-green",
+              changeTone === "down" && "text-crimson",
+              changeTone === "neutral" && "text-muted-foreground",
+            )}
+          >
+            {changePercent > 0 ? (
+              <TrendingUp className="h-3 w-3" />
+            ) : changePercent < 0 ? (
+              <TrendingDown className="h-3 w-3" />
+            ) : (
+              <Minus className="h-3 w-3" />
+            )}
+            {changePercent > 0 ? "+" : ""}
+            {changePercent.toFixed(1)}%
+          </span>
+        ) : null}
+        {detail ? (
+          <span
+            className={cn(
+              "text-[11px] font-medium",
+              resolvedTrend === "up" && !changePercent && "text-cat-green",
+              resolvedTrend === "down" && !changePercent && "text-crimson",
+              (resolvedTrend === "neutral" || changePercent != null) && "text-muted-foreground",
+            )}
+          >
+            {detail}
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }
