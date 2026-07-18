@@ -46,7 +46,30 @@ import {
   type ImageAlign,
   type ListStyle,
 } from "@/lib/blocks";
+import {
+  EditorBubbleToolbar,
+  selectionBubblePos,
+  type BubblePos,
+} from "@/components/editor-bubble-toolbar";
+import {
+  clipboardToEditorText,
+  looksLikeRichHtml,
+  pasteLooksLikeList,
+  pasteToListItems,
+  splitPasteParagraphs,
+} from "@/lib/paste-cleanup";
 import { wrapSelection } from "@/lib/writing-stats";
+
+function insertAtCaret(
+  value: string,
+  start: number,
+  end: number,
+  insert: string,
+): { text: string; selectionStart: number; selectionEnd: number } {
+  const text = value.slice(0, start) + insert + value.slice(end);
+  const caret = start + insert.length;
+  return { text, selectionStart: caret, selectionEnd: caret };
+}
 
 const BLOCK_ICONS: Record<BlockType, typeof AlignLeft> = {
   paragraph: AlignLeft,
@@ -107,8 +130,58 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
   const [activeField, setActiveField] = useState<ActiveField | null>(null);
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
   const [convertOpenId, setConvertOpenId] = useState<string | null>(null);
+  const [bubblePos, setBubblePos] = useState<BubblePos | null>(null);
+  const bubbleBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const focusedBlock = value.find((b) => b.id === focusedBlockId) ?? null;
+
+  const updateBubble = useCallback(() => {
+    if (readOnly || !activeField) {
+      setBubblePos(null);
+      return;
+    }
+    setBubblePos(selectionBubblePos(activeField.el));
+  }, [readOnly, activeField]);
+
+  const focusField = useCallback((blockId: string, el: HTMLTextAreaElement | HTMLInputElement) => {
+    if (bubbleBlurTimer.current) {
+      clearTimeout(bubbleBlurTimer.current);
+      bubbleBlurTimer.current = null;
+    }
+    setActiveField({ blockId, el });
+  }, []);
+
+  const blurField = useCallback(() => {
+    if (bubbleBlurTimer.current) clearTimeout(bubbleBlurTimer.current);
+    bubbleBlurTimer.current = setTimeout(() => {
+      setBubblePos(null);
+      bubbleBlurTimer.current = null;
+    }, 150);
+  }, []);
+
+  useEffect(() => {
+    if (!activeField) {
+      setBubblePos(null);
+      return;
+    }
+    const el = activeField.el;
+    const onSel = () => {
+      if (readOnly) {
+        setBubblePos(null);
+        return;
+      }
+      setBubblePos(selectionBubblePos(el));
+    };
+    el.addEventListener("select", onSel);
+    el.addEventListener("mouseup", onSel);
+    el.addEventListener("keyup", onSel);
+    onSel();
+    return () => {
+      el.removeEventListener("select", onSel);
+      el.removeEventListener("mouseup", onSel);
+      el.removeEventListener("keyup", onSel);
+    };
+  }, [activeField, readOnly]);
 
   const apply = useCallback(
     (next: Block[], editedBlockId: string | null = null) => {
@@ -294,6 +367,16 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
 
   return (
     <div onKeyDown={onKeyDown} className="relative">
+      {bubblePos && !readOnly && (
+        <EditorBubbleToolbar
+          pos={bubblePos}
+          onBold={() => applyMark("**")}
+          onItalic={() => applyMark("*")}
+          onUnderline={() => applyMark("__")}
+          onStrike={() => applyMark("~~")}
+          onLink={insertLink}
+        />
+      )}
       {/* Sticky formatting toolbar */}
       <div className="sticky top-0 z-30 flex flex-wrap items-center gap-1 border-b border-border/60 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <ToolButton
@@ -501,7 +584,36 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
                           block.id,
                         );
                       }}
-                      onFocusField={(el) => setActiveField({ blockId: block.id, el })}
+                      onPasteBlocks={(chunks) => {
+                        const idx = value.findIndex((b) => b.id === block.id);
+                        if (idx === -1 || chunks.length < 2) return;
+                        const [first, ...rest] = chunks;
+                        const next = [...value];
+                        next[idx] = { id: block.id, type: "paragraph", data: { text: first } };
+                        const restJoined = rest.join("\n\n");
+                        if (pasteLooksLikeList(restJoined)) {
+                          const listBlock = createBlock("list") as Extract<Block, { type: "list" }>;
+                          listBlock.data = { style: "bullet", items: pasteToListItems(restJoined) };
+                          next.splice(idx + 1, 0, listBlock);
+                        } else {
+                          next.splice(
+                            idx + 1,
+                            0,
+                            ...rest.map((text) => {
+                              const para = createBlock("paragraph") as Extract<
+                                Block,
+                                { type: "paragraph" }
+                              >;
+                              para.data = { text };
+                              return para;
+                            }),
+                          );
+                        }
+                        apply(next, block.id);
+                      }}
+                      onFocusField={(el) => focusField(block.id, el)}
+                      onBlurField={blurField}
+                      onSelectField={updateBubble}
                       onSlashQuery={(query) => {
                         if (query === null) setSlashAt(null);
                         else setSlashAt({ blockId: block.id, query });
@@ -695,18 +807,24 @@ function BlockFields({
   readOnly,
   onChange,
   onReplaceBlock,
+  onPasteBlocks,
   onKeyDown,
   onUploadImage,
   onFocusField,
+  onBlurField,
+  onSelectField,
   onSlashQuery,
 }: {
   block: Block;
   readOnly?: boolean;
   onChange: (data: Block["data"]) => void;
   onReplaceBlock: (next: Block) => void;
+  onPasteBlocks?: (chunks: string[]) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
   onUploadImage?: (file: File) => Promise<string>;
   onFocusField: (el: HTMLTextAreaElement | HTMLInputElement) => void;
+  onBlurField?: () => void;
+  onSelectField?: () => void;
   onSlashQuery: (query: string | null) => void;
 }) {
   const common = {
@@ -714,18 +832,22 @@ function BlockFields({
     onKeyDown,
     onFocus: (e: React.FocusEvent<HTMLTextAreaElement | HTMLInputElement>) =>
       onFocusField(e.currentTarget),
+    onBlur: () => onBlurField?.(),
+    onSelect: () => onSelectField?.(),
+    onMouseUp: () => onSelectField?.(),
+    onKeyUp: () => onSelectField?.(),
   };
 
   const pasteClipboardImage = async (
     e: React.ClipboardEvent,
     mode: "image" | "paragraph",
   ) => {
-    if (!onUploadImage || readOnly) return;
+    if (!onUploadImage || readOnly) return false;
     const items = Array.from(e.clipboardData?.items ?? []);
     const imageItem = items.find((item) => item.type.startsWith("image/"));
-    if (!imageItem) return;
+    if (!imageItem) return false;
     const file = imageItem.getAsFile();
-    if (!file) return;
+    if (!file) return false;
     e.preventDefault();
     try {
       const url = await onUploadImage(file);
@@ -741,6 +863,42 @@ function BlockFields({
     } catch {
       /* ignore upload errors */
     }
+    return true;
+  };
+
+  const handleRichTextPaste = (
+    e: React.ClipboardEvent<HTMLTextAreaElement | HTMLInputElement>,
+    currentText: string,
+    applyText: (next: string, selectionStart: number, selectionEnd: number) => void,
+    opts?: { allowMultiBlock?: boolean },
+  ) => {
+    if (readOnly) return;
+    const cleaned = clipboardToEditorText(e.clipboardData);
+    if (cleaned == null) return;
+
+    const html = e.clipboardData.getData("text/html");
+    const isRich = !!(html && looksLikeRichHtml(html));
+    const chunks = splitPasteParagraphs(cleaned);
+    const empty = !currentText.trim();
+
+    if (opts?.allowMultiBlock && empty && chunks.length >= 2 && onPasteBlocks) {
+      e.preventDefault();
+      onPasteBlocks(chunks);
+      return;
+    }
+
+    if (!isRich) return;
+
+    e.preventDefault();
+    const el = e.currentTarget;
+    const start = el.selectionStart ?? currentText.length;
+    const end = el.selectionEnd ?? currentText.length;
+    const result = insertAtCaret(currentText, start, end, cleaned);
+    applyText(result.text, result.selectionStart, result.selectionEnd);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(result.selectionStart, result.selectionEnd);
+    });
   };
 
   switch (block.type) {
@@ -758,7 +916,24 @@ function BlockFields({
               onSlashQuery(null);
             }
           }}
-          onPaste={(e) => void pasteClipboardImage(e, "paragraph")}
+          onPaste={(e) => {
+            const hasImage = Array.from(e.clipboardData?.items ?? []).some((item) =>
+              item.type.startsWith("image/"),
+            );
+            if (hasImage && onUploadImage && !readOnly) {
+              void pasteClipboardImage(e, "paragraph");
+              return;
+            }
+            handleRichTextPaste(
+              e,
+              block.data.text,
+              (text) => {
+                onChange({ ...block.data, text });
+                onSlashQuery(null);
+              },
+              { allowMultiBlock: true },
+            );
+          }}
           className={`${canvasField} font-serif text-[1.125rem] leading-8`}
         />
       );
@@ -778,6 +953,11 @@ function BlockFields({
             value={block.data.text}
             placeholder={`Heading ${block.data.level}`}
             onChange={(e) => onChange({ ...block.data, text: e.target.value })}
+            onPaste={(e) =>
+              handleRichTextPaste(e, block.data.text, (text) =>
+                onChange({ ...block.data, text }),
+              )
+            }
             className={`${canvasField} font-serif ${size}`}
           />
           <select
@@ -887,6 +1067,11 @@ function BlockFields({
             value={block.data.text}
             placeholder="Quote…"
             onChange={(text) => onChange({ ...block.data, text })}
+            onPaste={(e) =>
+              handleRichTextPaste(e, block.data.text, (text) =>
+                onChange({ ...block.data, text }),
+              )
+            }
             className={`${canvasField} font-serif text-lg italic leading-7`}
           />
           <input
@@ -906,6 +1091,11 @@ function BlockFields({
             value={block.data.text}
             placeholder="Pull quote…"
             onChange={(text) => onChange({ ...block.data, text })}
+            onPaste={(e) =>
+              handleRichTextPaste(e, block.data.text, (text) =>
+                onChange({ ...block.data, text }),
+              )
+            }
             className={`${canvasField} text-center font-serif text-2xl font-medium italic leading-snug`}
           />
           <input
@@ -972,7 +1162,39 @@ function BlockFields({
                       items: block.data.items.map((it, j) => (j === i ? { ...it, text } : it)),
                     })
                   }
-                  className={`${canvasField} font-serif text-base leading-7`}
+                  onKeyDown={(e) => {
+                    if (!readOnly && e.key === "Enter" && !e.shiftKey && !(e.ctrlKey || e.metaKey)) {
+                      if (item.text.trim()) {
+                        e.preventDefault();
+                        const items = [...block.data.items];
+                        items.splice(i + 1, 0, {
+                          text: "",
+                          ...(block.data.style === "check" ? { checked: false } : {}),
+                        });
+                        onChange({ ...block.data, items });
+                        return;
+                      }
+                    }
+                    if (
+                      !readOnly &&
+                      e.key === "Backspace" &&
+                      !item.text &&
+                      (e.currentTarget.selectionStart ?? 0) === 0
+                    ) {
+                      if (block.data.items.length > 1) {
+                        e.preventDefault();
+                        onChange({
+                          ...block.data,
+                          items: block.data.items.filter((_, j) => j !== i),
+                        });
+                        return;
+                      }
+                    }
+                    onKeyDown(e);
+                  }}
+                  className={`${canvasField} font-serif text-base leading-7${
+                    item.checked ? " text-muted-foreground line-through" : ""
+                  }`}
                 />
                 {!readOnly && (
                   <button
@@ -1100,13 +1322,44 @@ function BlockFields({
       );
     case "table": {
       const colCount = Math.max(block.data.headers.length, 1);
+      const rowCount = Math.max(block.data.rows.length, 1);
+      const deleteColumn = (col: number) => {
+        if (colCount <= 1) return;
+        onChange({
+          headers: block.data.headers.filter((_, i) => i !== col),
+          rows: block.data.rows.map((row) => row.filter((_, i) => i !== col)),
+        });
+      };
+      const deleteRow = (rowIndex: number) => {
+        if (block.data.rows.length <= 1) return;
+        onChange({
+          ...block.data,
+          rows: block.data.rows.filter((_, i) => i !== rowIndex),
+        });
+      };
+      const mergeLastTwoColumns = () => {
+        if (colCount < 2) return;
+        const a = colCount - 2;
+        const b = colCount - 1;
+        const left = (block.data.headers[a] ?? "").trim();
+        const right = (block.data.headers[b] ?? "").trim();
+        const mergedHeader = [left, right].filter(Boolean).join(" / ") || `Column ${a + 1}`;
+        onChange({
+          headers: [...block.data.headers.slice(0, a), mergedHeader, ...block.data.headers.slice(b + 1)],
+          rows: block.data.rows.map((row) => [
+            ...row.slice(0, a),
+            `${row[a] ?? ""} ${row[b] ?? ""}`.trim(),
+            ...row.slice(b + 1),
+          ]),
+        });
+      };
       return (
         <div className="space-y-2 overflow-x-auto">
           <table className="w-full min-w-[480px] border-collapse text-sm">
             <thead>
               <tr>
                 {block.data.headers.map((header, col) => (
-                  <th key={col} className="border border-border/60 bg-muted/30 p-1">
+                  <th key={col} className="border border-border/60 bg-muted/30 p-1 align-top">
                     <input
                       {...common}
                       value={header}
@@ -1121,8 +1374,19 @@ function BlockFields({
                       }
                       className={`${canvasField} px-2 py-1 text-xs font-semibold`}
                     />
+                    {!readOnly && colCount > 1 && (
+                      <button
+                        type="button"
+                        title="Delete column"
+                        onClick={() => deleteColumn(col)}
+                        className="mx-auto mt-0.5 flex h-5 w-5 items-center justify-center text-muted-foreground hover:text-crimson"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
                   </th>
                 ))}
+                {!readOnly && block.data.rows.length > 1 ? <th className="w-8" /> : null}
               </tr>
             </thead>
             <tbody>
@@ -1150,6 +1414,18 @@ function BlockFields({
                       />
                     </td>
                   ))}
+                  {!readOnly && block.data.rows.length > 1 && (
+                    <td className="border-0 p-1 align-middle">
+                      <button
+                        type="button"
+                        title="Delete row"
+                        onClick={() => deleteRow(rowIndex)}
+                        className="inline-flex h-6 w-6 items-center justify-center text-muted-foreground hover:text-crimson"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -1179,6 +1455,35 @@ function BlockFields({
                 }
               >
                 Add column
+              </button>
+              <button
+                type="button"
+                disabled={rowCount <= 1}
+                className="rounded-sm px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                onClick={() =>
+                  onChange({
+                    ...block.data,
+                    rows: block.data.rows.slice(0, -1),
+                  })
+                }
+              >
+                Delete last row
+              </button>
+              <button
+                type="button"
+                disabled={colCount <= 1}
+                className="rounded-sm px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                onClick={() => deleteColumn(colCount - 1)}
+              >
+                Delete last column
+              </button>
+              <button
+                type="button"
+                disabled={colCount < 2}
+                className="rounded-sm px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+                onClick={mergeLastTwoColumns}
+              >
+                Merge last two columns
               </button>
             </div>
           ) : null}
@@ -1373,16 +1678,26 @@ function AutoTextarea({
   disabled,
   onKeyDown,
   onFocus,
+  onBlur,
   onPaste,
+  onSelect,
+  onMouseUp,
+  onKeyUp,
+  style,
 }: {
   value: string;
   onChange: (value: string) => void;
   className?: string;
   placeholder?: string;
   disabled?: boolean;
-  onKeyDown?: (e: React.KeyboardEvent) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onFocus?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
+  onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
   onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
+  onSelect?: (e: React.SyntheticEvent<HTMLTextAreaElement>) => void;
+  onMouseUp?: (e: React.MouseEvent<HTMLTextAreaElement>) => void;
+  onKeyUp?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  style?: React.CSSProperties;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -1398,10 +1713,15 @@ function AutoTextarea({
       value={value}
       disabled={disabled}
       placeholder={placeholder}
+      style={style}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={onKeyDown}
       onFocus={onFocus}
+      onBlur={onBlur}
       onPaste={onPaste}
+      onSelect={onSelect}
+      onMouseUp={onMouseUp}
+      onKeyUp={onKeyUp}
       className={`${className} resize-none overflow-hidden`}
     />
   );
