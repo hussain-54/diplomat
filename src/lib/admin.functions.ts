@@ -498,6 +498,17 @@ export const restoreArticleRevision = async ({
 }: {
   data: { article_id: string; revision_id: string };
 }) => {
+  const { data: restoredId, error: rpcError } = await supabase.rpc(
+    "admin_restore_article_revision",
+    { p_revision_id: data.revision_id },
+  );
+  if (!rpcError && restoredId) {
+    return getAdminArticle({ data: { id: data.article_id } });
+  }
+  if (rpcError && !/admin_restore_article_revision|schema cache|PGRST202/i.test(rpcError.message)) {
+    throw toAppError(rpcError);
+  }
+
   const { data: revision, error } = await supabase
     .from("article_revisions")
     .select("snapshot")
@@ -505,7 +516,16 @@ export const restoreArticleRevision = async ({
     .eq("article_id", data.article_id)
     .single();
   if (error) throw toAppError(error);
-  const snapshot = revision.snapshot as unknown as Database["public"]["Tables"]["articles"]["Row"];
+
+  const raw = revision.snapshot as unknown;
+  const wrapped =
+    raw &&
+    typeof raw === "object" &&
+    !Array.isArray(raw) &&
+    "article" in (raw as Record<string, unknown>)
+      ? (raw as { article: Database["public"]["Tables"]["articles"]["Row"]; tag_ids?: string[] })
+      : null;
+  const snapshot = (wrapped?.article ?? raw) as Database["public"]["Tables"]["articles"]["Row"];
   if (!snapshot?.title || !snapshot.section_id) {
     throw new Error("This revision cannot be restored.");
   }
@@ -559,7 +579,31 @@ export const restoreArticleRevision = async ({
           : {},
     },
   });
+
+  if (wrapped?.tag_ids?.length) {
+    const { data: tags } = await supabase.from("tags").select("id,name").in("id", wrapped.tag_ids);
+    if (tags?.length) {
+      await setArticleTags({
+        data: { article_id: data.article_id, tag_names: tags.map((tag) => tag.name) },
+      });
+    }
+  }
+
   return article;
+};
+
+export const publishDueArticles = async () => {
+  await requirePermission("articles:publish");
+  const { data, error } = await supabase.rpc("publish_due_articles");
+  if (error) {
+    if (/publish_due_articles|schema cache|PGRST202/i.test(error.message)) {
+      throw new Error(
+        "Scheduled publish is not installed. Apply supabase/migrations/20260718120000_newsroom_foundation_hardening.sql.",
+      );
+    }
+    throw toAppError(error);
+  }
+  return { published: data ?? 0 };
 };
 
 // AMBASSADORS

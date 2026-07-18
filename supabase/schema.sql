@@ -339,6 +339,37 @@ CREATE TABLE IF NOT EXISTS public.admin_backup_records (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS public.notification_outbox (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_type text NOT NULL,
+  channel text NOT NULL DEFAULT 'email',
+  recipient_user_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  recipient_email text,
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status text NOT NULL DEFAULT 'pending',
+  error text,
+  scheduled_for timestamptz NOT NULL DEFAULT now(),
+  sent_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.article_revisions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  article_id uuid NOT NULL REFERENCES public.articles(id) ON DELETE CASCADE,
+  version integer NOT NULL CHECK (version > 0),
+  snapshot jsonb NOT NULL,
+  changed_by uuid REFERENCES public.profiles(id) ON DELETE SET NULL,
+  changed_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (article_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS public.article_daily_metrics (
+  article_id uuid NOT NULL REFERENCES public.articles(id) ON DELETE CASCADE,
+  metric_date date NOT NULL DEFAULT current_date,
+  views bigint NOT NULL DEFAULT 0 CHECK (views >= 0),
+  PRIMARY KEY (article_id, metric_date)
+);
+
 -- ============ SECURITY HELPER FUNCTIONS ============
 
 CREATE OR REPLACE FUNCTION app_hidden.has_role(_user_id uuid, _role public.app_role)

@@ -768,6 +768,56 @@ export type Database = {
           },
         ]
       }
+      notification_outbox: {
+        Row: {
+          channel: string
+          created_at: string
+          error: string | null
+          event_type: string
+          id: string
+          payload: Json
+          recipient_email: string | null
+          recipient_user_id: string | null
+          scheduled_for: string
+          sent_at: string | null
+          status: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          error?: string | null
+          event_type: string
+          id?: string
+          payload?: Json
+          recipient_email?: string | null
+          recipient_user_id?: string | null
+          scheduled_for?: string
+          sent_at?: string | null
+          status?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          error?: string | null
+          event_type?: string
+          id?: string
+          payload?: Json
+          recipient_email?: string | null
+          recipient_user_id?: string | null
+          scheduled_for?: string
+          sent_at?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_outbox_recipient_user_id_fkey"
+            columns: ["recipient_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1027,6 +1077,26 @@ export type Database = {
           p_section_id?: string | null
         }
         Returns: number
+      }
+      admin_restore_article_revision: {
+        Args: {
+          p_revision_id: string
+        }
+        Returns: string
+      }
+      publish_due_articles: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      enqueue_notification: {
+        Args: {
+          p_event_type: string
+          p_payload?: Json
+          p_recipient_user_id?: string | null
+          p_recipient_email?: string | null
+          p_channel?: string
+        }
+        Returns: string
       }
       admin_reorder_categories: {
         Args: {
