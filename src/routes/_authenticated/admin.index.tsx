@@ -1,29 +1,31 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Activity,
-  ArrowRight,
-  Bell,
-  CircleAlert,
-  Clock3,
-  FileText,
-  Radio,
-} from "lucide-react";
+import { FileText } from "lucide-react";
 import {
   getAnalyticsOverview,
   getDashboardMetrics,
+  getDashboardSettingsSnapshot,
   getMe,
   listDashboardArticles,
 } from "@/lib/admin.functions";
 import { getTicker } from "@/lib/content.functions";
-import {
-  CmsEmptyState,
-  CmsPageHeader,
-  CmsPanel,
-  CmsStat,
-  CmsStatus,
-} from "@/components/cms-ui";
+import { PageHeader } from "@/components/cms";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  AnalyticsView,
+  DashboardViewTabs,
+  EditorialView,
+  NotificationsView,
+  OverviewView,
+  QuickActionsView,
+  RealtimeView,
+  RevenueView,
+  SeoView,
+  type DashboardArticle,
+  type DashboardView,
+} from "@/components/dashboard/newsroom-dashboard";
+import { parseIntegrations } from "@/lib/settings";
 import { useLiveVisitors } from "@/hooks/useLiveVisitors";
 import { useNewsroomRealtime } from "@/hooks/useNewsroomRealtime";
 import { hasPermission } from "@/lib/permissions";
@@ -35,10 +37,12 @@ export const Route = createFileRoute("/_authenticated/admin/")({
 });
 
 function Overview() {
+  const [view, setView] = useState<DashboardView>("overview");
   const me = useQuery({ queryKey: ["me"], queryFn: () => getMe() });
   const canViewArticles = hasPermission(me.data?.roles, "articles:view");
   const canCreateArticles = hasPermission(me.data?.roles, "articles:create");
   const canViewAnalytics = hasPermission(me.data?.roles, "analytics:view");
+
   const articles = useQuery({
     queryKey: ["dashboard-articles"],
     queryFn: listDashboardArticles,
@@ -56,23 +60,83 @@ function Overview() {
     queryFn: getAnalyticsOverview,
     enabled: canViewAnalytics,
   });
+  const settings = useQuery({
+    queryKey: ["dashboard-settings-snapshot"],
+    queryFn: getDashboardSettingsSnapshot,
+  });
+
   const { count: liveVisitors, connected: presenceConnected } = useLiveVisitors();
   const realtimeConnected = useNewsroomRealtime();
 
-  const list = articles.data ?? [];
+  const list = (articles.data ?? []) as DashboardArticle[];
   const review = list.filter((a) => a.status === "review");
-  const pendingComments = (analytics.data?.comments ?? []).filter(
-    (comment) => comment.status === "pending",
-  ).length;
+  const recentPublished = list
+    .filter((a) => a.status === "published")
+    .slice(0, 8);
   const breakingAlerts = alerts.data ?? [];
-  const recent = list.slice(0, 6);
+  const pendingComments =
+    metrics.data?.pendingComments ??
+    (analytics.data?.comments ?? []).filter((comment) => comment.status === "pending").length;
+  const flaggedComments = metrics.data?.flaggedComments ?? 0;
+
+  const analyticsModel = useMemo(() => {
+    const data = analytics.data;
+    const totalViews = (data?.metrics ?? []).reduce((sum, item) => sum + item.views, 0);
+    const published = (data?.articles ?? []).filter((article) => article.status === "published").length;
+    const pending = (data?.comments ?? []).filter((comment) => comment.status === "pending").length;
+
+    const daily = new Map<string, number>();
+    for (let offset = 29; offset >= 0; offset -= 1) {
+      const date = new Date();
+      date.setUTCDate(date.getUTCDate() - offset);
+      daily.set(date.toISOString().slice(0, 10), 0);
+    }
+    for (const metric of data?.metrics ?? []) {
+      daily.set(metric.metric_date, (daily.get(metric.metric_date) ?? 0) + metric.views);
+    }
+
+    const storyTotals = new Map<string, { title: string; views: number }>();
+    for (const metric of data?.metrics ?? []) {
+      const article = Array.isArray(metric.articles) ? metric.articles[0] : metric.articles;
+      const current = storyTotals.get(metric.article_id) ?? {
+        title: article?.title ?? "Unknown article",
+        views: 0,
+      };
+      current.views += metric.views;
+      storyTotals.set(metric.article_id, current);
+    }
+
+    const sectionCounts = new Map<string, number>();
+    for (const article of data?.articles ?? []) {
+      const section = Array.isArray(article.sections) ? article.sections[0] : article.sections;
+      const name = section?.name ?? "Unassigned";
+      sectionCounts.set(name, (sectionCounts.get(name) ?? 0) + 1);
+    }
+
+    return {
+      totalViews,
+      published,
+      pendingComments: pending,
+      commentCount: data?.comments.length ?? 0,
+      dailyRows: [...daily.entries()] as Array<[string, number]>,
+      topStories: [...storyTotals.values()].sort((a, b) => b.views - a.views).slice(0, 8),
+      sectionCounts: [...sectionCounts.entries()].sort((a, b) => b[1] - a[1]),
+    };
+  }, [analytics.data]);
+
+  const integrations = parseIntegrations(
+    (settings.data as { integrations?: unknown } | null)?.integrations,
+  );
+
   const isLoading =
     me.isLoading ||
     articles.isLoading ||
     alerts.isLoading ||
     metrics.isLoading ||
     (canViewAnalytics && analytics.isLoading);
-  const error = me.error ?? articles.error ?? alerts.error ?? metrics.error ?? analytics.error;
+  const error =
+    me.error ?? articles.error ?? alerts.error ?? metrics.error ?? analytics.error ?? settings.error;
+
   const dateLabel = new Intl.DateTimeFormat("en", {
     weekday: "long",
     day: "numeric",
@@ -83,10 +147,10 @@ function Overview() {
 
   return (
     <div className="space-y-6">
-      <CmsPageHeader
+      <PageHeader
         eyebrow={dateLabel}
-        title={`Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, ${me.data?.profile?.name?.split(" ")[0] ?? "editor"}`}
-        description="A live view of publishing, editorial workflow, and audience activity."
+        title={`Good ${greeting()}, ${me.data?.profile?.name?.split(" ")[0] ?? "editor"}`}
+        description="Enterprise newsroom command center — editorial, SEO, analytics, revenue readiness, and live operations."
         actions={
           <>
             <div className="flex h-9 items-center gap-2 border border-border px-3 text-xs text-muted-foreground">
@@ -116,222 +180,93 @@ function Overview() {
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <CmsStat
-          label="Published Today"
-          value={metrics.data?.publishedToday ?? 0}
-          detail="Stories published since midnight"
-          trend={metrics.data?.publishedToday ? "up" : "neutral"}
-        />
-        <CmsStat
-          label="Pending Review"
-          value={metrics.data?.pendingReview ?? 0}
-          detail="Awaiting an editorial decision"
-          trend={review.length ? "down" : "neutral"}
-        />
-        <CmsStat
-          label="Live Visitors"
-          value={presenceConnected ? liveVisitors : "—"}
-          detail={presenceConnected ? "Readers currently on the site" : "Connecting to presence"}
-          trend={liveVisitors > 0 ? "up" : "neutral"}
-        />
-        <CmsStat
-          label="Breaking Alerts"
-          value={breakingAlerts.length}
-          detail="Active ticker alerts"
-          trend={breakingAlerts.length ? "up" : "neutral"}
-        />
-      </div>
+      <DashboardViewTabs active={view} onChange={setView} />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(320px,0.65fr)]">
-        <CmsPanel
-          title="Recent Articles"
-          description="Latest newsroom stories by update time"
-          action={
-            canViewArticles ? (
-              <Link
-                to="/admin/articles"
-                className="flex items-center gap-1 text-xs font-semibold text-cat-blue"
-              >
-                View all <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            ) : null
-          }
-        >
-          <div className="divide-y divide-border">
-            {!recent.length ? (
-              <CmsEmptyState
-                title="No recent articles"
-                description="New and updated newsroom stories will appear here."
-              />
-            ) : (
-              recent.map((article) => {
-                const content = (
-                  <>
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-foreground">{article.title}</div>
-                    <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
-                      <Clock3 className="h-3 w-3" /> {new Date(article.updated_at).toLocaleString()}
-                    </div>
-                  </div>
-                  <span className="text-xs text-muted-foreground">{sectionName(article.sections)}</span>
-                  <CmsStatus tone={statusTone(article.status)}>{article.status}</CmsStatus>
-                  </>
-                );
-                return canViewArticles ? (
-                  <Link
-                    key={article.id}
-                    to="/admin/articles/$id"
-                    params={{ id: article.id }}
-                    className="grid gap-3 px-5 py-4 hover:bg-muted/30 sm:grid-cols-[1fr_150px_110px]"
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                  <div
-                    key={article.id}
-                    className="grid gap-3 px-5 py-4 sm:grid-cols-[1fr_150px_110px]"
-                  >
-                    {content}
-                  </div>
-                );
-              })
-            )}
+      {view === "overview" && (
+        <OverviewView
+          metrics={{
+            publishedToday: metrics.data?.publishedToday ?? 0,
+            pendingReview: metrics.data?.pendingReview ?? 0,
+            drafts: metrics.data?.drafts ?? 0,
+            scheduled: metrics.data?.scheduled ?? 0,
+          }}
+          liveVisitors={presenceConnected ? liveVisitors : "—"}
+          presenceConnected={presenceConnected}
+          articles={list}
+          review={review}
+          alerts={breakingAlerts}
+          pendingComments={pendingComments}
+          realtimeConnected={realtimeConnected}
+          canViewArticles={canViewArticles}
+          canCreateArticles={canCreateArticles}
+        />
+      )}
+
+      {view === "editorial" && (
+        <EditorialView
+          articles={list}
+          metrics={{
+            pendingReview: metrics.data?.pendingReview ?? 0,
+            drafts: metrics.data?.drafts ?? 0,
+            scheduled: metrics.data?.scheduled ?? 0,
+            archived: metrics.data?.archived ?? 0,
+          }}
+          canViewArticles={canViewArticles}
+        />
+      )}
+
+      {view === "seo" && <SeoView articles={list} canViewArticles={canViewArticles} />}
+
+      {view === "analytics" &&
+        (canViewAnalytics ? (
+          <AnalyticsView {...analyticsModel} />
+        ) : (
+          <div className="border border-border bg-card px-5 py-10 text-sm text-muted-foreground">
+            Analytics requires the <span className="font-semibold text-foreground">analytics:view</span>{" "}
+            permission.
           </div>
-        </CmsPanel>
+        ))}
 
-        <CmsPanel title="Notifications" description="Items requiring newsroom attention">
-          <div className="divide-y divide-border">
-            <Notification
-              icon={CircleAlert}
-              label="Editorial review"
-              detail={`${review.length} ${review.length === 1 ? "story" : "stories"} waiting`}
-              active={review.length > 0}
-            />
-            <Notification
-              icon={Bell}
-              label="Comment moderation"
-              detail={
-                canViewAnalytics
-                  ? `${pendingComments} pending ${pendingComments === 1 ? "comment" : "comments"}`
-                  : "Not available for your role"
-              }
-              active={pendingComments > 0}
-            />
-            <Notification
-              icon={Radio}
-              label="Breaking news"
-              detail={`${breakingAlerts.length} active ${breakingAlerts.length === 1 ? "alert" : "alerts"}`}
-              active={breakingAlerts.length > 0}
-            />
-            <Notification
-              icon={Activity}
-              label="Realtime connection"
-              detail={realtimeConnected ? "Dashboard is synchronized" : "Reconnecting"}
-              active={!realtimeConnected}
-            />
-          </div>
-        </CmsPanel>
-      </div>
+      {view === "revenue" && (
+        <RevenueView
+          adManagerCode={integrations.google_ad_manager_network_code}
+          totalViews={analyticsModel.totalViews}
+          published={analyticsModel.published}
+        />
+      )}
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <CmsPanel title="Editorial Queue" description="Stories submitted for review">
-          {!review.length ? (
-            <CmsEmptyState
-              title="Review queue is clear"
-              description="Submitted stories will appear here automatically."
-            />
-          ) : (
-            <div className="divide-y divide-border">
-              {review.slice(0, 6).map((article) => (
-                <div key={article.id} className="flex items-center gap-4 px-5 py-4">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">{article.title}</div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {sectionName(article.sections)}
-                    </div>
-                  </div>
-                  <CmsStatus tone="warning">Review</CmsStatus>
-                  {canViewArticles && (
-                    <Link
-                      to="/admin/articles/$id"
-                      params={{ id: article.id }}
-                      className="text-xs font-semibold text-cat-blue"
-                    >
-                      Open
-                    </Link>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </CmsPanel>
+      {view === "realtime" && (
+        <RealtimeView
+          liveVisitors={liveVisitors}
+          presenceConnected={presenceConnected}
+          realtimeConnected={realtimeConnected}
+          alerts={breakingAlerts as Array<{ id?: string; text?: string; tag?: string | null }>}
+          publishedToday={metrics.data?.publishedToday ?? 0}
+          recentPublished={recentPublished}
+          canViewArticles={canViewArticles}
+        />
+      )}
 
-        <CmsPanel title="Recent Activity" description="Latest publishing workflow changes">
-          {!recent.length ? (
-            <CmsEmptyState
-              title="No newsroom activity"
-              description="Article changes will be recorded here."
-            />
-          ) : (
-            <div className="divide-y divide-border">
-              {recent.map((article) => (
-                <div key={article.id} className="flex gap-3 px-5 py-4">
-                  <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-cat-blue" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm">
-                      <span className="font-semibold">{article.title}</span>{" "}
-                      <span className="text-muted-foreground">is {article.status}</span>
-                    </div>
-                    <div className="mt-1 text-[11px] text-muted-foreground">
-                      {new Date(article.updated_at).toLocaleString()} · {sectionName(article.sections)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CmsPanel>
-      </div>
+      {view === "notifications" && (
+        <NotificationsView
+          reviewCount={review.length}
+          pendingComments={pendingComments}
+          flaggedComments={flaggedComments}
+          alertCount={breakingAlerts.length}
+          realtimeConnected={realtimeConnected}
+        />
+      )}
+
+      {view === "actions" && <QuickActionsView />}
     </div>
   );
 }
 
-function sectionName(
-  section: { name?: string } | { name?: string }[] | null | undefined,
-) {
-  return (Array.isArray(section) ? section[0]?.name : section?.name) ?? "Unassigned";
-}
-
-function statusTone(status: string): "success" | "warning" | "neutral" {
-  if (status === "published") return "success";
-  if (status === "review") return "warning";
-  return "neutral";
-}
-
-function Notification({
-  icon: Icon,
-  label,
-  detail,
-  active,
-}: {
-  icon: typeof Bell;
-  label: string;
-  detail: string;
-  active: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-3 px-5 py-4">
-      <div className={`flex h-8 w-8 items-center justify-center ${active ? "bg-gold/15 text-gold" : "bg-muted text-muted-foreground"}`}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-xs font-semibold text-foreground">{label}</div>
-        <div className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</div>
-      </div>
-      {active && <span className="h-2 w-2 rounded-full bg-crimson" />}
-    </div>
-  );
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "morning";
+  if (hour < 18) return "afternoon";
+  return "evening";
 }
 
 function DashboardSkeleton() {
@@ -341,6 +276,11 @@ function DashboardSkeleton() {
         <Skeleton className="h-3 w-32" />
         <Skeleton className="h-8 w-72" />
         <Skeleton className="h-4 w-96 max-w-full" />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <Skeleton key={index} className="h-9 w-24" />
+        ))}
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (

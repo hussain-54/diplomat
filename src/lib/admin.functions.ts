@@ -119,33 +119,100 @@ export const listDashboardArticles = async () => {
   await requirePermission("dashboard:view");
   const { data, error } = await supabase
     .from("articles")
-    .select("id,slug,title,status,badge_type,published_at,updated_at,section_id, sections(name,slug)")
+    .select(
+      "id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,section_id,author_id,seo_title,meta_description,focus_keyword,robots_index,canonical_url, sections(name,slug), author:profiles!articles_author_id_fkey(name)",
+    )
     .order("updated_at", { ascending: false })
     .limit(100);
-  if (error) throw toAppError(error);
+  if (error) {
+    // Fallback when SEO columns are not yet migrated.
+    if (/seo_title|meta_description|focus_keyword|robots_index|canonical_url|schema cache|PGRST/i.test(error.message)) {
+      const legacy = await supabase
+        .from("articles")
+        .select("id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,section_id,author_id, sections(name,slug), author:profiles!articles_author_id_fkey(name)")
+        .order("updated_at", { ascending: false })
+        .limit(100);
+      if (legacy.error) throw toAppError(legacy.error);
+      return (legacy.data ?? []).map((row) => ({
+        ...row,
+        seo_title: null,
+        meta_description: null,
+        focus_keyword: null,
+        robots_index: true,
+        canonical_url: null,
+      }));
+    }
+    throw toAppError(error);
+  }
   return data ?? [];
+};
+
+export const getDashboardSettingsSnapshot = async () => {
+  await requirePermission("dashboard:view");
+  const { data, error } = await supabase
+    .from("newsroom_settings")
+    .select("publication_name,integrations,seo_defaults,notification_prefs,comments_enabled")
+    .eq("id", true)
+    .maybeSingle();
+  if (error) {
+    if (/integrations|seo_defaults|notification_prefs|schema cache|PGRST/i.test(error.message)) {
+      const legacy = await supabase
+        .from("newsroom_settings")
+        .select("publication_name,comments_enabled")
+        .eq("id", true)
+        .maybeSingle();
+      if (legacy.error) throw toAppError(legacy.error);
+      return {
+        publication_name: legacy.data?.publication_name ?? "Diplomacy Lens",
+        comments_enabled: legacy.data?.comments_enabled ?? true,
+        integrations: {},
+        seo_defaults: {},
+        notification_prefs: {},
+      };
+    }
+    throw toAppError(error);
+  }
+  return data;
 };
 
 export const getDashboardMetrics = async () => {
   await requirePermission("dashboard:view");
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
-  const [publishedRes, reviewRes] = await Promise.all([
+  const [
+    publishedRes,
+    reviewRes,
+    draftRes,
+    scheduledRes,
+    archivedRes,
+    commentsPendingRes,
+    commentsFlaggedRes,
+  ] = await Promise.all([
     supabase
       .from("articles")
       .select("id", { count: "exact", head: true })
       .eq("status", "published")
       .gte("published_at", startOfToday.toISOString()),
-    supabase
-      .from("articles")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "review"),
+    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "review"),
+    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "draft"),
+    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "scheduled"),
+    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "archived"),
+    supabase.from("comments").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    supabase.from("comments").select("id", { count: "exact", head: true }).eq("status", "flagged"),
   ]);
-  if (publishedRes.error) throw toAppError(publishedRes.error);
-  if (reviewRes.error) throw toAppError(reviewRes.error);
+
+  for (const result of [publishedRes, reviewRes, draftRes, scheduledRes, archivedRes]) {
+    if (result.error) throw toAppError(result.error);
+  }
+
   return {
     publishedToday: publishedRes.count ?? 0,
     pendingReview: reviewRes.count ?? 0,
+    drafts: draftRes.count ?? 0,
+    scheduled: scheduledRes.count ?? 0,
+    archived: archivedRes.count ?? 0,
+    pendingComments: commentsPendingRes.error ? 0 : (commentsPendingRes.count ?? 0),
+    flaggedComments: commentsFlaggedRes.error ? 0 : (commentsFlaggedRes.count ?? 0),
   };
 };
 
