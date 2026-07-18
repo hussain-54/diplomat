@@ -1,33 +1,52 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
+  AlignCenter,
   AlignLeft,
+  AlignRight,
+  Bold,
   Braces,
+  CheckSquare,
+  ChevronDown,
   Code2,
+  Copy,
   GripVertical,
   Heading2,
   Image as ImageIcon,
   Images,
+  Italic,
+  Link2,
+  List,
+  ListOrdered,
+  Maximize2,
   Minus,
   Plus,
   Quote,
   Radio,
   Redo2,
+  Strikethrough,
   Table2,
   Trash2,
+  Underline,
   Undo2,
   Video,
-  Copy,
   ArrowUp,
   ArrowDown,
+  FileCode2,
 } from "lucide-react";
 import {
   BLOCK_LABELS,
+  CONVERTIBLE_TYPES,
+  convertBlockType,
   createBlock,
   embedSrc,
   isDirectVideoFile,
   type Block,
   type BlockType,
+  type HeadingLevel,
+  type ImageAlign,
+  type ListStyle,
 } from "@/lib/blocks";
+import { wrapSelection } from "@/lib/writing-stats";
 
 const BLOCK_ICONS: Record<BlockType, typeof AlignLeft> = {
   paragraph: AlignLeft,
@@ -35,12 +54,15 @@ const BLOCK_ICONS: Record<BlockType, typeof AlignLeft> = {
   image: ImageIcon,
   video: Video,
   quote: Quote,
+  pullquote: Quote,
+  list: List,
   divider: Minus,
   embed: Code2,
   gallery: Images,
   table: Table2,
   code: Braces,
   live: Radio,
+  html: FileCode2,
 };
 
 const BLOCK_MENU: BlockType[] = [
@@ -49,12 +71,15 @@ const BLOCK_MENU: BlockType[] = [
   "image",
   "video",
   "quote",
+  "pullquote",
+  "list",
   "divider",
   "embed",
   "gallery",
   "table",
   "code",
   "live",
+  "html",
 ];
 
 type Props = {
@@ -62,6 +87,11 @@ type Props = {
   onChange: (blocks: Block[]) => void;
   readOnly?: boolean;
   onUploadImage?: (file: File) => Promise<string>;
+};
+
+type ActiveField = {
+  blockId: string;
+  el: HTMLTextAreaElement | HTMLInputElement;
 };
 
 export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props) {
@@ -72,10 +102,16 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
   const [dragId, setDragId] = useState<string | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
   const [menuAt, setMenuAt] = useState<number | null>(null);
+  const [slashAt, setSlashAt] = useState<{ blockId: string; query: string } | null>(null);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [activeField, setActiveField] = useState<ActiveField | null>(null);
+  const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
+  const [convertOpenId, setConvertOpenId] = useState<string | null>(null);
+
+  const focusedBlock = value.find((b) => b.id === focusedBlockId) ?? null;
 
   const apply = useCallback(
     (next: Block[], editedBlockId: string | null = null) => {
-      // Coalesce rapid typing in the same block into one undo step.
       const now = Date.now();
       const coalesce =
         editedBlockId !== null &&
@@ -122,11 +158,13 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
     next.splice(index, 0, createBlock(type));
     apply(next);
     setMenuAt(null);
+    setSlashAt(null);
   };
 
   const removeBlock = (id: string) => {
     const next = value.filter((b) => b.id !== id);
     apply(next.length ? next : [createBlock("paragraph")]);
+    if (slashAt?.blockId === id) setSlashAt(null);
   };
 
   const duplicateBlock = (index: number) => {
@@ -145,6 +183,79 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
     apply(next);
   };
 
+  const convertBlock = (id: string, to: BlockType) => {
+    apply(
+      value.map((b) => (b.id === id ? convertBlockType(b, to) : b)),
+      id,
+    );
+    setConvertOpenId(null);
+  };
+
+  const applyMark = (before: string, after?: string) => {
+    if (readOnly || !activeField) return;
+    const { el, blockId } = activeField;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const result = wrapSelection(el.value, start, end, before, after ?? before);
+    const block = value.find((b) => b.id === blockId);
+    if (!block) return;
+
+    let nextData: Block["data"] | null = null;
+    if (block.type === "paragraph" || block.type === "heading" || block.type === "quote" || block.type === "pullquote") {
+      nextData = { ...block.data, text: result.text };
+    } else if (block.type === "code" || block.type === "html") {
+      nextData = { ...block.data, code: result.text };
+    } else if (block.type === "live") {
+      nextData = { ...block.data, text: result.text };
+    }
+    if (!nextData) return;
+
+    updateBlock(blockId, nextData);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(result.selectionStart, result.selectionEnd);
+    });
+  };
+
+  const insertLink = () => {
+    if (readOnly || !activeField) return;
+    const url = window.prompt("Link URL", "https://");
+    if (!url) return;
+    applyMark("[", `](${url})`);
+  };
+
+  const setHeadingLevel = (level: HeadingLevel) => {
+    if (!focusedBlock || focusedBlock.type !== "heading") return;
+    updateBlock(focusedBlock.id, { ...focusedBlock.data, level });
+  };
+
+  const setImageAlign = (align: ImageAlign) => {
+    if (!focusedBlock || focusedBlock.type !== "image") return;
+    updateBlock(focusedBlock.id, { ...focusedBlock.data, align });
+  };
+
+  const filteredSlash = (() => {
+    if (!slashAt) return [];
+    const q = slashAt.query.toLowerCase();
+    return BLOCK_MENU.filter(
+      (t) => !q || t.includes(q) || BLOCK_LABELS[t].toLowerCase().includes(q),
+    );
+  })();
+
+  useEffect(() => {
+    setSlashIndex(0);
+  }, [slashAt?.query, slashAt?.blockId]);
+
+  const pickSlash = (type: BlockType) => {
+    if (!slashAt) return;
+    const idx = value.findIndex((b) => b.id === slashAt.blockId);
+    if (idx === -1) return;
+    const next = [...value];
+    next[idx] = createBlock(type);
+    apply(next);
+    setSlashAt(null);
+  };
+
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (readOnly) return;
     const mod = e.ctrlKey || e.metaKey;
@@ -154,51 +265,124 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
     } else if ((mod && e.shiftKey && e.key.toLowerCase() === "z") || (mod && e.key.toLowerCase() === "y")) {
       e.preventDefault();
       redo();
+    } else if (mod && e.key.toLowerCase() === "b") {
+      e.preventDefault();
+      applyMark("**");
+    } else if (mod && e.key.toLowerCase() === "i") {
+      e.preventDefault();
+      applyMark("*");
+    } else if (mod && e.key.toLowerCase() === "u") {
+      e.preventDefault();
+      applyMark("__");
     }
   };
 
   useEffect(() => {
-    if (menuAt === null) return;
-    const close = () => setMenuAt(null);
+    if (menuAt === null && convertOpenId === null) return;
+    const close = () => {
+      setMenuAt(null);
+      setConvertOpenId(null);
+    };
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
-  }, [menuAt]);
+  }, [menuAt, convertOpenId]);
+
+  const isEmptyCanvas =
+    value.length === 1 &&
+    value[0]?.type === "paragraph" &&
+    !(value[0] as Extract<Block, { type: "paragraph" }>).data.text.trim();
 
   return (
-    <div onKeyDown={onKeyDown}>
-      <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2">
-        <div className="text-[11px] text-muted-foreground">
-          <kbd className="border border-border bg-background px-1">Ctrl+Z</kbd> undo ·{" "}
-          <kbd className="border border-border bg-background px-1">Ctrl+Shift+Z</kbd> redo ·{" "}
-          <kbd className="border border-border bg-background px-1">Ctrl+Enter</kbd> new paragraph ·{" "}
-          <kbd className="border border-border bg-background px-1">Alt+↑/↓</kbd> move block ·{" "}
-          <kbd className="border border-border bg-background px-1">Ctrl+S</kbd> save
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            title="Undo (Ctrl+Z)"
-            disabled={readOnly || !past.current.length}
-            onClick={undo}
-            className="inline-flex h-7 w-7 items-center justify-center border border-input text-muted-foreground hover:bg-accent disabled:opacity-40"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            title="Redo (Ctrl+Shift+Z)"
-            disabled={readOnly || !future.current.length}
-            onClick={redo}
-            className="inline-flex h-7 w-7 items-center justify-center border border-input text-muted-foreground hover:bg-accent disabled:opacity-40"
-          >
-            <Redo2 className="h-3.5 w-3.5" />
-          </button>
+    <div onKeyDown={onKeyDown} className="relative">
+      {/* Sticky formatting toolbar */}
+      <div className="sticky top-0 z-30 flex flex-wrap items-center gap-1 border-b border-border/60 bg-background/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <ToolButton
+          title="Undo (Ctrl+Z)"
+          disabled={readOnly || !past.current.length}
+          onClick={undo}
+        >
+          <Undo2 className="h-3.5 w-3.5" />
+        </ToolButton>
+        <ToolButton
+          title="Redo (Ctrl+Shift+Z)"
+          disabled={readOnly || !future.current.length}
+          onClick={redo}
+        >
+          <Redo2 className="h-3.5 w-3.5" />
+        </ToolButton>
+        <ToolbarSep />
+        <ToolButton title="Bold (Ctrl+B)" disabled={readOnly || !activeField} onClick={() => applyMark("**")}>
+          <Bold className="h-3.5 w-3.5" />
+        </ToolButton>
+        <ToolButton title="Italic (Ctrl+I)" disabled={readOnly || !activeField} onClick={() => applyMark("*")}>
+          <Italic className="h-3.5 w-3.5" />
+        </ToolButton>
+        <ToolButton title="Underline (Ctrl+U)" disabled={readOnly || !activeField} onClick={() => applyMark("__")}>
+          <Underline className="h-3.5 w-3.5" />
+        </ToolButton>
+        <ToolButton title="Strikethrough" disabled={readOnly || !activeField} onClick={() => applyMark("~~")}>
+          <Strikethrough className="h-3.5 w-3.5" />
+        </ToolButton>
+        <ToolButton title="Insert link" disabled={readOnly || !activeField} onClick={insertLink}>
+          <Link2 className="h-3.5 w-3.5" />
+        </ToolButton>
+
+        {focusedBlock?.type === "heading" && (
+          <>
+            <ToolbarSep />
+            {([1, 2, 3, 4] as HeadingLevel[]).map((level) => (
+              <ToolButton
+                key={level}
+                title={`Heading ${level}`}
+                active={focusedBlock.data.level === level}
+                disabled={readOnly}
+                onClick={() => setHeadingLevel(level)}
+              >
+                <span className="text-[11px] font-bold">H{level}</span>
+              </ToolButton>
+            ))}
+          </>
+        )}
+
+        {focusedBlock?.type === "image" && (
+          <>
+            <ToolbarSep />
+            {(
+              [
+                ["left", AlignLeft],
+                ["center", AlignCenter],
+                ["right", AlignRight],
+                ["full", Maximize2],
+              ] as const
+            ).map(([align, Icon]) => (
+              <ToolButton
+                key={align}
+                title={`Align ${align}`}
+                active={focusedBlock.data.align === align}
+                disabled={readOnly}
+                onClick={() => setImageAlign(align)}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </ToolButton>
+            ))}
+          </>
+        )}
+
+        <div className="ml-auto hidden text-[10px] text-muted-foreground sm:block">
+          <kbd className="rounded border border-border px-1">/</kbd> blocks ·{" "}
+          <kbd className="rounded border border-border px-1">Ctrl+Enter</kbd> paragraph
         </div>
       </div>
 
-      <div className="space-y-1 p-3">
+      <div className="mx-auto max-w-2xl space-y-1 px-4 py-8 sm:px-6">
+        {isEmptyCanvas && !readOnly && (
+          <p className="pointer-events-none mb-2 select-none text-center font-serif text-sm text-muted-foreground/70">
+            Type <span className="font-sans font-medium text-muted-foreground">/</span> to insert a block
+          </p>
+        )}
+
         {value.map((block, index) => (
-          <div key={block.id}>
+          <div key={block.id} className="relative">
             <AddBlockRow
               open={menuAt === index}
               readOnly={readOnly}
@@ -231,14 +415,15 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
                 setDragId(null);
                 setOverIndex(null);
               }}
-              className={`group border transition-colors ${
+              onFocusCapture={() => setFocusedBlockId(block.id)}
+              className={`group relative rounded-sm border transition-colors ${
                 overIndex === index && dragId && dragId !== block.id
-                  ? "border-ring bg-accent/40"
-                  : "border-transparent hover:border-border"
+                  ? "border-ring bg-accent/30"
+                  : "border-transparent hover:border-border/80 focus-within:border-border"
               } ${dragId === block.id ? "opacity-40" : ""}`}
             >
-              <div className="flex items-start gap-2 p-2">
-                <div className="flex shrink-0 flex-col items-center gap-1 pt-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+              <div className="flex items-start gap-1 px-1 py-1 sm:gap-2 sm:px-2">
+                <div className="flex shrink-0 flex-col items-center gap-0.5 pt-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                   <span
                     className={`text-muted-foreground ${readOnly ? "" : "cursor-grab active:cursor-grabbing"}`}
                     title="Drag to reorder"
@@ -246,13 +431,48 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
                     <GripVertical className="h-4 w-4" />
                   </span>
                 </div>
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-                      <BlockIcon type={block.type} /> {BLOCK_LABELS[block.type]}
-                    </span>
+                <div className="min-w-0 flex-1 py-1">
+                  <div className="mb-0.5 flex items-center justify-between gap-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                    <div className="relative flex items-center gap-1">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.1em] text-muted-foreground">
+                        <BlockIcon type={block.type} /> {BLOCK_LABELS[block.type]}
+                      </span>
+                      {!readOnly && CONVERTIBLE_TYPES.includes(block.type) && (
+                        <div className="relative">
+                          <button
+                            type="button"
+                            title="Convert block"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConvertOpenId(convertOpenId === block.id ? null : block.id);
+                            }}
+                            className="inline-flex h-5 items-center gap-0.5 rounded px-1 text-[10px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                          >
+                            Convert <ChevronDown className="h-3 w-3" />
+                          </button>
+                          {convertOpenId === block.id && (
+                            <div
+                              className="absolute left-0 top-6 z-20 min-w-[9rem] border border-border bg-popover py-1 shadow-lg"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {CONVERTIBLE_TYPES.filter((t) => t !== block.type).map((type) => (
+                                <button
+                                  key={type}
+                                  type="button"
+                                  onClick={() => convertBlock(block.id, type)}
+                                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs text-foreground hover:bg-accent"
+                                >
+                                  <BlockIcon type={type} />
+                                  {BLOCK_LABELS[type]}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
                     {!readOnly && (
-                      <span className="flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                      <span className="flex items-center gap-0.5">
                         <ToolButton title="Move up (Alt+↑)" onClick={() => moveBlock(index, index - 1)}>
                           <ArrowUp className="h-3 w-3" />
                         </ToolButton>
@@ -268,30 +488,95 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
                       </span>
                     )}
                   </div>
-                  <BlockFields
-                    block={block}
-                    readOnly={readOnly}
-                    onUploadImage={onUploadImage}
-                    onChange={(data) => updateBlock(block.id, data)}
-                    onKeyDown={(e) => {
-                      if (readOnly) return;
-                      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-                        e.preventDefault();
-                        insertAt(index + 1, "paragraph");
-                      } else if (e.altKey && e.key === "ArrowUp") {
-                        e.preventDefault();
-                        moveBlock(index, index - 1);
-                      } else if (e.altKey && e.key === "ArrowDown") {
-                        e.preventDefault();
-                        moveBlock(index, index + 1);
-                      }
-                    }}
-                  />
+
+                  <div className="relative">
+                    <BlockFields
+                      block={block}
+                      readOnly={readOnly}
+                      onUploadImage={onUploadImage}
+                      onChange={(data) => updateBlock(block.id, data)}
+                      onReplaceBlock={(next) => {
+                        apply(
+                          value.map((b) => (b.id === block.id ? { ...next, id: block.id } : b)),
+                          block.id,
+                        );
+                      }}
+                      onFocusField={(el) => setActiveField({ blockId: block.id, el })}
+                      onSlashQuery={(query) => {
+                        if (query === null) setSlashAt(null);
+                        else setSlashAt({ blockId: block.id, query });
+                      }}
+                      onKeyDown={(e) => {
+                        if (readOnly) return;
+
+                        if (slashAt?.blockId === block.id && filteredSlash.length) {
+                          if (e.key === "ArrowDown") {
+                            e.preventDefault();
+                            setSlashIndex((i) => (i + 1) % filteredSlash.length);
+                            return;
+                          }
+                          if (e.key === "ArrowUp") {
+                            e.preventDefault();
+                            setSlashIndex((i) => (i - 1 + filteredSlash.length) % filteredSlash.length);
+                            return;
+                          }
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            pickSlash(filteredSlash[slashIndex] ?? filteredSlash[0]);
+                            return;
+                          }
+                          if (e.key === "Escape") {
+                            e.preventDefault();
+                            setSlashAt(null);
+                            return;
+                          }
+                        }
+
+                        if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                          e.preventDefault();
+                          insertAt(index + 1, "paragraph");
+                        } else if (e.altKey && e.key === "ArrowUp") {
+                          e.preventDefault();
+                          moveBlock(index, index - 1);
+                        } else if (e.altKey && e.key === "ArrowDown") {
+                          e.preventDefault();
+                          moveBlock(index, index + 1);
+                        }
+                      }}
+                    />
+
+                    {slashAt?.blockId === block.id && filteredSlash.length > 0 && (
+                      <div
+                        className="absolute left-0 top-full z-40 mt-1 max-h-64 w-64 overflow-y-auto border border-border bg-popover shadow-lg"
+                        onMouseDown={(e) => e.preventDefault()}
+                      >
+                        {filteredSlash.map((type, i) => {
+                          const Icon = BLOCK_ICONS[type];
+                          return (
+                            <button
+                              key={type}
+                              type="button"
+                              onClick={() => pickSlash(type)}
+                              className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${
+                                i === slashIndex
+                                  ? "bg-accent text-foreground"
+                                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+                              }`}
+                            >
+                              <Icon className="h-4 w-4 shrink-0" />
+                              <span>{BLOCK_LABELS[type]}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           </div>
         ))}
+
         <AddBlockRow
           open={menuAt === value.length}
           readOnly={readOnly}
@@ -312,21 +597,32 @@ function BlockIcon({ type }: { type: BlockType }) {
   return <Icon className="h-3 w-3" />;
 }
 
+function ToolbarSep() {
+  return <span className="mx-0.5 h-4 w-px bg-border" aria-hidden />;
+}
+
 function ToolButton({
   title,
   onClick,
   children,
+  disabled,
+  active,
 }: {
   title: string;
   onClick: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
+  disabled?: boolean;
+  active?: boolean;
 }) {
   return (
     <button
       type="button"
       title={title}
+      disabled={disabled}
       onClick={onClick}
-      className="inline-flex h-6 w-6 items-center justify-center border border-transparent text-muted-foreground hover:border-input hover:bg-accent hover:text-foreground"
+      className={`inline-flex h-7 min-w-7 items-center justify-center rounded-sm px-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 ${
+        active ? "bg-accent text-foreground" : ""
+      }`}
     >
       {children}
     </button>
@@ -348,12 +644,20 @@ function AddBlockRow({
 }) {
   if (readOnly) return null;
   return (
-    <div className={`relative ${always ? "" : "h-2 opacity-0 transition-opacity hover:h-auto hover:opacity-100"}`}>
-      <div className="flex items-center gap-2 py-1">
+    <div
+      className={`relative ${
+        always
+          ? "mt-4"
+          : "h-1 opacity-0 transition-all hover:h-auto hover:opacity-100 focus-within:h-auto focus-within:opacity-100"
+      }`}
+    >
+      <div className="flex items-center gap-2 py-0.5">
         <button
           type="button"
           onClick={onToggle}
-          className={`inline-flex h-6 items-center gap-1 border border-dashed border-input px-2 text-[11px] font-semibold text-muted-foreground hover:bg-accent hover:text-foreground ${always ? "w-full justify-center" : ""}`}
+          className={`inline-flex h-6 items-center gap-1 rounded-sm border border-dashed border-border/80 px-2 text-[11px] font-medium text-muted-foreground hover:border-foreground/30 hover:bg-accent/50 hover:text-foreground ${
+            always ? "w-full justify-center" : ""
+          }`}
         >
           <Plus className="h-3 w-3" /> Add block
         </button>
@@ -370,7 +674,7 @@ function AddBlockRow({
                 key={type}
                 type="button"
                 onClick={() => onPick(type)}
-                className="flex flex-col items-center gap-1 border border-transparent px-2 py-2 text-[10px] font-semibold text-muted-foreground hover:border-input hover:bg-accent hover:text-foreground"
+                className="flex flex-col items-center gap-1 rounded-sm border border-transparent px-2 py-2 text-[10px] font-semibold text-muted-foreground hover:border-input hover:bg-accent hover:text-foreground"
               >
                 <Icon className="h-4 w-4" />
                 {BLOCK_LABELS[type]}
@@ -383,23 +687,61 @@ function AddBlockRow({
   );
 }
 
-const fieldClass =
-  "w-full border border-input bg-background px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-ring";
+const canvasField =
+  "w-full border-0 bg-transparent px-1 py-1 text-foreground outline-none placeholder:text-muted-foreground/50 focus:outline-none";
 
 function BlockFields({
   block,
   readOnly,
   onChange,
+  onReplaceBlock,
   onKeyDown,
   onUploadImage,
+  onFocusField,
+  onSlashQuery,
 }: {
   block: Block;
   readOnly?: boolean;
   onChange: (data: Block["data"]) => void;
+  onReplaceBlock: (next: Block) => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
   onUploadImage?: (file: File) => Promise<string>;
+  onFocusField: (el: HTMLTextAreaElement | HTMLInputElement) => void;
+  onSlashQuery: (query: string | null) => void;
 }) {
-  const common = { disabled: readOnly, onKeyDown };
+  const common = {
+    disabled: readOnly,
+    onKeyDown,
+    onFocus: (e: React.FocusEvent<HTMLTextAreaElement | HTMLInputElement>) =>
+      onFocusField(e.currentTarget),
+  };
+
+  const pasteClipboardImage = async (
+    e: React.ClipboardEvent,
+    mode: "image" | "paragraph",
+  ) => {
+    if (!onUploadImage || readOnly) return;
+    const items = Array.from(e.clipboardData?.items ?? []);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    if (!imageItem) return;
+    const file = imageItem.getAsFile();
+    if (!file) return;
+    e.preventDefault();
+    try {
+      const url = await onUploadImage(file);
+      if (mode === "image" && block.type === "image") {
+        onChange({ ...block.data, url });
+      } else if (mode === "paragraph") {
+        onReplaceBlock({
+          id: block.id,
+          type: "image",
+          data: { url, alt: "", caption: "", credit: "", align: "full" },
+        });
+      }
+    } catch {
+      /* ignore upload errors */
+    }
+  };
 
   switch (block.type) {
     case "paragraph":
@@ -407,60 +749,113 @@ function BlockFields({
         <AutoTextarea
           {...common}
           value={block.data.text}
-          placeholder="Write a paragraph…"
-          onChange={(text) => onChange({ ...block.data, text })}
-          className={`${fieldClass} font-serif text-base leading-7`}
+          placeholder="Type '/' for blocks, or start writing…"
+          onChange={(text) => {
+            onChange({ ...block.data, text });
+            if (text === "/" || (text.startsWith("/") && !text.includes("\n") && text.length < 40)) {
+              onSlashQuery(text.slice(1));
+            } else {
+              onSlashQuery(null);
+            }
+          }}
+          onPaste={(e) => void pasteClipboardImage(e, "paragraph")}
+          className={`${canvasField} font-serif text-[1.125rem] leading-8`}
         />
       );
-    case "heading":
+    case "heading": {
+      const size =
+        block.data.level === 1
+          ? "text-3xl font-bold"
+          : block.data.level === 2
+            ? "text-2xl font-semibold"
+            : block.data.level === 3
+              ? "text-xl font-semibold"
+              : "text-lg font-medium";
       return (
         <div className="flex items-start gap-2">
           <input
             {...common}
             value={block.data.text}
-            placeholder="Heading text"
+            placeholder={`Heading ${block.data.level}`}
             onChange={(e) => onChange({ ...block.data, text: e.target.value })}
-            className={`${fieldClass} font-serif ${block.data.level === 2 ? "text-xl font-semibold" : "text-lg"}`}
+            className={`${canvasField} font-serif ${size}`}
           />
           <select
             disabled={readOnly}
             value={block.data.level}
-            onChange={(e) => onChange({ ...block.data, level: Number(e.target.value) as 2 | 3 })}
-            className="h-9 shrink-0 border border-input bg-background px-2 text-xs"
+            onChange={(e) =>
+              onChange({ ...block.data, level: Number(e.target.value) as HeadingLevel })
+            }
+            className="mt-1 h-8 shrink-0 rounded-sm border-0 bg-transparent px-1 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent"
           >
+            <option value={1}>H1</option>
             <option value={2}>H2</option>
             <option value={3}>H3</option>
+            <option value={4}>H4</option>
           </select>
         </div>
       );
+    }
     case "image":
       return (
-        <div className="space-y-2">
+        <div className="space-y-2" onPaste={(e) => void pasteClipboardImage(e, "image")}>
           {block.data.url && (
-            <img src={block.data.url} alt={block.data.alt} className="max-h-64 border border-border object-contain" />
+            <img
+              src={block.data.url}
+              alt={block.data.alt}
+              className={`max-h-72 border border-border/50 object-contain ${
+                block.data.align === "left"
+                  ? "mr-auto"
+                  : block.data.align === "right"
+                    ? "ml-auto"
+                    : block.data.align === "center"
+                      ? "mx-auto"
+                      : "w-full"
+              }`}
+            />
           )}
           <MediaUrlInput
             readOnly={readOnly}
             url={block.data.url}
             onUrl={(url) => onChange({ ...block.data, url })}
             onUploadImage={onUploadImage}
-            placeholder="Image URL"
+            placeholder="Image URL or paste image"
           />
           <div className="grid gap-2 sm:grid-cols-2">
             <input
               {...common}
               value={block.data.alt}
-              placeholder="Alt text (accessibility)"
+              placeholder="Alt text"
               onChange={(e) => onChange({ ...block.data, alt: e.target.value })}
-              className={`${fieldClass} text-xs`}
+              className={`${canvasField} text-xs`}
             />
             <input
               {...common}
               value={block.data.caption}
-              placeholder="Caption (optional)"
+              placeholder="Caption"
               onChange={(e) => onChange({ ...block.data, caption: e.target.value })}
-              className={`${fieldClass} text-xs`}
+              className={`${canvasField} text-xs`}
             />
+            <input
+              {...common}
+              value={block.data.credit}
+              placeholder="Credit / source"
+              onChange={(e) => onChange({ ...block.data, credit: e.target.value })}
+              className={`${canvasField} text-xs`}
+            />
+            <select
+              disabled={readOnly}
+              value={block.data.align}
+              onChange={(e) =>
+                onChange({ ...block.data, align: e.target.value as ImageAlign })
+              }
+              className="h-8 rounded-sm border-0 bg-transparent px-1 text-xs text-muted-foreground hover:bg-accent"
+            >
+              <option value="full">Full width</option>
+              <option value="center">Center</option>
+              <option value="left">Left</option>
+              <option value="right">Right</option>
+            </select>
           </div>
         </div>
       );
@@ -472,7 +867,7 @@ function BlockFields({
             value={block.data.url}
             placeholder="Video URL (YouTube, Vimeo, or direct .mp4)"
             onChange={(e) => onChange({ ...block.data, url: e.target.value })}
-            className={`${fieldClass} text-xs`}
+            className={`${canvasField} text-xs`}
           />
           <VideoPreview url={block.data.url} />
           <input
@@ -480,31 +875,142 @@ function BlockFields({
             value={block.data.caption}
             placeholder="Caption (optional)"
             onChange={(e) => onChange({ ...block.data, caption: e.target.value })}
-            className={`${fieldClass} text-xs`}
+            className={`${canvasField} text-xs`}
           />
         </div>
       );
     case "quote":
       return (
-        <div className="space-y-2 border-l-2 border-crimson pl-3">
+        <div className="space-y-2 border-l-2 border-crimson pl-4">
           <AutoTextarea
             {...common}
             value={block.data.text}
-            placeholder="Quote text…"
+            placeholder="Quote…"
             onChange={(text) => onChange({ ...block.data, text })}
-            className={`${fieldClass} font-serif text-lg italic`}
+            className={`${canvasField} font-serif text-lg italic leading-7`}
           />
           <input
             {...common}
             value={block.data.attribution}
-            placeholder="Attribution (e.g. Foreign Minister, at UNGA)"
+            placeholder="Attribution"
             onChange={(e) => onChange({ ...block.data, attribution: e.target.value })}
-            className={`${fieldClass} text-xs`}
+            className={`${canvasField} text-xs`}
           />
         </div>
       );
+    case "pullquote":
+      return (
+        <div className="space-y-3 py-4 text-center">
+          <AutoTextarea
+            {...common}
+            value={block.data.text}
+            placeholder="Pull quote…"
+            onChange={(text) => onChange({ ...block.data, text })}
+            className={`${canvasField} text-center font-serif text-2xl font-medium italic leading-snug`}
+          />
+          <input
+            {...common}
+            value={block.data.attribution}
+            placeholder="Attribution"
+            onChange={(e) => onChange({ ...block.data, attribution: e.target.value })}
+            className={`${canvasField} text-center text-xs`}
+          />
+        </div>
+      );
+    case "list": {
+      const ListIcon =
+        block.data.style === "numbered" ? ListOrdered : block.data.style === "check" ? CheckSquare : List;
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            <ListIcon className="h-3.5 w-3.5 text-muted-foreground" />
+            <select
+              disabled={readOnly}
+              value={block.data.style}
+              onChange={(e) =>
+                onChange({ ...block.data, style: e.target.value as ListStyle })
+              }
+              className="h-7 rounded-sm border-0 bg-transparent text-xs text-muted-foreground hover:bg-accent"
+            >
+              <option value="bullet">Bulleted</option>
+              <option value="numbered">Numbered</option>
+              <option value="check">Checklist</option>
+            </select>
+          </div>
+          <ul className="space-y-1">
+            {block.data.items.map((item, i) => (
+              <li key={i} className="flex items-start gap-2">
+                {block.data.style === "check" ? (
+                  <input
+                    type="checkbox"
+                    disabled={readOnly}
+                    checked={!!item.checked}
+                    onChange={(e) =>
+                      onChange({
+                        ...block.data,
+                        items: block.data.items.map((it, j) =>
+                          j === i ? { ...it, checked: e.target.checked } : it,
+                        ),
+                      })
+                    }
+                    className="mt-2.5"
+                  />
+                ) : block.data.style === "numbered" ? (
+                  <span className="mt-1.5 w-5 shrink-0 text-right text-sm text-muted-foreground">
+                    {i + 1}.
+                  </span>
+                ) : (
+                  <span className="mt-1.5 w-4 shrink-0 text-center text-muted-foreground">•</span>
+                )}
+                <AutoTextarea
+                  {...common}
+                  value={item.text}
+                  placeholder="List item"
+                  onChange={(text) =>
+                    onChange({
+                      ...block.data,
+                      items: block.data.items.map((it, j) => (j === i ? { ...it, text } : it)),
+                    })
+                  }
+                  className={`${canvasField} font-serif text-base leading-7`}
+                />
+                {!readOnly && (
+                  <button
+                    type="button"
+                    title="Remove item"
+                    onClick={() =>
+                      onChange({
+                        ...block.data,
+                        items:
+                          block.data.items.length <= 1
+                            ? [{ text: "" }]
+                            : block.data.items.filter((_, j) => j !== i),
+                      })
+                    }
+                    className="mt-1.5 opacity-0 text-muted-foreground hover:text-crimson group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={() =>
+                onChange({ ...block.data, items: [...block.data.items, { text: "" }] })
+              }
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Plus className="h-3 w-3" /> Add item
+            </button>
+          )}
+        </div>
+      );
+    }
     case "divider":
-      return <hr className="my-2 border-t-2 border-border" />;
+      return <hr className="my-4 border-t border-border" />;
     case "embed":
       return (
         <div className="space-y-2">
@@ -513,14 +1019,14 @@ function BlockFields({
             value={block.data.url}
             placeholder="Embed URL (YouTube, Vimeo…)"
             onChange={(e) => onChange({ ...block.data, url: e.target.value })}
-            className={`${fieldClass} text-xs`}
+            className={`${canvasField} text-xs`}
           />
           {block.data.url &&
             (embedSrc(block.data.url) ? (
               <iframe
                 src={embedSrc(block.data.url)!}
                 title="Embed preview"
-                className="aspect-video w-full border border-border"
+                className="aspect-video w-full border border-border/50"
                 allowFullScreen
               />
             ) : (
@@ -533,7 +1039,7 @@ function BlockFields({
             value={block.data.caption}
             placeholder="Caption (optional)"
             onChange={(e) => onChange({ ...block.data, caption: e.target.value })}
-            className={`${fieldClass} text-xs`}
+            className={`${canvasField} text-xs`}
           />
         </div>
       );
@@ -544,7 +1050,11 @@ function BlockFields({
             <div className="grid grid-cols-3 gap-2">
               {block.data.images.map((img, i) => (
                 <div key={i} className="group/img relative">
-                  <img src={img.url} alt={img.alt} className="aspect-square w-full border border-border object-cover" />
+                  <img
+                    src={img.url}
+                    alt={img.alt}
+                    className="aspect-square w-full border border-border/50 object-cover"
+                  />
                   {!readOnly && (
                     <button
                       type="button"
@@ -563,10 +1073,12 @@ function BlockFields({
                     placeholder="Alt text"
                     onChange={(e) =>
                       onChange({
-                        images: block.data.images.map((g, j) => (j === i ? { ...g, alt: e.target.value } : g)),
+                        images: block.data.images.map((g, j) =>
+                          j === i ? { ...g, alt: e.target.value } : g,
+                        ),
                       })
                     }
-                    className="mt-1 w-full border border-input bg-background px-2 py-1 text-[11px] outline-none"
+                    className="mt-1 w-full border-0 bg-transparent px-1 py-0.5 text-[11px] outline-none"
                   />
                 </div>
               ))}
@@ -594,7 +1106,7 @@ function BlockFields({
             <thead>
               <tr>
                 {block.data.headers.map((header, col) => (
-                  <th key={col} className="border border-border bg-muted/40 p-1">
+                  <th key={col} className="border border-border/60 bg-muted/30 p-1">
                     <input
                       {...common}
                       value={header}
@@ -607,7 +1119,7 @@ function BlockFields({
                           ),
                         })
                       }
-                      className={`${fieldClass} border-0 bg-transparent px-2 py-1 text-xs font-semibold`}
+                      className={`${canvasField} px-2 py-1 text-xs font-semibold`}
                     />
                   </th>
                 ))}
@@ -617,7 +1129,7 @@ function BlockFields({
               {block.data.rows.map((row, rowIndex) => (
                 <tr key={rowIndex}>
                   {Array.from({ length: colCount }, (_, col) => (
-                    <td key={col} className="border border-border p-1">
+                    <td key={col} className="border border-border/60 p-1">
                       <input
                         {...common}
                         value={row[col] ?? ""}
@@ -634,7 +1146,7 @@ function BlockFields({
                             ),
                           })
                         }
-                        className={`${fieldClass} border-0 bg-transparent px-2 py-1 text-xs`}
+                        className={`${canvasField} px-2 py-1 text-xs`}
                       />
                     </td>
                   ))}
@@ -646,7 +1158,7 @@ function BlockFields({
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                className="border border-input px-2 py-1 text-[11px] font-semibold hover:bg-accent"
+                className="rounded-sm px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
                 onClick={() =>
                   onChange({
                     ...block.data,
@@ -658,7 +1170,7 @@ function BlockFields({
               </button>
               <button
                 type="button"
-                className="border border-input px-2 py-1 text-[11px] font-semibold hover:bg-accent"
+                className="rounded-sm px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
                 onClick={() =>
                   onChange({
                     headers: [...block.data.headers, `Column ${colCount + 1}`],
@@ -680,7 +1192,7 @@ function BlockFields({
             disabled={readOnly}
             value={block.data.language}
             onChange={(e) => onChange({ ...block.data, language: e.target.value })}
-            className="h-8 border border-input bg-background px-2 text-xs"
+            className="h-7 rounded-sm border-0 bg-transparent px-1 text-xs text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-accent"
           >
             {["text", "javascript", "typescript", "json", "html", "css", "sql", "bash"].map(
               (lang) => (
@@ -696,13 +1208,24 @@ function BlockFields({
             placeholder="// Code…"
             rows={8}
             onChange={(e) => onChange({ ...block.data, code: e.target.value })}
-            className={`${fieldClass} font-mono text-xs leading-5`}
+            className={`${canvasField} font-mono text-xs leading-5`}
           />
         </div>
       );
+    case "html":
+      return (
+        <textarea
+          {...common}
+          value={block.data.code}
+          placeholder="<!-- Custom HTML -->"
+          rows={8}
+          onChange={(e) => onChange({ ...block.data, code: e.target.value })}
+          className={`${canvasField} font-mono text-xs leading-5 text-muted-foreground`}
+        />
+      );
     case "live":
       return (
-        <div className="space-y-2 border-l-2 border-cat-blue pl-3">
+        <div className="space-y-2 border-l-2 border-cat-blue pl-4">
           <div className="flex items-center gap-2">
             <span className="inline-flex items-center gap-1 bg-crimson/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest text-crimson">
               <Radio className="h-3 w-3" /> Live
@@ -714,10 +1237,12 @@ function BlockFields({
               onChange={(e) =>
                 onChange({
                   ...block.data,
-                  time: e.target.value ? new Date(e.target.value).toISOString() : new Date().toISOString(),
+                  time: e.target.value
+                    ? new Date(e.target.value).toISOString()
+                    : new Date().toISOString(),
                 })
               }
-              className="h-8 border border-input bg-background px-2 text-xs"
+              className="h-7 border-0 bg-transparent px-1 text-xs text-muted-foreground"
             />
           </div>
           <input
@@ -725,14 +1250,14 @@ function BlockFields({
             value={block.data.title}
             placeholder="Update headline"
             onChange={(e) => onChange({ ...block.data, title: e.target.value })}
-            className={`${fieldClass} font-semibold`}
+            className={`${canvasField} font-semibold`}
           />
           <AutoTextarea
             {...common}
             value={block.data.text}
             placeholder="What just happened…"
             onChange={(text) => onChange({ ...block.data, text })}
-            className={`${fieldClass} text-sm leading-6`}
+            className={`${canvasField} text-sm leading-6`}
           />
         </div>
       );
@@ -743,12 +1268,25 @@ function VideoPreview({ url }: { url: string }) {
   if (!url) return null;
   const src = embedSrc(url);
   if (src) {
-    return <iframe src={src} title="Video preview" className="aspect-video w-full border border-border" allowFullScreen />;
+    return (
+      <iframe
+        src={src}
+        title="Video preview"
+        className="aspect-video w-full border border-border/50"
+        allowFullScreen
+      />
+    );
   }
   if (isDirectVideoFile(url)) {
-    return <video src={url} controls className="aspect-video w-full border border-border bg-black" />;
+    return (
+      <video src={url} controls className="aspect-video w-full border border-border/50 bg-black" />
+    );
   }
-  return <p className="text-xs text-muted-foreground">Unrecognized video URL — it will render as an external link.</p>;
+  return (
+    <p className="text-xs text-muted-foreground">
+      Unrecognized video URL — it will render as an external link.
+    </p>
+  );
 }
 
 function MediaUrlInput({
@@ -793,10 +1331,10 @@ function MediaUrlInput({
               commit(draft);
             }
           }}
-          className={`${fieldClass} text-xs`}
+          className={`${canvasField} text-xs`}
         />
         {onUploadImage && !readOnly && (
-          <label className="inline-flex h-9 shrink-0 cursor-pointer items-center border border-input px-3 text-xs font-semibold text-muted-foreground hover:bg-accent hover:text-foreground">
+          <label className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-sm px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
             {busy ? "Uploading…" : "Upload"}
             <input
               type="file"
@@ -834,6 +1372,8 @@ function AutoTextarea({
   placeholder,
   disabled,
   onKeyDown,
+  onFocus,
+  onPaste,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -841,6 +1381,8 @@ function AutoTextarea({
   placeholder?: string;
   disabled?: boolean;
   onKeyDown?: (e: React.KeyboardEvent) => void;
+  onFocus?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -858,6 +1400,8 @@ function AutoTextarea({
       placeholder={placeholder}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={onKeyDown}
+      onFocus={onFocus}
+      onPaste={onPaste}
       className={`${className} resize-none overflow-hidden`}
     />
   );

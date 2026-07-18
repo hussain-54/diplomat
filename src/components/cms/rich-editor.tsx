@@ -11,7 +11,7 @@ export type RichEditorProps = {
   emptyHint?: ReactNode;
 };
 
-/** Newsroom block-based rich editor (paragraph, heading, media, table, code, live). */
+/** Newsroom block editor: Medium-like canvas with slash commands, formatting toolbar, lists, pullquotes, HTML. */
 export function RichEditor({
   value,
   onChange,

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, History, Loader2, RotateCcw, Wifi, X } from "lucide-react";
 import {
   applyArticleWorkflowAction,
+  duplicateArticle,
   getAdminArticle,
   getArticleRevisions,
   getArticleTags,
@@ -19,16 +20,21 @@ import {
   type ArticleSeoInput,
 } from "@/lib/admin.functions";
 import { getSections } from "@/lib/content.functions";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { Database } from "@/integrations/supabase/types";
 import { CmsPageHeader, CmsPanel, CmsStatus, cmsButton, cmsInput } from "@/components/cms-ui";
 import { MediaUploader, RichEditor, SEOForm } from "@/components/cms";
+import { ArticleBody } from "@/components/article-body";
 import { ArticleAiAssistantPanel } from "@/components/articles/ai-assistant-panel";
 import {
   ArticleApprovalHistoryPanel,
   ArticleNotesPanel,
   WorkflowActions,
 } from "@/components/articles/article-edit-panels";
+import {
+  EditorModeToolbar,
+  type EditorViewMode,
+} from "@/components/articles/editor-mode-toolbar";
 import {
   clearArticleDraftCache,
   loadArticleDraftCache,
@@ -40,8 +46,11 @@ import { useArticleEditRealtime } from "@/hooks/useArticleEditRealtime";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermissionRoute } from "@/lib/route-guards";
 import { parseBody, serializeBlocks, type Block } from "@/lib/blocks";
+import { computeWritingStats } from "@/lib/writing-stats";
 import { parseHreflang, seoLengthTone, siteUrl } from "@/lib/seo";
 import { ARTICLES_STATIC_SEGMENTS } from "@/components/articles/nav";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
 
@@ -135,12 +144,39 @@ function EditArticle() {
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [draftRecovery, setDraftRecovery] = useState<ArticleDraftCachePayload | null>(null);
+  const [viewMode, setViewMode] = useState<EditorViewMode>("edit");
+  const [sidebarTab, setSidebarTab] = useState("publishing");
   const hydratedRef = useRef(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const cacheKey = isNew ? "new" : id;
 
   const { connected: realtimeConnected, remoteUpdatedAt } = useArticleEditRealtime(
     isNew ? null : id,
   );
+
+  const writingStats = useMemo(
+    () => computeWritingStats(form.title, form.deck, blocks),
+    [form.title, form.deck, blocks],
+  );
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && (viewMode === "focus" || viewMode === "fullscreen" || viewMode === "reading")) {
+        setViewMode("edit");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (viewMode !== "fullscreen") return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [viewMode]);
 
   const patchForm = (patch: Partial<typeof form>) => {
     setForm((f) => ({ ...f, ...patch }));
@@ -268,6 +304,17 @@ function EditArticle() {
     (isFactChecker ||
       hasPermission(editorRoles, "articles:review") ||
       hasPermission(editorRoles, "articles:edit_all"));
+  const canDuplicate = !isNew && hasPermission(editorRoles, "articles:create");
+  const canArchive =
+    !isNew &&
+    !readOnly &&
+    (canPublish || hasPermission(editorRoles, "articles:delete"));
+
+  useEffect(() => {
+    if (readOnly) return;
+    const timer = window.setTimeout(() => titleInputRef.current?.focus(), 80);
+    return () => window.clearTimeout(timer);
+  }, [id, readOnly]);
 
   // Persist unsaved work locally for recovery.
   useEffect(() => {
@@ -431,6 +478,26 @@ function EditArticle() {
       void qc.invalidateQueries({ queryKey: ["admin-article", id] });
       void qc.invalidateQueries({ queryKey: ["article-approvals", id] });
       void qc.invalidateQueries({ queryKey: ["article-revisions", id] });
+      void qc.invalidateQueries({ queryKey: ["admin-articles"] });
+    },
+  });
+
+  const duplicate = useMutation({
+    mutationFn: () => duplicateArticle({ data: { id } }),
+    onSuccess: (article) => {
+      if (article?.id) {
+        navigate({ to: "/admin/articles/$id", params: { id: article.id } });
+      }
+    },
+  });
+
+  const archive = useMutation({
+    mutationFn: () =>
+      applyArticleWorkflowAction({
+        data: { article_id: id, action: "archive" },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin-article", id] });
       void qc.invalidateQueries({ queryKey: ["admin-articles"] });
     },
   });
@@ -624,328 +691,490 @@ function EditArticle() {
             e.preventDefault();
           }
         }}
-        className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]"
+        className={cn(
+          viewMode === "fullscreen"
+            ? "fixed inset-0 z-50 overflow-y-auto bg-background p-4 sm:p-8"
+            : "grid gap-6",
+          viewMode === "edit" || viewMode === "reading"
+            ? "xl:grid-cols-[minmax(0,1fr)_380px]"
+            : "",
+        )}
       >
-        {/* LEFT — content editor */}
-        <div className="min-w-0 space-y-4">
-          <CmsPanel>
-            <div className="space-y-4 p-5">
-              <input
-                required
-                disabled={readOnly}
-                value={form.title}
-                onChange={(e) => patchForm({ title: e.target.value })}
-                placeholder="Title"
-                className="w-full border-0 border-b border-input bg-transparent pb-2 font-serif text-3xl text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-ring"
-              />
-              <textarea
-                disabled={readOnly}
-                value={form.deck}
-                onChange={(e) => patchForm({ deck: e.target.value })}
-                rows={2}
-                placeholder="Subtitle — one or two sentences under the title"
-                className="w-full resize-none border-0 bg-transparent font-serif text-lg leading-relaxed text-muted-foreground outline-none placeholder:text-muted-foreground/50"
-              />
-            </div>
-          </CmsPanel>
-          <CmsPanel
-            title="Content editor"
-            description="Blocks: paragraph, heading, image, video, quote, embed, gallery, table, code, live"
-          >
-            <RichEditor
-              value={blocks}
-              onChange={changeBlocks}
-              readOnly={readOnly}
-              onUploadImage={mayUploadMedia ? uploadImage : undefined}
-            />
-          </CmsPanel>
-        </div>
-
-        {/* RIGHT — sidebar */}
-        <aside className="space-y-4">
-          <CmsPanel title="Publishing" description="Workflow status and distribution">
-            <div className="space-y-4 p-5">
-              <Field label="Status">
-                <select
-                  value={form.status}
-                  onChange={(e) => patchForm({ status: e.target.value as ArticleStatus })}
-                  disabled={readOnly}
-                  className={cmsInput}
-                >
-                  <option value="draft">Draft</option>
-                  <option value="review">In review</option>
-                  {canPublish && (
-                    <>
-                      <option value="scheduled">Scheduled</option>
-                      <option value="published">Published</option>
-                      <option value="archived">Archived</option>
-                    </>
-                  )}
-                </select>
-              </Field>
-              {form.status === "scheduled" && (
-                <Field label="Publication date and time">
-                  <input
-                    type="datetime-local"
-                    required
-                    min={toDateTimeLocal(new Date().toISOString())}
-                    value={form.scheduled_at}
-                    onChange={(event) => patchForm({ scheduled_at: event.target.value })}
-                    className={cmsInput}
-                  />
-                </Field>
-              )}
-              <Field label="Badge">
-                <select
-                  value={form.badge_type}
-                  disabled={readOnly}
-                  onChange={(e) => patchForm({ badge_type: e.target.value })}
-                  className={cmsInput}
-                >
-                  {["none", "breaking", "live", "exclusive", "opinion", "premium", "alert"].map((b) => (
-                    <option key={b} value={b}>
-                      {b}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Region">
-                <input
-                  value={form.region}
-                  disabled={readOnly}
-                  onChange={(e) => patchForm({ region: e.target.value })}
-                  className={cmsInput}
-                />
-              </Field>
-              <div className="flex items-center justify-between border-t border-border pt-4">
-                <span className="text-xs font-semibold text-foreground">Current state</span>
-                <CmsStatus tone={statusTone(form.status)}>{form.status}</CmsStatus>
-              </div>
-              {!isNew && !readOnly ? (
-                <WorkflowActions
-                  status={form.status}
-                  canSubmitReview={canSubmitReview}
-                  canReview={canReview}
-                  canPublish={canPublish}
-                  disabled={workflow.isPending || save.isPending}
-                  onAction={(action, note) => workflow.mutate({ action, note })}
-                />
-              ) : null}
-              {workflow.isError ? (
-                <div className="border border-crimson/30 bg-crimson/10 p-3 text-xs text-crimson">
-                  {workflow.error.message}
-                </div>
-              ) : null}
-              <button type="submit" disabled={!canSubmit} className={`${cmsButton} w-full`}>
-                {save.isPending
-                  ? "Saving…"
-                  : form.status === "published"
-                    ? "Publish article"
-                    : form.status === "scheduled"
-                      ? "Schedule article"
-                      : form.status === "archived"
-                        ? "Archive article"
-                        : isNew
-                          ? "Create article"
-                          : "Save changes"}
-              </button>
-              {save.isError && (
-                <div className="border border-crimson/30 bg-crimson/10 p-3 text-xs text-crimson">
-                  {(save.error as Error).message}
-                </div>
-              )}
-            </div>
-          </CmsPanel>
-
-          <SEOForm
-            value={seo}
-            onChange={(patch) => {
-              patchSeo(patch);
-              setDirty(true);
+        <div
+          className={cn(
+            "min-w-0",
+            viewMode === "focus" || viewMode === "fullscreen"
+              ? "mx-auto w-full max-w-3xl space-y-4"
+              : "space-y-4",
+          )}
+        >
+          <EditorModeToolbar
+            mode={viewMode}
+            onModeChange={setViewMode}
+            stats={writingStats}
+            articleId={id}
+            isNew={isNew}
+            publicSlug={form.status === "published" && form.slug ? form.slug : undefined}
+            canDuplicate={canDuplicate}
+            canArchive={canArchive && form.status !== "archived"}
+            onDuplicate={() => {
+              if (window.confirm("Duplicate this article as a new draft?")) duplicate.mutate();
             }}
-            slug={form.slug}
-            onSlugChange={(slug) => {
-              patchForm({ slug });
-              setDirty(true);
+            onArchive={() => {
+              if (window.confirm("Move this article to trash (archived)?")) archive.mutate();
             }}
-            titleFallback={form.title}
-            deckFallback={form.deck}
-            heroImageUrl={form.hero_image_url}
-            hreflangRows={hreflangRows}
-            onHreflangChange={(rows) => {
-              setHreflangRows(rows);
-              setDirty(true);
-            }}
-            readOnly={readOnly}
-            showSocial
+            onSave={() => save.mutate({})}
+            saveLabel={
+              form.status === "published"
+                ? "Update"
+                : form.status === "scheduled"
+                  ? "Schedule"
+                  : isNew
+                    ? "Create"
+                    : "Save"
+            }
+            canSave={canSubmit}
+            saving={save.isPending}
           />
 
-          <ArticleAiAssistantPanel
-            title={form.title}
-            deck={form.deck}
-            blocks={blocks}
-            readOnly={readOnly}
-            onApplyTitle={(next) => {
-              patchForm({ title: next });
-              setDirty(true);
-            }}
-            onApplyDeck={(next) => {
-              patchForm({ deck: next });
-              setDirty(true);
-            }}
-            onApplyMeta={(patch) => {
-              patchSeo(patch);
-              setDirty(true);
-            }}
-            onInsertSummaryBlock={(next) => {
-              changeBlocks(next);
-              setDirty(true);
-            }}
-          />
-
-          <CmsPanel title="Categories" description="Section placement for this story">
-            <div className="p-5">
-              <Field label="Category">
-                <select
-                  required
-                  disabled={readOnly}
-                  value={form.section_id}
-                  onChange={(e) => patchForm({ section_id: e.target.value })}
-                  className={cmsInput}
-                >
-                  <option value="">—</option>
-                  {(sectionsQ.data ?? []).map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            </div>
-          </CmsPanel>
-
-          <CmsPanel title="Tags" description="Topics for discovery and related coverage">
-            <div className="space-y-3 p-5">
-              {tagNames.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {tagNames.map((tag) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-1 border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground"
-                    >
-                      {tag}
-                      {!readOnly && mayManageTags && (
-                        <button
-                          type="button"
-                          title={`Remove ${tag}`}
-                          onClick={() => {
-                            setTagNames((prev) => prev.filter((t) => t !== tag));
-                            setDirty(true);
-                          }}
-                          className="text-muted-foreground hover:text-crimson"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      )}
-                    </span>
-                  ))}
-                </div>
-              )}
-              {!readOnly && mayManageTags && (
-                <>
-                  <input
-                    value={tagDraft}
-                    onChange={(e) => setTagDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === ",") {
-                        e.preventDefault();
-                        addTag(tagDraft);
-                      }
-                    }}
-                    placeholder="Add tag and press Enter"
-                    className={cmsInput}
-                    list="all-tags-list"
-                  />
-                  <datalist id="all-tags-list">
-                    {(allTagsQ.data ?? [])
-                      .filter((t) => !tagNames.some((n) => n.toLowerCase() === t.name.toLowerCase()))
-                      .map((t) => (
-                        <option key={t.id} value={t.name} />
-                      ))}
-                  </datalist>
-                </>
-              )}
-              {!mayManageTags && (
-                <p className="text-xs text-muted-foreground">Your role cannot modify tags.</p>
-              )}
-            </div>
-          </CmsPanel>
-
-          <CmsPanel title="Media" description="Lead image · JPEG, PNG, WebP, or GIF · max 5 MB">
-            <div className="space-y-3 p-5">
-              {mayUploadMedia && !readOnly ? (
-                <MediaUploader
-                  previewUrl={form.hero_image_url || null}
-                  busy={uploadBusy}
-                  progress={uploadBusy ? "Uploading…" : null}
-                  onFiles={(files) => {
-                    const file = files[0];
-                    if (file) void uploadHero(file);
-                  }}
-                >
-                  Upload lead image
-                </MediaUploader>
-              ) : form.hero_image_url ? (
+          {viewMode === "reading" ? (
+            <article className="border border-border bg-card px-6 py-8 sm:px-10">
+              <h1 className="font-serif text-4xl font-semibold tracking-tight">
+                {form.title || "Untitled"}
+              </h1>
+              {form.deck ? (
+                <p className="mt-3 text-lg text-muted-foreground">{form.deck}</p>
+              ) : null}
+              {form.hero_image_url ? (
                 <img
                   src={form.hero_image_url}
-                  alt={form.title || "Article hero"}
-                  className="aspect-video w-full border border-border object-cover"
+                  alt=""
+                  className="mt-6 max-h-96 w-full object-cover"
                 />
               ) : null}
-              {uploadError && <div className="text-xs text-crimson">{uploadError}</div>}
-              <input
-                value={form.hero_image_url}
-                disabled={readOnly}
-                onChange={(e) => patchForm({ hero_image_url: e.target.value })}
-                placeholder="Or paste image URL"
-                className={`${cmsInput} text-xs`}
-              />
-            </div>
-          </CmsPanel>
-
-          <CmsPanel title="Author" description="Byline for this story">
-            <div className="flex items-center gap-3 p-5">
-              {isNew ? (
-                <AuthorRow
-                  name={meQ.data?.profile?.name ?? "You"}
-                  avatarUrl={meQ.data?.profile?.avatar_url}
-                  note="You will be credited as the author."
-                />
-              ) : (
-                <AuthorRow
-                  name={author?.name ?? "Unknown author"}
-                  avatarUrl={author?.avatar_url}
-                  note={
-                    articleQ.data?.created_at
-                      ? `Created ${new Date(articleQ.data.created_at).toLocaleDateString()}`
-                      : undefined
-                  }
-                />
-              )}
-            </div>
-          </CmsPanel>
-
-          {!isNew ? (
+              <ArticleBody body={serializeBlocks(blocks)} />
+            </article>
+          ) : (
             <>
-              <ArticleNotesPanel
-                articleId={id}
-                canEditorial={canWriteEditorialNotes}
-                canFactCheck={canWriteFactCheckNotes}
-              />
-              <ArticleApprovalHistoryPanel articleId={id} />
+              <div className="border border-border bg-card">
+                <div className="space-y-3 px-6 py-8 sm:px-10">
+                  <input
+                    ref={titleInputRef}
+                    required
+                    disabled={readOnly}
+                    value={form.title}
+                    onChange={(e) => patchForm({ title: e.target.value })}
+                    placeholder="Article title"
+                    className="w-full border-0 bg-transparent font-serif text-4xl font-semibold leading-tight tracking-tight text-foreground outline-none placeholder:text-muted-foreground/50"
+                  />
+                  <textarea
+                    disabled={readOnly}
+                    value={form.deck}
+                    onChange={(e) => patchForm({ deck: e.target.value })}
+                    rows={2}
+                    placeholder="Deck — one or two sentences that pull the reader in"
+                    className="w-full resize-none border-0 bg-transparent font-serif text-xl leading-relaxed text-muted-foreground outline-none placeholder:text-muted-foreground/40"
+                  />
+                </div>
+              </div>
+              <div className="overflow-hidden border border-border bg-card">
+                <RichEditor
+                  value={blocks}
+                  onChange={changeBlocks}
+                  readOnly={readOnly}
+                  onUploadImage={mayUploadMedia ? uploadImage : undefined}
+                />
+              </div>
             </>
-          ) : null}
-        </aside>
+          )}
+        </div>
+
+        {(viewMode === "edit" || viewMode === "reading") && (
+          <aside className="space-y-4">
+            <Tabs value={sidebarTab} onValueChange={setSidebarTab} className="space-y-4">
+              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-none border border-border bg-muted/30 p-1">
+                <TabsTrigger value="publishing" className="rounded-none text-xs">
+                  Publishing
+                </TabsTrigger>
+                <TabsTrigger value="seo" className="rounded-none text-xs">
+                  SEO
+                </TabsTrigger>
+                <TabsTrigger value="social" className="rounded-none text-xs">
+                  Social
+                </TabsTrigger>
+                <TabsTrigger value="categories" className="rounded-none text-xs">
+                  Categories
+                </TabsTrigger>
+                <TabsTrigger value="tags" className="rounded-none text-xs">
+                  Tags
+                </TabsTrigger>
+                <TabsTrigger value="media" className="rounded-none text-xs">
+                  Media
+                </TabsTrigger>
+                <TabsTrigger value="author" className="rounded-none text-xs">
+                  Author
+                </TabsTrigger>
+                <TabsTrigger value="ai" className="rounded-none text-xs">
+                  AI
+                </TabsTrigger>
+                <TabsTrigger value="settings" className="rounded-none text-xs">
+                  Settings
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="publishing" className="mt-0">
+                <CmsPanel title="Publishing" description="Workflow status and distribution">
+                  <div className="space-y-4 p-5">
+                    <Field label="Status">
+                      <select
+                        value={form.status}
+                        onChange={(e) => patchForm({ status: e.target.value as ArticleStatus })}
+                        disabled={readOnly}
+                        className={cmsInput}
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="review">In review</option>
+                        {canPublish && (
+                          <>
+                            <option value="scheduled">Scheduled</option>
+                            <option value="published">Published</option>
+                            <option value="archived">Archived</option>
+                          </>
+                        )}
+                      </select>
+                    </Field>
+                    {form.status === "scheduled" && (
+                      <Field label="Publication date and time">
+                        <input
+                          type="datetime-local"
+                          required
+                          min={toDateTimeLocal(new Date().toISOString())}
+                          value={form.scheduled_at}
+                          onChange={(event) => patchForm({ scheduled_at: event.target.value })}
+                          className={cmsInput}
+                        />
+                      </Field>
+                    )}
+                    <Field label="Badge">
+                      <select
+                        value={form.badge_type}
+                        disabled={readOnly}
+                        onChange={(e) => patchForm({ badge_type: e.target.value })}
+                        className={cmsInput}
+                      >
+                        {["none", "breaking", "live", "exclusive", "opinion", "premium", "alert"].map(
+                          (b) => (
+                            <option key={b} value={b}>
+                              {b}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </Field>
+                    <Field label="Region">
+                      <input
+                        value={form.region}
+                        disabled={readOnly}
+                        onChange={(e) => patchForm({ region: e.target.value })}
+                        className={cmsInput}
+                      />
+                    </Field>
+                    <div className="flex items-center justify-between border-t border-border pt-4">
+                      <span className="text-xs font-semibold text-foreground">Current state</span>
+                      <CmsStatus tone={statusTone(form.status)}>{form.status}</CmsStatus>
+                    </div>
+                    {!isNew && !readOnly ? (
+                      <WorkflowActions
+                        status={form.status}
+                        canSubmitReview={canSubmitReview}
+                        canReview={canReview}
+                        canPublish={canPublish}
+                        disabled={workflow.isPending || save.isPending}
+                        onAction={(action, note) => workflow.mutate({ action, note })}
+                      />
+                    ) : null}
+                    {workflow.isError ? (
+                      <div className="border border-crimson/30 bg-crimson/10 p-3 text-xs text-crimson">
+                        {workflow.error.message}
+                      </div>
+                    ) : null}
+                    <button type="submit" disabled={!canSubmit} className={`${cmsButton} w-full`}>
+                      {save.isPending
+                        ? "Saving…"
+                        : form.status === "published"
+                          ? "Publish article"
+                          : form.status === "scheduled"
+                            ? "Schedule article"
+                            : form.status === "archived"
+                              ? "Archive article"
+                              : isNew
+                                ? "Create article"
+                                : "Save changes"}
+                    </button>
+                    {save.isError && (
+                      <div className="border border-crimson/30 bg-crimson/10 p-3 text-xs text-crimson">
+                        {(save.error as Error).message}
+                      </div>
+                    )}
+                  </div>
+                </CmsPanel>
+              </TabsContent>
+
+              <TabsContent value="seo" className="mt-0">
+                <SEOForm
+                  value={seo}
+                  onChange={(patch) => {
+                    patchSeo(patch);
+                    setDirty(true);
+                  }}
+                  slug={form.slug}
+                  onSlugChange={(slug) => {
+                    patchForm({ slug });
+                    setDirty(true);
+                  }}
+                  titleFallback={form.title}
+                  deckFallback={form.deck}
+                  heroImageUrl={form.hero_image_url}
+                  hreflangRows={hreflangRows}
+                  onHreflangChange={(rows) => {
+                    setHreflangRows(rows);
+                    setDirty(true);
+                  }}
+                  readOnly={readOnly}
+                  showSocial={false}
+                />
+              </TabsContent>
+
+              <TabsContent value="social" className="mt-0">
+                <SEOForm
+                  value={seo}
+                  onChange={(patch) => {
+                    patchSeo(patch);
+                    setDirty(true);
+                  }}
+                  slug={form.slug}
+                  onSlugChange={(slug) => {
+                    patchForm({ slug });
+                    setDirty(true);
+                  }}
+                  titleFallback={form.title}
+                  deckFallback={form.deck}
+                  heroImageUrl={form.hero_image_url}
+                  hreflangRows={hreflangRows}
+                  onHreflangChange={(rows) => {
+                    setHreflangRows(rows);
+                    setDirty(true);
+                  }}
+                  readOnly={readOnly}
+                  showSocial
+                />
+              </TabsContent>
+
+              <TabsContent value="categories" className="mt-0">
+                <CmsPanel title="Categories" description="Section placement for this story">
+                  <div className="p-5">
+                    <Field label="Category">
+                      <select
+                        required
+                        disabled={readOnly}
+                        value={form.section_id}
+                        onChange={(e) => patchForm({ section_id: e.target.value })}
+                        className={cmsInput}
+                      >
+                        <option value="">—</option>
+                        {(sectionsQ.data ?? []).map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                </CmsPanel>
+              </TabsContent>
+
+              <TabsContent value="tags" className="mt-0">
+                <CmsPanel title="Tags" description="Topics for discovery and related coverage">
+                  <div className="space-y-3 p-5">
+                    {tagNames.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {tagNames.map((tag) => (
+                          <span
+                            key={tag}
+                            className="inline-flex items-center gap-1 border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground"
+                          >
+                            {tag}
+                            {!readOnly && mayManageTags && (
+                              <button
+                                type="button"
+                                title={`Remove ${tag}`}
+                                onClick={() => {
+                                  setTagNames((prev) => prev.filter((t) => t !== tag));
+                                  setDirty(true);
+                                }}
+                                className="text-muted-foreground hover:text-crimson"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {!readOnly && mayManageTags && (
+                      <>
+                        <input
+                          value={tagDraft}
+                          onChange={(e) => setTagDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === ",") {
+                              e.preventDefault();
+                              addTag(tagDraft);
+                            }
+                          }}
+                          placeholder="Add tag and press Enter"
+                          className={cmsInput}
+                          list="all-tags-list"
+                        />
+                        <datalist id="all-tags-list">
+                          {(allTagsQ.data ?? [])
+                            .filter(
+                              (t) =>
+                                !tagNames.some((n) => n.toLowerCase() === t.name.toLowerCase()),
+                            )
+                            .map((t) => (
+                              <option key={t.id} value={t.name} />
+                            ))}
+                        </datalist>
+                      </>
+                    )}
+                    {!mayManageTags && (
+                      <p className="text-xs text-muted-foreground">Your role cannot modify tags.</p>
+                    )}
+                  </div>
+                </CmsPanel>
+              </TabsContent>
+
+              <TabsContent value="media" className="mt-0">
+                <CmsPanel title="Media" description="Lead image · JPEG, PNG, WebP, or GIF · max 5 MB">
+                  <div className="space-y-3 p-5">
+                    {mayUploadMedia && !readOnly ? (
+                      <MediaUploader
+                        previewUrl={form.hero_image_url || null}
+                        busy={uploadBusy}
+                        progress={uploadBusy ? "Uploading…" : null}
+                        onFiles={(files) => {
+                          const file = files[0];
+                          if (file) void uploadHero(file);
+                        }}
+                      >
+                        Upload lead image
+                      </MediaUploader>
+                    ) : form.hero_image_url ? (
+                      <img
+                        src={form.hero_image_url}
+                        alt={form.title || "Article hero"}
+                        className="aspect-video w-full border border-border object-cover"
+                      />
+                    ) : null}
+                    {uploadError && <div className="text-xs text-crimson">{uploadError}</div>}
+                    <input
+                      value={form.hero_image_url}
+                      disabled={readOnly}
+                      onChange={(e) => patchForm({ hero_image_url: e.target.value })}
+                      placeholder="Or paste image URL"
+                      className={`${cmsInput} text-xs`}
+                    />
+                  </div>
+                </CmsPanel>
+              </TabsContent>
+
+              <TabsContent value="author" className="mt-0">
+                <CmsPanel title="Author" description="Byline for this story">
+                  <div className="flex items-center gap-3 p-5">
+                    {isNew ? (
+                      <AuthorRow
+                        name={meQ.data?.profile?.name ?? "You"}
+                        avatarUrl={meQ.data?.profile?.avatar_url}
+                        note="You will be credited as the author."
+                      />
+                    ) : (
+                      <AuthorRow
+                        name={author?.name ?? "Unknown author"}
+                        avatarUrl={author?.avatar_url}
+                        note={
+                          articleQ.data?.created_at
+                            ? `Created ${new Date(articleQ.data.created_at).toLocaleDateString()}`
+                            : undefined
+                        }
+                      />
+                    )}
+                  </div>
+                </CmsPanel>
+              </TabsContent>
+
+              <TabsContent value="ai" className="mt-0">
+                <ArticleAiAssistantPanel
+                  title={form.title}
+                  deck={form.deck}
+                  blocks={blocks}
+                  readOnly={readOnly}
+                  onApplyTitle={(next) => {
+                    patchForm({ title: next });
+                    setDirty(true);
+                  }}
+                  onApplyDeck={(next) => {
+                    patchForm({ deck: next });
+                    setDirty(true);
+                  }}
+                  onApplyMeta={(patch) => {
+                    patchSeo(patch);
+                    setDirty(true);
+                  }}
+                  onInsertSummaryBlock={(next) => {
+                    changeBlocks(next);
+                    setDirty(true);
+                  }}
+                />
+              </TabsContent>
+
+              <TabsContent value="settings" className="mt-0 space-y-4">
+                <CmsPanel title="Settings" description="Quick summary of this article">
+                  <div className="space-y-3 p-5 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Status</span>
+                      <CmsStatus tone={statusTone(form.status)}>{form.status}</CmsStatus>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Slug</span>
+                      <span className="truncate font-mono text-xs text-foreground">
+                        {form.slug || "—"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Region</span>
+                      <span className="text-foreground">{form.region || "—"}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Badge</span>
+                      <span className="text-foreground">{form.badge_type}</span>
+                    </div>
+                  </div>
+                </CmsPanel>
+                {!isNew ? (
+                  <>
+                    <ArticleNotesPanel
+                      articleId={id}
+                      canEditorial={canWriteEditorialNotes}
+                      canFactCheck={canWriteFactCheckNotes}
+                    />
+                    <ArticleApprovalHistoryPanel articleId={id} />
+                  </>
+                ) : null}
+              </TabsContent>
+            </Tabs>
+          </aside>
+        )}
       </form>
 
       {!isNew && (
