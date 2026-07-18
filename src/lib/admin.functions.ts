@@ -106,33 +106,83 @@ export const getMe = async () => {
 
 export const listAdminArticles = async () => {
   await requirePermission("articles:view");
+  const enrich = <T extends Record<string, unknown>>(rows: T[]) =>
+    rows.map((row) => {
+      const tagRows = (row.article_tags as Array<{ tag_id?: string; tags?: { id: string } | { id: string }[] | null }> | null) ?? [];
+      const tag_ids = tagRows
+        .map((entry) => {
+          const tag = Array.isArray(entry.tags) ? entry.tags[0] : entry.tags;
+          return tag?.id ?? entry.tag_id;
+        })
+        .filter((id): id is string => Boolean(id));
+      const { article_tags: _tags, ...rest } = row as T & { article_tags?: unknown };
+      return {
+        ...rest,
+        language: (row.language as string | undefined) ?? "en",
+        schema_type: (row.schema_type as string | undefined) ?? "NewsArticle",
+        seo_title: (row.seo_title as string | null | undefined) ?? null,
+        meta_description: (row.meta_description as string | null | undefined) ?? null,
+        focus_keyword: (row.focus_keyword as string | null | undefined) ?? null,
+        robots_index: (row.robots_index as boolean | undefined) ?? true,
+        is_featured: Boolean(row.is_featured),
+        google_news: Boolean(row.google_news),
+        google_discover: Boolean(row.google_discover),
+        tag_ids,
+      };
+    });
+
+  const selectFull =
+    "id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,created_at,section_id,author_id,is_featured,google_news,google_discover,language,schema_type,seo_title,meta_description,focus_keyword,robots_index, article_tags(tag_id, tags(id,name,slug)), sections(name,slug), author:profiles!articles_author_id_fkey(id,name)";
   const { data, error } = await supabase
     .from("articles")
+    .select(selectFull)
+    .order("updated_at", { ascending: false })
+    .limit(200);
+
+  if (!error) return enrich(data ?? []);
+
+  if (!/language|schema_type|seo_title|article_tags|is_featured|google_news|google_discover|schema cache|PGRST/i.test(error.message)) {
+    throw toAppError(error);
+  }
+
+  const legacy = await supabase
+    .from("articles")
     .select(
-      "id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,created_at,section_id,author_id,is_featured,google_news,google_discover, sections(name,slug), author:profiles!articles_author_id_fkey(id,name)",
+      "id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,created_at,section_id,author_id, sections(name,slug), author:profiles!articles_author_id_fkey(id,name)",
     )
     .order("updated_at", { ascending: false })
     .limit(200);
+  if (legacy.error) throw toAppError(legacy.error);
+  return enrich(
+    (legacy.data ?? []).map((row) => ({
+      ...row,
+      is_featured: false,
+      google_news: false,
+      google_discover: false,
+      language: "en",
+      schema_type: "NewsArticle",
+      seo_title: null,
+      meta_description: null,
+      focus_keyword: null,
+      robots_index: true,
+      article_tags: [],
+    })),
+  );
+};
+
+/** Lifetime view totals keyed by article id (Phase 5 filters) */
+export const getArticleViewTotals = async () => {
+  await requirePermission("articles:view");
+  const { data, error } = await supabase.from("article_daily_metrics").select("article_id,views");
   if (error) {
-    if (/is_featured|google_news|google_discover|schema cache|PGRST/i.test(error.message)) {
-      const legacy = await supabase
-        .from("articles")
-        .select(
-          "id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,created_at,section_id,author_id, sections(name,slug), author:profiles!articles_author_id_fkey(id,name)",
-        )
-        .order("updated_at", { ascending: false })
-        .limit(200);
-      if (legacy.error) throw toAppError(legacy.error);
-      return (legacy.data ?? []).map((row) => ({
-        ...row,
-        is_featured: false,
-        google_news: false,
-        google_discover: false,
-      }));
-    }
+    if (/article_daily_metrics|schema cache|PGRST/i.test(error.message)) return {} as Record<string, number>;
     throw toAppError(error);
   }
-  return data ?? [];
+  const totals: Record<string, number> = {};
+  for (const row of data ?? []) {
+    totals[row.article_id] = (totals[row.article_id] ?? 0) + (row.views ?? 0);
+  }
+  return totals;
 };
 
 export type ArticlesLibraryTab =

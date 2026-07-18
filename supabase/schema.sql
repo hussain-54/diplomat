@@ -152,6 +152,7 @@ CREATE TABLE IF NOT EXISTS public.articles (
   is_featured BOOLEAN NOT NULL DEFAULT false,
   google_news BOOLEAN NOT NULL DEFAULT false,
   google_discover BOOLEAN NOT NULL DEFAULT false,
+  language TEXT NOT NULL DEFAULT 'en',
   published_at TIMESTAMPTZ,
   scheduled_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

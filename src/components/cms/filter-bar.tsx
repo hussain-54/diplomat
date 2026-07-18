@@ -17,7 +17,7 @@ export function FilterBar({
 }) {
   return (
     <div className={cn("space-y-3 border-b border-border bg-muted/20 p-4", className)}>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{children}</div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{children}</div>
       {(onClear || trailing) && (
         <div className="flex flex-wrap items-center gap-2 pt-0.5">
           {onClear && (

@@ -175,6 +175,7 @@ export type Database = {
           hreflang: Json
           id: string
           is_featured: boolean
+          language: string
           meta_description: string | null
           og_description: string | null
           og_image_url: string | null
@@ -211,6 +212,7 @@ export type Database = {
           hreflang?: Json
           id?: string
           is_featured?: boolean
+          language?: string
           meta_description?: string | null
           og_description?: string | null
           og_image_url?: string | null
@@ -247,6 +249,7 @@ export type Database = {
           hreflang?: Json
           id?: string
           is_featured?: boolean
+          language?: string
           meta_description?: string | null
           og_description?: string | null
           og_image_url?: string | null

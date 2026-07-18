@@ -7,20 +7,17 @@ import {
   History,
   Pencil,
   Plus,
-  Search,
   Send,
   Trash2,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { ArticlesAdvancedFilters } from "@/components/articles/articles-advanced-filters";
 import {
-  bulkManageArticles,
-  duplicateArticle,
-  getArticlesLibraryCounts,
-  getMe,
-  listAdminArticles,
-  type ArticlesLibraryTab,
-} from "@/lib/admin.functions";
-import { getSections } from "@/lib/content.functions";
+  DEFAULT_ARTICLES_FILTERS,
+  isArticlesFilterActive,
+  matchesArticlesFilters,
+  type ArticlesFilterState,
+} from "@/components/articles/articles-filters";
 import {
   ARTICLES_LIBRARY_TABS,
   matchesLibraryTab,
@@ -36,12 +33,21 @@ import {
   DataTableCell,
   DataTableEmpty,
   DataTableRow,
-  FilterBar,
-  FilterField,
   cmsButton,
   cmsInput,
   cmsSecondaryButton,
 } from "@/components/cms";
+import {
+  bulkManageArticles,
+  duplicateArticle,
+  getArticleViewTotals,
+  getArticlesLibraryCounts,
+  getMe,
+  listAdminArticles,
+  listTags,
+  type ArticlesLibraryTab,
+} from "@/lib/admin.functions";
+import { getSections } from "@/lib/content.functions";
 import { hasPermission } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 import type { Database } from "@/integrations/supabase/types";
@@ -50,15 +56,6 @@ type ArticleStatus = Database["public"]["Enums"]["article_status"];
 type BulkAction = "publish" | "archive" | "delete" | "reassign_category";
 
 const PAGE_SIZE = 25;
-
-const STATUSES: Array<"all" | ArticleStatus> = [
-  "all",
-  "draft",
-  "review",
-  "scheduled",
-  "published",
-  "archived",
-];
 
 const ARTICLE_COLUMNS = [
   { key: "select", header: "", width: "48px" },
@@ -83,17 +80,20 @@ export function ArticlesListPanel({
   title: string;
   description: string;
   eyebrow?: string;
-  /** When set, status filter is locked to this value */
   lockedStatus?: ArticleStatus;
-  /** Filter by badge_type when provided */
   badgeFilter?: Database["public"]["Enums"]["badge_type"];
-  /** Phase 4 — tabbed All Articles library with live counts */
   libraryMode?: boolean;
   libraryTab?: ArticlesLibraryTab;
   onLibraryTabChange?: (tab: ArticlesLibraryTab) => void;
 }) {
   const queryClient = useQueryClient();
   const articles = useQuery({ queryKey: ["admin-articles"], queryFn: listAdminArticles });
+  const views = useQuery({
+    queryKey: ["article-view-totals"],
+    queryFn: getArticleViewTotals,
+    staleTime: 60_000,
+  });
+  const tags = useQuery({ queryKey: ["tags"], queryFn: listTags, staleTime: 60_000 });
   const counts = useQuery({
     queryKey: ["articles-library-counts"],
     queryFn: getArticlesLibraryCounts,
@@ -106,22 +106,23 @@ export function ArticlesListPanel({
     queryFn: () => getSections({ includeHidden: true }),
   });
   const [selected, setSelected] = useState<string[]>([]);
-  const [searchText, setSearchText] = useState("");
-  const [author, setAuthor] = useState("all");
-  const [category, setCategory] = useState("all");
-  const [status, setStatus] = useState<"all" | ArticleStatus>(lockedStatus ?? "all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [filters, setFilters] = useState<ArticlesFilterState>(() => ({
+    ...DEFAULT_ARTICLES_FILTERS,
+    status: lockedStatus ?? "all",
+  }));
   const [page, setPage] = useState(1);
 
   useEffect(() => {
-    if (lockedStatus) setStatus(lockedStatus);
+    if (lockedStatus) {
+      setFilters((current) => ({ ...current, status: lockedStatus }));
+    }
   }, [lockedStatus]);
 
   const refresh = () => {
     setSelected([]);
     void queryClient.invalidateQueries({ queryKey: ["admin-articles"] });
     void queryClient.invalidateQueries({ queryKey: ["articles-library-counts"] });
+    void queryClient.invalidateQueries({ queryKey: ["article-view-totals"] });
     void queryClient.invalidateQueries({ queryKey: ["dashboard-articles"] });
     void queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
     void queryClient.invalidateQueries({ queryKey: ["articles-dashboard"] });
@@ -145,6 +146,8 @@ export function ArticlesListPanel({
   const canPublish = hasPermission(roles, "articles:publish");
   const canDelete = hasPermission(roles, "articles:delete");
   const canReassign = hasPermission(roles, "articles:edit_all");
+  const showStatusFilter = !lockedStatus && !(libraryMode && libraryTab !== "all");
+  const ignoreStatusInFilters = Boolean(lockedStatus) || (libraryMode && libraryTab !== "all");
 
   const authorOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -157,42 +160,32 @@ export function ArticlesListPanel({
   }, [articles.data]);
 
   const filtered = useMemo(() => {
-    const query = searchText.trim().toLowerCase();
-    const from = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null;
-    const to = dateTo ? new Date(`${dateTo}T23:59:59.999`).getTime() : null;
-    const effectiveStatus = lockedStatus ?? (libraryMode ? "all" : status);
+    const viewTotals = views.data ?? {};
     return (articles.data ?? []).filter((article) => {
-      const updated = new Date(article.updated_at).getTime();
-      return (
-        (!libraryMode || matchesLibraryTab(article, libraryTab)) &&
-        (!query ||
-          article.title.toLowerCase().includes(query) ||
-          article.slug.toLowerCase().includes(query)) &&
-        (author === "all" || article.author_id === author) &&
-        (category === "all" || article.section_id === category) &&
-        (effectiveStatus === "all" || article.status === effectiveStatus) &&
-        (!badgeFilter || article.badge_type === badgeFilter) &&
-        (from === null || updated >= from) &&
-        (to === null || updated <= to)
+      if (libraryMode && !matchesLibraryTab(article, libraryTab)) return false;
+      if (badgeFilter && article.badge_type !== badgeFilter) return false;
+      if (lockedStatus && article.status !== lockedStatus) return false;
+      return matchesArticlesFilters(
+        article,
+        filters,
+        viewTotals[article.id] ?? 0,
+        { ignoreStatus: ignoreStatusInFilters },
       );
     });
   }, [
     articles.data,
-    author,
     badgeFilter,
-    category,
-    dateFrom,
-    dateTo,
+    filters,
+    ignoreStatusInFilters,
     libraryMode,
     libraryTab,
     lockedStatus,
-    searchText,
-    status,
+    views.data,
   ]);
 
   useEffect(() => {
     setPage(1);
-  }, [searchText, author, category, status, dateFrom, dateTo, lockedStatus, badgeFilter, libraryTab]);
+  }, [filters, lockedStatus, badgeFilter, libraryTab]);
 
   const pageRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -201,12 +194,16 @@ export function ArticlesListPanel({
 
   const allVisibleSelected =
     pageRows.length > 0 && pageRows.every((article) => selected.includes(article.id));
-  const error = articles.error ?? me.error ?? sections.error ?? duplicate.error ?? bulk.error ?? counts.error;
-  const hasFilters =
-    Boolean(searchText || dateFrom || dateTo) ||
-    author !== "all" ||
-    category !== "all" ||
-    (!lockedStatus && !libraryMode && status !== "all");
+  const error =
+    articles.error ??
+    me.error ??
+    sections.error ??
+    tags.error ??
+    views.error ??
+    duplicate.error ??
+    bulk.error ??
+    counts.error;
+  const hasFilters = isArticlesFilterActive(filters, { ignoreStatus: ignoreStatusInFilters });
 
   const runBulk = (
     action: Exclude<BulkAction, "reassign_category">,
@@ -220,12 +217,10 @@ export function ArticlesListPanel({
   };
 
   const resetFilters = () => {
-    setSearchText("");
-    setAuthor("all");
-    setCategory("all");
-    if (!lockedStatus && !libraryMode) setStatus("all");
-    setDateFrom("");
-    setDateTo("");
+    setFilters({
+      ...DEFAULT_ARTICLES_FILTERS,
+      status: lockedStatus ?? "all",
+    });
   };
 
   const tabCounts = counts.data;
@@ -291,74 +286,18 @@ export function ArticlesListPanel({
       ) : null}
 
       <CmsPanel>
-        <FilterBar onClear={hasFilters ? resetFilters : undefined}>
-          <FilterField label="Search">
-            <div className="relative">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-              <input
-                className={`${cmsInput} pl-9`}
-                value={searchText}
-                onChange={(event) => setSearchText(event.target.value)}
-                placeholder="Title or slug"
-              />
-            </div>
-          </FilterField>
-          <FilterField label="Author">
-            <select className={cmsInput} value={author} onChange={(event) => setAuthor(event.target.value)}>
-              <option value="all">All authors</option>
-              {authorOptions.map(([id, name]) => (
-                <option key={id} value={id}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </FilterField>
-          <FilterField label="Category">
-            <select
-              className={cmsInput}
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-            >
-              <option value="all">All categories</option>
-              {(sections.data ?? []).map((section) => (
-                <option key={section.id} value={section.id}>
-                  {section.name}
-                </option>
-              ))}
-            </select>
-          </FilterField>
-          {!lockedStatus && !libraryMode ? (
-            <FilterField label="Status">
-              <select
-                className={cmsInput}
-                value={status}
-                onChange={(event) => setStatus(event.target.value as "all" | ArticleStatus)}
-              >
-                {STATUSES.map((value) => (
-                  <option key={value} value={value}>
-                    {statusLabel(value)}
-                  </option>
-                ))}
-              </select>
-            </FilterField>
-          ) : null}
-          <FilterField label="Updated from">
-            <input
-              type="date"
-              className={cmsInput}
-              value={dateFrom}
-              onChange={(event) => setDateFrom(event.target.value)}
-            />
-          </FilterField>
-          <FilterField label="Updated to">
-            <input
-              type="date"
-              className={cmsInput}
-              value={dateTo}
-              onChange={(event) => setDateTo(event.target.value)}
-            />
-          </FilterField>
-        </FilterBar>
+        <ArticlesAdvancedFilters
+          filters={filters}
+          onChange={setFilters}
+          onClear={resetFilters}
+          authors={authorOptions}
+          categories={(sections.data ?? []).map((section) => ({
+            id: section.id,
+            name: section.name,
+          }))}
+          tags={(tags.data ?? []).map((tag) => ({ id: tag.id, name: tag.name }))}
+          showStatus={showStatusFilter}
+        />
 
         {selected.length > 0 ? (
           <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-4 py-3">
@@ -437,7 +376,11 @@ export function ArticlesListPanel({
               <DataTableEmpty
                 colSpan={ARTICLE_COLUMNS.length}
                 title="No matching articles"
-                description="Adjust the filters or create a new article."
+                description={
+                  hasFilters
+                    ? "No articles match these filters. Clear filters or try a preset."
+                    : "Adjust the filters or create a new article."
+                }
                 action={
                   canCreate ? (
                     <Link to="/admin/articles/$id" params={{ id: "new" }} className={cmsButton}>
@@ -604,8 +547,7 @@ function sectionName(section: { name?: string } | { name?: string }[] | null) {
   return (Array.isArray(section) ? section[0]?.name : section?.name) ?? "Unassigned";
 }
 
-function statusLabel(status: "all" | ArticleStatus) {
-  if (status === "all") return "All statuses";
+function statusLabel(status: ArticleStatus) {
   if (status === "review") return "In Review";
   return status[0].toUpperCase() + status.slice(1);
 }
