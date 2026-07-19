@@ -225,6 +225,7 @@ export function WorkflowActions({
   canReview,
   canPublish,
   disabled,
+  dirty,
   onAction,
 }: {
   status: string;
@@ -232,6 +233,7 @@ export function WorkflowActions({
   canReview: boolean;
   canPublish: boolean;
   disabled?: boolean;
+  dirty?: boolean;
   onAction: (action: ArticleApprovalAction, note?: string) => void;
 }) {
   return (
@@ -239,6 +241,11 @@ export function WorkflowActions({
       <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
         Publishing workflow
       </div>
+      {dirty ? (
+        <p className="text-[11px] text-cat-amber">
+          Unsaved edits will be saved automatically before this action runs.
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         {canSubmitReview && status === "draft" ? (
           <button
@@ -250,15 +257,27 @@ export function WorkflowActions({
             Submit for review
           </button>
         ) : null}
+        {canPublish && (status === "draft" || status === "review") ? (
+          <button
+            type="button"
+            className={cn(cmsButton)}
+            disabled={disabled}
+            title="Save current content and publish live"
+            onClick={() => onAction("publish")}
+          >
+            {status === "review" ? "Approve & publish" : "Publish now"}
+          </button>
+        ) : null}
         {canReview && status === "review" ? (
           <>
             <button
               type="button"
-              className={cn(cmsButton)}
+              className={cmsSecondaryButton}
               disabled={disabled}
+              title="Records an approval note — status stays In review until published"
               onClick={() => onAction("approve")}
             >
-              Approve
+              Log approval
             </button>
             <button
               type="button"
@@ -283,16 +302,6 @@ export function WorkflowActions({
               Reject
             </button>
           </>
-        ) : null}
-        {canPublish && status === "review" ? (
-          <button
-            type="button"
-            className={cmsSecondaryButton}
-            disabled={disabled}
-            onClick={() => onAction("publish")}
-          >
-            Approve & publish
-          </button>
         ) : null}
       </div>
     </div>

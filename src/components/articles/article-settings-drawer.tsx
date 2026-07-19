@@ -100,6 +100,7 @@ export function ArticleSettingsDrawer({
   workflowPending,
   onWorkflow,
   workflowError,
+  dirty,
   sections,
   tagNames,
   tagDraft,
@@ -148,6 +149,7 @@ export function ArticleSettingsDrawer({
   workflowPending: boolean;
   onWorkflow: (action: ArticleApprovalAction, note?: string) => void;
   workflowError?: string | null;
+  dirty?: boolean;
   sections: Array<{ id: string; name: string }>;
   tagNames: string[];
   tagDraft: string;
@@ -339,6 +341,7 @@ export function ArticleSettingsDrawer({
                     canReview={canReview}
                     canPublish={canPublish}
                     disabled={workflowPending}
+                    dirty={dirty}
                     onAction={onWorkflow}
                   />
                 ) : null}

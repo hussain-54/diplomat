@@ -41,6 +41,10 @@ export function DocumentEditorBar({
   onSave,
   saveLabel,
   canSave,
+  saveError,
+  saveBlockedHint,
+  onPublish,
+  canPublish,
   articleId,
   isNew,
   publicSlug,
@@ -65,6 +69,10 @@ export function DocumentEditorBar({
   onSave: () => void;
   saveLabel: string;
   canSave: boolean;
+  saveError?: string | null;
+  saveBlockedHint?: string | null;
+  onPublish?: () => void;
+  canPublish?: boolean;
   articleId: string;
   isNew: boolean;
   publicSlug?: string;
@@ -140,6 +148,16 @@ export function DocumentEditorBar({
               {title.trim() || (isNew ? "Untitled article" : "Edit article")}
             </span>
           </div>
+          {saveError || saveBlockedHint ? (
+            <p
+              className={cn(
+                "truncate text-[10px]",
+                saveError ? "text-cat-rose" : "text-cat-amber",
+              )}
+            >
+              {saveError || saveBlockedHint}
+            </p>
+          ) : null}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -232,9 +250,24 @@ export function DocumentEditorBar({
             </DropdownMenuContent>
           </DropdownMenu>
 
+          {canPublish && onPublish ? (
+            <button
+              type="button"
+              className={cn(cmsButton, "h-8 px-3")}
+              disabled={!canSave || saving}
+              onClick={onPublish}
+              title="Save and publish this article"
+            >
+              {saving ? "Publishing…" : "Publish"}
+            </button>
+          ) : null}
+
           <button
             type="button"
-            className={cn(cmsButton, "h-8 px-3")}
+            className={cn(
+              canPublish && onPublish ? cmsGhostButton : cmsButton,
+              "h-8 px-3",
+            )}
             disabled={!canSave || saving}
             onClick={onSave}
           >

@@ -382,8 +382,12 @@ function EditArticle() {
   };
 
   const save = useMutation({
-    mutationFn: async ({ auto: _auto }: { auto?: boolean } = {}) => {
+    mutationFn: async ({
+      auto: _auto,
+      statusOverride,
+    }: { auto?: boolean; statusOverride?: ArticleStatus } = {}) => {
       const previousStatus = articleQ.data?.status;
+      const nextStatus = statusOverride ?? form.status;
       const article = await upsertArticle({
         data: {
           id: isNew ? undefined : id,
@@ -394,10 +398,10 @@ function EditArticle() {
           region: form.region,
           badge_type: form.badge_type,
           hero_image_url: form.hero_image_url,
-          status: form.status,
+          status: nextStatus,
           slug: form.slug || undefined,
           scheduled_at:
-            form.status === "scheduled" && form.scheduled_at
+            nextStatus === "scheduled" && form.scheduled_at
               ? new Date(form.scheduled_at).toISOString()
               : null,
         },
@@ -418,17 +422,17 @@ function EditArticle() {
       if (
         article?.id &&
         previousStatus &&
-        previousStatus !== form.status &&
-        ["published", "scheduled", "archived", "review"].includes(form.status)
+        previousStatus !== nextStatus &&
+        ["published", "scheduled", "archived", "review"].includes(nextStatus)
       ) {
         const action: ArticleApprovalAction | null =
-          form.status === "published"
+          nextStatus === "published"
             ? "publish"
-            : form.status === "scheduled"
+            : nextStatus === "scheduled"
               ? "schedule"
-              : form.status === "archived"
+              : nextStatus === "archived"
                 ? "archive"
-                : form.status === "review" && previousStatus === "draft"
+                : nextStatus === "review" && previousStatus === "draft"
                   ? "submit_review"
                   : null;
         if (action) {
@@ -438,7 +442,7 @@ function EditArticle() {
                 article_id: article.id,
                 action,
                 from_status: previousStatus,
-                to_status: form.status,
+                to_status: nextStatus,
               },
             });
           } catch {
@@ -446,15 +450,30 @@ function EditArticle() {
           }
         }
       }
-      return article;
+      return { article, nextStatus };
     },
-    onSuccess: (article, variables) => {
+    onSuccess: (result, variables) => {
+      const article = result?.article;
+      const nextStatus = result?.nextStatus;
       setDirty(false);
       setLastSavedAt(new Date());
       clearArticleDraftCache(cacheKey);
+      if (article && nextStatus) {
+        setForm((prev) => ({
+          ...prev,
+          status: nextStatus,
+          slug: article.slug ?? prev.slug,
+        }));
+      }
       if (isNew && article?.id) {
         moveArticleDraftCache("new", article.id);
         clearArticleDraftCache("new");
+      }
+      if (article?.id) {
+        void qc.invalidateQueries({ queryKey: ["admin-article", article.id] });
+      }
+      if (!isNew) {
+        void qc.invalidateQueries({ queryKey: ["admin-article", id] });
       }
       qc.invalidateQueries({ queryKey: ["admin-articles"] });
       qc.invalidateQueries({ queryKey: ["article-revisions", id] });
@@ -472,18 +491,32 @@ function EditArticle() {
   });
 
   const workflow = useMutation({
-    mutationFn: ({ action, note }: { action: ArticleApprovalAction; note?: string }) =>
-      applyArticleWorkflowAction({
+    mutationFn: async ({ action, note }: { action: ArticleApprovalAction; note?: string }) => {
+      // Always persist the canvas first so workflow never publishes stale DB content.
+      if (dirty) {
+        if (!form.title.trim() || !form.section_id) {
+          throw new Error("Add a title and category, then try again.");
+        }
+        await save.mutateAsync({});
+      }
+      return applyArticleWorkflowAction({
         data: {
           article_id: id,
           action,
           note,
-          scheduled_at:
-            form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null,
+          scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null,
         },
-      }),
-    onSuccess: () => {
+      });
+    },
+    onSuccess: (article) => {
       setDirty(false);
+      if (article?.status) {
+        setForm((prev) => ({
+          ...prev,
+          status: article.status as ArticleStatus,
+          slug: article.slug ?? prev.slug,
+        }));
+      }
       void qc.invalidateQueries({ queryKey: ["admin-article", id] });
       void qc.invalidateQueries({ queryKey: ["article-approvals", id] });
       void qc.invalidateQueries({ queryKey: ["article-revisions", id] });
@@ -623,8 +656,25 @@ function EditArticle() {
       : form.status === "scheduled"
         ? "Schedule"
         : isNew
-          ? "Create"
+          ? "Add"
           : "Save draft";
+
+  const saveBlockedHint = !readOnly
+    ? !form.title.trim()
+      ? "Add a title to save"
+      : !form.section_id
+        ? "Pick a category in Settings to save or publish"
+        : form.status === "scheduled" && !form.scheduled_at
+          ? "Set a schedule date before saving"
+          : null
+    : null;
+
+  const showQuickPublish =
+    canPublish &&
+    !readOnly &&
+    ["draft", "review"].includes(form.status) &&
+    !!form.title.trim() &&
+    !!form.section_id;
 
   const copyShareLink = () => {
     const url = publicSlug
@@ -657,7 +707,7 @@ function EditArticle() {
       <DocumentEditorBar
         title={form.title}
         statusLabel={form.status}
-        saving={save.isPending}
+        saving={save.isPending || workflow.isPending}
         dirty={dirty}
         lastSavedAt={lastSavedAt}
         stats={writingStats}
@@ -667,6 +717,20 @@ function EditArticle() {
         onSave={() => save.mutate({})}
         saveLabel={saveLabel}
         canSave={canSubmit}
+        saveError={save.error?.message ?? workflow.error?.message ?? null}
+        saveBlockedHint={saveBlockedHint}
+        canPublish={showQuickPublish}
+        onPublish={() => {
+          if (
+            window.confirm(
+              isNew
+                ? "Add and publish this article live now?"
+                : "Publish this article live with your latest edits?",
+            )
+          ) {
+            save.mutate({ statusOverride: "published" });
+          }
+        }}
         articleId={id}
         isNew={isNew}
         publicSlug={publicSlug}
@@ -898,7 +962,8 @@ function EditArticle() {
           canReview={canReview}
           workflowPending={workflow.isPending || save.isPending}
           onWorkflow={(action, note) => workflow.mutate({ action, note })}
-          workflowError={workflow.error?.message}
+          workflowError={workflow.error?.message ?? save.error?.message}
+          dirty={dirty}
           sections={(sectionsQ.data ?? []).map((sec) => ({ id: sec.id, name: sec.name }))}
           tagNames={tagNames}
           tagDraft={tagDraft}
