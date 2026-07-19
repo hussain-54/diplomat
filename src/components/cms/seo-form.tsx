@@ -19,6 +19,7 @@ export function SEOForm({
   readOnly = false,
   publicationName = "Diplomacy Lens",
   showSocial = true,
+  showSeo = true,
 }: {
   value: SEOFormValue;
   onChange: (patch: Partial<SEOFormValue>) => void;
@@ -32,6 +33,7 @@ export function SEOForm({
   readOnly?: boolean;
   publicationName?: string;
   showSocial?: boolean;
+  showSeo?: boolean;
 }) {
   const seoTitle = value.seo_title?.trim() || titleFallback;
   const metaDescription = value.meta_description?.trim() || deckFallback;
@@ -39,6 +41,7 @@ export function SEOForm({
 
   return (
     <div className="space-y-6">
+      {showSeo ? (
       <CmsPanel title="SEO" description="Search metadata, robots, schema, and previews">
         <div className="space-y-4 p-5">
           <Field label="SEO title" hint="50–60 characters ideal">
@@ -163,6 +166,7 @@ export function SEOForm({
           />
         </div>
       </CmsPanel>
+      ) : null}
 
       {showSocial && (
         <CmsPanel title="Social" description="Open Graph and Twitter card overrides">

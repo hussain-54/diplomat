@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { History, ImagePlus, RotateCcw, X } from "lucide-react";
+import { ImagePlus } from "lucide-react";
 import {
   applyArticleWorkflowAction,
   duplicateArticle,
@@ -12,7 +12,6 @@ import {
   recordArticleApproval,
   restoreArticleRevision,
   setArticleTags,
-  unwrapRevisionSnapshot,
   updateArticleSeo,
   upsertArticle,
   uploadHeroImage,
@@ -22,19 +21,16 @@ import {
 import { getSections } from "@/lib/content.functions";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { Database } from "@/integrations/supabase/types";
-import { CmsPanel, CmsStatus, cmsButton, cmsInput } from "@/components/cms-ui";
-import { MediaUploader, RichEditor, SEOForm } from "@/components/cms";
+import { RichEditor } from "@/components/cms";
 import { ArticleBody } from "@/components/article-body";
-import { ArticleAiAssistantPanel } from "@/components/articles/ai-assistant-panel";
-import {
-  ArticleApprovalHistoryPanel,
-  ArticleNotesPanel,
-  WorkflowActions,
-} from "@/components/articles/article-edit-panels";
 import {
   DocumentEditorBar,
   type DocumentViewMode,
 } from "@/components/articles/document-editor-chrome";
+import {
+  ArticleSettingsDrawer,
+  type ArticleSettingsSection,
+} from "@/components/articles/article-settings-drawer";
 import { computeArticleSeoScore } from "@/components/articles/articles-filters";
 import {
   clearArticleDraftCache,
@@ -48,9 +44,8 @@ import { hasPermission } from "@/lib/permissions";
 import { requirePermissionRoute } from "@/lib/route-guards";
 import { parseBody, serializeBlocks, type Block } from "@/lib/blocks";
 import { computeWritingStats } from "@/lib/writing-stats";
-import { parseHreflang, seoLengthTone, siteUrl } from "@/lib/seo";
+import { parseHreflang, siteUrl } from "@/lib/seo";
 import { ARTICLES_STATIC_SEGMENTS } from "@/components/articles/nav";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
@@ -146,8 +141,9 @@ function EditArticle() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [draftRecovery, setDraftRecovery] = useState<ArticleDraftCachePayload | null>(null);
   const [viewMode, setViewMode] = useState<DocumentViewMode>("edit");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState("publishing");
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsSection, setSettingsSection] =
+    useState<ArticleSettingsSection>("publishing");
   const hydratedRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -613,10 +609,12 @@ function EditArticle() {
     ? meQ.data?.profile?.avatar_url
     : author?.avatar_url;
   const publicSlug = form.status === "published" && form.slug ? form.slug : undefined;
-  const showSidebar =
-    sidebarOpen && (viewMode === "edit" || viewMode === "reading");
   const fullscreen = viewMode === "fullscreen";
   const focusLike = viewMode === "focus" || viewMode === "fullscreen";
+  const openSettings = (section: ArticleSettingsSection = "publishing") => {
+    setSettingsSection(section);
+    setSettingsOpen(true);
+  };
   const saveLabel =
     form.status === "published"
       ? articleQ.data?.status === "published"
@@ -649,9 +647,6 @@ function EditArticle() {
     );
   }
 
-  const tabTriggerClass =
-    "rounded-none border-b-2 border-transparent bg-transparent px-2.5 py-1.5 text-xs font-medium text-muted-foreground shadow-none data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none";
-
   return (
     <div
       className={cn(
@@ -667,8 +662,6 @@ function EditArticle() {
         lastSavedAt={lastSavedAt}
         stats={writingStats}
         seoScore={seoScore}
-        sidebarOpen={sidebarOpen && viewMode === "edit"}
-        onToggleSidebar={() => setSidebarOpen((v) => !v)}
         mode={viewMode}
         onModeChange={setViewMode}
         onSave={() => save.mutate({})}
@@ -686,6 +679,9 @@ function EditArticle() {
           if (window.confirm("Move this article to trash (archived)?")) archive.mutate();
         }}
         onShare={publicSlug || !isNew ? copyShareLink : undefined}
+        onOpenSettings={() => openSettings("publishing")}
+        onOpenSeo={() => openSettings("seo")}
+        onOpenAi={() => openSettings("ai")}
       />
 
       {draftRecovery ? (
@@ -748,8 +744,8 @@ function EditArticle() {
         >
           <div
             className={cn(
-              "mx-auto w-full bg-background shadow-sm",
-              focusLike ? "max-w-[720px]" : "max-w-[850px]",
+              "mx-auto w-full rounded-xl bg-background shadow-[var(--cms-shadow)]",
+              focusLike ? "max-w-[720px]" : "max-w-[960px]",
               "px-8 py-10 sm:px-14 sm:py-14",
             )}
           >
@@ -873,476 +869,85 @@ function EditArticle() {
           </div>
         </main>
 
-        {showSidebar ? (
-          <aside className="hidden w-[300px] shrink-0 overflow-y-auto border-l border-border/60 bg-background lg:block xl:w-[320px]">
-            <Tabs value={sidebarTab} onValueChange={setSidebarTab} className="space-y-0">
-              <TabsList className="sticky top-0 z-10 flex h-auto w-full flex-wrap justify-start gap-0 rounded-none border-b border-border/50 bg-background px-2 py-1">
-                <TabsTrigger value="publishing" className={tabTriggerClass}>
-                  Publishing
-                </TabsTrigger>
-                <TabsTrigger value="seo" className={tabTriggerClass}>
-                  SEO
-                </TabsTrigger>
-                <TabsTrigger value="social" className={tabTriggerClass}>
-                  Social
-                </TabsTrigger>
-                <TabsTrigger value="categories" className={tabTriggerClass}>
-                  Categories
-                </TabsTrigger>
-                <TabsTrigger value="tags" className={tabTriggerClass}>
-                  Tags
-                </TabsTrigger>
-                <TabsTrigger value="media" className={tabTriggerClass}>
-                  Media
-                </TabsTrigger>
-                <TabsTrigger value="author" className={tabTriggerClass}>
-                  Author
-                </TabsTrigger>
-                <TabsTrigger value="ai" className={tabTriggerClass}>
-                  AI
-                </TabsTrigger>
-                <TabsTrigger value="settings" className={tabTriggerClass}>
-                  Settings
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="publishing" className="mt-0">
-                <CmsPanel title="Publishing" description="Workflow and distribution">
-                  <div className="space-y-4 p-4">
-                    <Field label="Status">
-                      <select
-                        value={form.status}
-                        onChange={(e) => patchForm({ status: e.target.value as ArticleStatus })}
-                        disabled={readOnly}
-                        className={cmsInput}
-                      >
-                        <option value="draft">Draft</option>
-                        <option value="review">In review</option>
-                        {canPublish && (
-                          <>
-                            <option value="scheduled">Scheduled</option>
-                            <option value="published">Published</option>
-                            <option value="archived">Archived</option>
-                          </>
-                        )}
-                      </select>
-                    </Field>
-                    {form.status === "scheduled" && (
-                      <Field label="Publication date and time">
-                        <input
-                          type="datetime-local"
-                          required
-                          min={toDateTimeLocal(new Date().toISOString())}
-                          value={form.scheduled_at}
-                          onChange={(event) => patchForm({ scheduled_at: event.target.value })}
-                          className={cmsInput}
-                        />
-                      </Field>
-                    )}
-                    <Field label="Badge">
-                      <select
-                        value={form.badge_type}
-                        disabled={readOnly}
-                        onChange={(e) => patchForm({ badge_type: e.target.value })}
-                        className={cmsInput}
-                      >
-                        {["none", "breaking", "live", "exclusive", "opinion", "premium", "alert"].map(
-                          (b) => (
-                            <option key={b} value={b}>
-                              {b}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </Field>
-                    <Field label="Region">
-                      <input
-                        value={form.region}
-                        disabled={readOnly}
-                        onChange={(e) => patchForm({ region: e.target.value })}
-                        className={cmsInput}
-                      />
-                    </Field>
-                    <div className="flex items-center justify-between border-t border-border pt-4">
-                      <span className="text-xs font-semibold text-foreground">Current state</span>
-                      <CmsStatus tone={statusTone(form.status)} status={form.status}>
-                        {form.status}
-                      </CmsStatus>
-                    </div>
-                    {!isNew && !readOnly ? (
-                      <WorkflowActions
-                        status={form.status}
-                        canSubmitReview={canSubmitReview}
-                        canReview={canReview}
-                        canPublish={canPublish}
-                        disabled={workflow.isPending || save.isPending}
-                        onAction={(action, note) => workflow.mutate({ action, note })}
-                      />
-                    ) : null}
-                    {workflow.isError ? (
-                      <div className="border border-crimson/30 bg-crimson/10 p-3 text-xs text-crimson">
-                        {workflow.error.message}
-                      </div>
-                    ) : null}
-                    <button type="submit" disabled={!canSubmit} className={`${cmsButton} w-full`}>
-                      {save.isPending
-                        ? "Saving…"
-                        : form.status === "published"
-                          ? "Publish article"
-                          : form.status === "scheduled"
-                            ? "Schedule article"
-                            : form.status === "archived"
-                              ? "Archive article"
-                              : isNew
-                                ? "Create article"
-                                : "Save changes"}
-                    </button>
-                    {save.isError && (
-                      <div className="border border-crimson/30 bg-crimson/10 p-3 text-xs text-crimson">
-                        {(save.error as Error).message}
-                      </div>
-                    )}
-                  </div>
-                </CmsPanel>
-              </TabsContent>
-
-              <TabsContent value="seo" className="mt-0">
-                <SEOForm
-                  value={seo}
-                  onChange={(patch) => {
-                    patchSeo(patch);
-                    setDirty(true);
-                  }}
-                  slug={form.slug}
-                  onSlugChange={(slug) => {
-                    patchForm({ slug });
-                    setDirty(true);
-                  }}
-                  titleFallback={form.title}
-                  deckFallback={form.deck}
-                  heroImageUrl={form.hero_image_url}
-                  hreflangRows={hreflangRows}
-                  onHreflangChange={(rows) => {
-                    setHreflangRows(rows);
-                    setDirty(true);
-                  }}
-                  readOnly={readOnly}
-                  showSocial={false}
-                />
-              </TabsContent>
-
-              <TabsContent value="social" className="mt-0">
-                <SEOForm
-                  value={seo}
-                  onChange={(patch) => {
-                    patchSeo(patch);
-                    setDirty(true);
-                  }}
-                  slug={form.slug}
-                  onSlugChange={(slug) => {
-                    patchForm({ slug });
-                    setDirty(true);
-                  }}
-                  titleFallback={form.title}
-                  deckFallback={form.deck}
-                  heroImageUrl={form.hero_image_url}
-                  hreflangRows={hreflangRows}
-                  onHreflangChange={(rows) => {
-                    setHreflangRows(rows);
-                    setDirty(true);
-                  }}
-                  readOnly={readOnly}
-                  showSocial
-                />
-              </TabsContent>
-
-              <TabsContent value="categories" className="mt-0">
-                <CmsPanel title="Categories" description="Section placement">
-                  <div className="p-4">
-                    <Field label="Category">
-                      <select
-                        required
-                        disabled={readOnly}
-                        value={form.section_id}
-                        onChange={(e) => patchForm({ section_id: e.target.value })}
-                        className={cmsInput}
-                      >
-                        <option value="">—</option>
-                        {(sectionsQ.data ?? []).map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.name}
-                          </option>
-                        ))}
-                      </select>
-                    </Field>
-                  </div>
-                </CmsPanel>
-              </TabsContent>
-
-              <TabsContent value="tags" className="mt-0">
-                <CmsPanel title="Tags" description="Topics for discovery">
-                  <div className="space-y-3 p-4">
-                    {tagNames.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5">
-                        {tagNames.map((tag) => (
-                          <span
-                            key={tag}
-                            className="inline-flex items-center gap-1 border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold text-foreground"
-                          >
-                            {tag}
-                            {!readOnly && mayManageTags && (
-                              <button
-                                type="button"
-                                title={`Remove ${tag}`}
-                                onClick={() => {
-                                  setTagNames((prev) => prev.filter((t) => t !== tag));
-                                  setDirty(true);
-                                }}
-                                className="text-muted-foreground hover:text-crimson"
-                              >
-                                <X className="h-3 w-3" />
-                              </button>
-                            )}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {!readOnly && mayManageTags && (
-                      <>
-                        <input
-                          value={tagDraft}
-                          onChange={(e) => setTagDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === ",") {
-                              e.preventDefault();
-                              addTag(tagDraft);
-                            }
-                          }}
-                          placeholder="Add tag and press Enter"
-                          className={cmsInput}
-                          list="all-tags-list"
-                        />
-                        <datalist id="all-tags-list">
-                          {(allTagsQ.data ?? [])
-                            .filter(
-                              (t) =>
-                                !tagNames.some((n) => n.toLowerCase() === t.name.toLowerCase()),
-                            )
-                            .map((t) => (
-                              <option key={t.id} value={t.name} />
-                            ))}
-                        </datalist>
-                      </>
-                    )}
-                    {!mayManageTags && (
-                      <p className="text-xs text-muted-foreground">Your role cannot modify tags.</p>
-                    )}
-                  </div>
-                </CmsPanel>
-              </TabsContent>
-
-              <TabsContent value="media" className="mt-0">
-                <CmsPanel title="Media" description="Cover image · max 5 MB">
-                  <div className="space-y-3 p-4">
-                    {mayUploadMedia && !readOnly ? (
-                      <MediaUploader
-                        previewUrl={form.hero_image_url || null}
-                        busy={uploadBusy}
-                        progress={uploadBusy ? "Uploading…" : null}
-                        onFiles={(files) => {
-                          const file = files[0];
-                          if (file) void uploadHero(file);
-                        }}
-                      >
-                        Upload lead image
-                      </MediaUploader>
-                    ) : form.hero_image_url ? (
-                      <img
-                        src={form.hero_image_url}
-                        alt={form.title || "Article hero"}
-                        className="aspect-video w-full border border-border object-cover"
-                      />
-                    ) : null}
-                    {uploadError && <div className="text-xs text-crimson">{uploadError}</div>}
-                    <input
-                      value={form.hero_image_url}
-                      disabled={readOnly}
-                      onChange={(e) => patchForm({ hero_image_url: e.target.value })}
-                      placeholder="Or paste image URL"
-                      className={`${cmsInput} text-xs`}
-                    />
-                  </div>
-                </CmsPanel>
-              </TabsContent>
-
-              <TabsContent value="author" className="mt-0">
-                <CmsPanel title="Author" description="Byline">
-                  <div className="flex items-center gap-3 p-4">
-                    {isNew ? (
-                      <AuthorRow
-                        name={meQ.data?.profile?.name ?? "You"}
-                        avatarUrl={meQ.data?.profile?.avatar_url}
-                        note="You will be credited as the author."
-                      />
-                    ) : (
-                      <AuthorRow
-                        name={author?.name ?? "Unknown author"}
-                        avatarUrl={author?.avatar_url}
-                        note={
-                          articleQ.data?.created_at
-                            ? `Created ${new Date(articleQ.data.created_at).toLocaleDateString()}`
-                            : undefined
-                        }
-                      />
-                    )}
-                  </div>
-                </CmsPanel>
-              </TabsContent>
-
-              <TabsContent value="ai" className="mt-0">
-                <ArticleAiAssistantPanel
-                  title={form.title}
-                  deck={form.deck}
-                  blocks={blocks}
-                  readOnly={readOnly}
-                  onApplyTitle={(next) => {
-                    patchForm({ title: next });
-                    setDirty(true);
-                  }}
-                  onApplyDeck={(next) => {
-                    patchForm({ deck: next });
-                    setDirty(true);
-                  }}
-                  onApplyMeta={(patch) => {
-                    patchSeo(patch);
-                    setDirty(true);
-                  }}
-                  onInsertSummaryBlock={(next) => {
-                    changeBlocks(next);
-                    setDirty(true);
-                  }}
-                />
-              </TabsContent>
-
-              <TabsContent value="settings" className="mt-0 space-y-3 p-3">
-                <CmsPanel title="Settings" description="Article summary">
-                  <div className="space-y-3 p-4 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Status</span>
-                      <CmsStatus tone={statusTone(form.status)} status={form.status}>
-                        {form.status}
-                      </CmsStatus>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Slug</span>
-                      <span className="truncate font-mono text-xs text-foreground">
-                        {form.slug || "—"}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Region</span>
-                      <span className="text-foreground">{form.region || "—"}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">Badge</span>
-                      <span className="text-foreground">{form.badge_type}</span>
-                    </div>
-                  </div>
-                </CmsPanel>
-                {!isNew ? (
-                  <>
-                    <ArticleNotesPanel
-                      articleId={id}
-                      canEditorial={canWriteEditorialNotes}
-                      canFactCheck={canWriteFactCheckNotes}
-                    />
-                    <ArticleApprovalHistoryPanel articleId={id} />
-                    <CmsPanel
-                      title="Version history"
-                      description="Restorable snapshots from each save"
-                      action={
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <History className="h-3.5 w-3.5" />
-                          {revisionsQ.data?.length ?? 0}
-                        </span>
-                      }
-                    >
-                      {revisionsQ.isLoading ? (
-                        <div className="p-4 text-sm text-muted-foreground">Loading…</div>
-                      ) : revisionsQ.isError ? (
-                        <div className="p-4 text-sm text-crimson">{revisionsQ.error.message}</div>
-                      ) : !revisionsQ.data?.length ? (
-                        <div className="p-6 text-center text-xs text-muted-foreground">
-                          History begins after the first update.
-                        </div>
-                      ) : (
-                        <div className="divide-y divide-border/60">
-                          {revisionsQ.data.map((revision) => {
-                            const snapshot = unwrapRevisionSnapshot(revision.snapshot);
-                            const changer = Array.isArray(revision.changer)
-                              ? revision.changer[0]?.name
-                              : revision.changer?.name;
-                            return (
-                              <div
-                                key={revision.id}
-                                className="flex flex-col gap-2 px-4 py-3"
-                              >
-                                <div className="flex items-start gap-2">
-                                  <div className="flex h-7 w-7 shrink-0 items-center justify-center bg-muted text-[10px] font-bold">
-                                    v{revision.version}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="truncate text-xs font-semibold">
-                                      {snapshot.title ?? "Untitled revision"}
-                                    </div>
-                                    <div className="mt-0.5 text-[10px] text-muted-foreground">
-                                      {new Date(revision.changed_at).toLocaleString()} ·{" "}
-                                      {changer ?? "System"}
-                                    </div>
-                                  </div>
-                                  <CmsStatus
-                                    tone={statusTone(
-                                      (snapshot.status as ArticleStatus) ?? "draft",
-                                    )}
-                                  >
-                                    {snapshot.status ?? "draft"}
-                                  </CmsStatus>
-                                </div>
-                                {!readOnly && (
-                                  <button
-                                    type="button"
-                                    className="inline-flex h-7 items-center justify-center gap-1 border border-input px-2 text-[10px] font-semibold hover:bg-accent"
-                                    disabled={restore.isPending}
-                                    onClick={() => {
-                                      if (
-                                        window.confirm(
-                                          `Restore revision v${revision.version}?`,
-                                        )
-                                      ) {
-                                        restore.mutate(revision.id);
-                                      }
-                                    }}
-                                  >
-                                    <RotateCcw className="h-3 w-3" /> Restore
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      {restore.isError && (
-                        <div className="border-t border-border bg-crimson/10 px-4 py-2 text-xs text-crimson">
-                          {restore.error.message}
-                        </div>
-                      )}
-                    </CmsPanel>
-                  </>
-                ) : null}
-              </TabsContent>
-            </Tabs>
-          </aside>
-        ) : null}
+        <ArticleSettingsDrawer
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          section={settingsSection}
+          onSectionChange={setSettingsSection}
+          form={form}
+          patchForm={(partial) => {
+            patchForm(partial);
+            setDirty(true);
+          }}
+          seo={seo}
+          patchSeo={(partial) => {
+            patchSeo(partial);
+            setDirty(true);
+          }}
+          hreflangRows={hreflangRows}
+          onHreflangChange={(rows) => {
+            setHreflangRows(rows);
+            setDirty(true);
+          }}
+          readOnly={readOnly}
+          isNew={isNew}
+          articleId={id}
+          canPublish={canPublish}
+          canSubmitReview={canSubmitReview}
+          canReview={canReview}
+          workflowPending={workflow.isPending || save.isPending}
+          onWorkflow={(action, note) => workflow.mutate({ action, note })}
+          workflowError={workflow.error?.message}
+          sections={(sectionsQ.data ?? []).map((sec) => ({ id: sec.id, name: sec.name }))}
+          tagNames={tagNames}
+          tagDraft={tagDraft}
+          setTagDraft={setTagDraft}
+          onAddTag={addTag}
+          onRemoveTag={(tag) => {
+            setTagNames((prev) => prev.filter((t) => t !== tag));
+            setDirty(true);
+          }}
+          allTags={(allTagsQ.data ?? []).map((t) => ({ id: t.id, name: t.name }))}
+          mayManageTags={mayManageTags}
+          mayUploadMedia={mayUploadMedia}
+          uploadBusy={uploadBusy}
+          uploadError={uploadError}
+          onUploadHero={(file) => void uploadHero(file)}
+          authorName={authorName}
+          authorAvatar={authorAvatar}
+          authorNote={
+            isNew
+              ? "You will be credited as the author."
+              : articleQ.data?.created_at
+                ? `Created ${new Date(articleQ.data.created_at).toLocaleDateString()}`
+                : undefined
+          }
+          blocks={blocks}
+          onApplyTitle={(next) => {
+            patchForm({ title: next });
+            setDirty(true);
+          }}
+          onApplyDeck={(next) => {
+            patchForm({ deck: next });
+            setDirty(true);
+          }}
+          onApplyMeta={(patch) => {
+            patchSeo(patch);
+            setDirty(true);
+          }}
+          onInsertSummaryBlock={(next) => {
+            changeBlocks(next);
+            setDirty(true);
+          }}
+          canWriteEditorialNotes={canWriteEditorialNotes}
+          canWriteFactCheckNotes={canWriteFactCheckNotes}
+          revisions={revisionsQ.data}
+          revisionsLoading={revisionsQ.isLoading}
+          revisionsError={revisionsQ.error?.message}
+          restorePending={restore.isPending}
+          restoreError={restore.error?.message}
+          onRestore={(revisionId) => restore.mutate(revisionId)}
+        />
       </form>
     </div>
   );
@@ -1374,269 +979,6 @@ function AuthorRow({
   );
 }
 
-function LengthGuide({
-  length,
-  min,
-  max,
-}: {
-  length: number;
-  min: number;
-  max: number;
-}) {
-  return (
-    <div className="mt-1 flex items-center gap-2">
-      <div className="h-1 flex-1 overflow-hidden bg-muted">
-        <div
-          className={`h-full transition-all ${
-            length >= min && length <= max ? "bg-cat-green" : "bg-crimson"
-          }`}
-          style={{ width: `${Math.min(100, (length / max) * 100)}%` }}
-        />
-      </div>
-      <span className={`text-[10px] ${seoLengthTone(length, min, max)}`}>
-        {length < min ? `${min - length} short` : length > max ? `${length - max} over` : "Good"}
-      </span>
-    </div>
-  );
-}
-
-function GoogleSerpPreview({
-  title,
-  description,
-  url,
-  keyword,
-}: {
-  title: string;
-  description: string;
-  url: string;
-  keyword: string;
-}) {
-  const emphasize = (text: string) => {
-    if (!keyword.trim()) return text;
-    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const parts = text.split(new RegExp(`(${escaped})`, "ig"));
-    return parts.map((part, index) =>
-      part.toLowerCase() === keyword.toLowerCase() ? (
-        <strong key={index}>{part}</strong>
-      ) : (
-        part
-      ),
-    );
-  };
-
-  return (
-    <div>
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="text-xs font-semibold text-foreground">Google SERP preview</span>
-        <span className="text-[10px] text-muted-foreground">Desktop</span>
-      </div>
-      <div className="overflow-hidden border border-border bg-white p-4 text-[#202124] dark:bg-white">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f1f3f4] font-bold text-[#3c4043]">
-            D
-          </span>
-          <div className="min-w-0">
-            <div className="text-[#202124]">Diplomacy Lens</div>
-            <div className="max-w-full truncate text-[10px] text-[#4d5156]">
-              {url || siteUrl()}
-            </div>
-          </div>
-        </div>
-        <div className="mt-2 line-clamp-1 font-sans text-lg leading-6 text-[#1a0dab]">
-          {emphasize(title || "Headline appears here")}
-        </div>
-        <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#4d5156]">
-          {emphasize(
-            description ||
-              "Add a meta description to explain what readers will find on this page.",
-          )}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function BinaryChoice({
-  label,
-  value,
-  trueLabel,
-  falseLabel,
-  disabled,
-  onChange,
-}: {
-  label: string;
-  value: boolean;
-  trueLabel: string;
-  falseLabel: string;
-  disabled?: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <div>
-      <div className="mb-1 text-[10px] text-muted-foreground">{label}</div>
-      <div className="grid grid-cols-2 border border-input">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange(true)}
-          className={`h-8 text-[10px] font-semibold ${
-            value ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground"
-          }`}
-        >
-          {trueLabel}
-        </button>
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange(false)}
-          className={`h-8 text-[10px] font-semibold ${
-            !value ? "bg-crimson text-white" : "bg-background text-muted-foreground"
-          }`}
-        >
-          {falseLabel}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function HreflangEditor({
-  rows,
-  readOnly,
-  onChange,
-}: {
-  rows: Array<{ locale: string; url: string }>;
-  readOnly: boolean;
-  onChange: (rows: Array<{ locale: string; url: string }>) => void;
-}) {
-  return (
-    <div className="border-t border-border pt-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs font-semibold text-foreground">hreflang</div>
-          <div className="text-[11px] text-muted-foreground">
-            Alternate language or regional URLs
-          </div>
-        </div>
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={() => onChange([...rows, { locale: "", url: "" }])}
-            className="border border-input px-2 py-1 text-[10px] font-semibold hover:bg-accent"
-          >
-            + Language
-          </button>
-        )}
-      </div>
-      {rows.length > 0 && (
-        <div className="mt-3 space-y-2">
-          {rows.map((row, index) => (
-            <div key={index} className="grid grid-cols-[82px_1fr_24px] gap-1">
-              <input
-                value={row.locale}
-                disabled={readOnly}
-                pattern="(?:[a-zA-Z]{2,3}(?:-[a-zA-Z]{2,4})?|x-default)"
-                onChange={(e) =>
-                  onChange(
-                    rows.map((item, i) =>
-                      i === index ? { ...item, locale: e.target.value } : item,
-                    ),
-                  )
-                }
-                placeholder="en-US"
-                aria-label="Language code"
-                className={`${cmsInput} px-2 text-xs`}
-              />
-              <input
-                type="url"
-                value={row.url}
-                disabled={readOnly}
-                onChange={(e) =>
-                  onChange(
-                    rows.map((item, i) =>
-                      i === index ? { ...item, url: e.target.value } : item,
-                    ),
-                  )
-                }
-                placeholder="https://…"
-                aria-label="Alternate URL"
-                className={`${cmsInput} px-2 text-xs`}
-              />
-              <button
-                type="button"
-                disabled={readOnly}
-                title="Remove alternate"
-                onClick={() => onChange(rows.filter((_, i) => i !== index))}
-                className="text-muted-foreground hover:text-crimson"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SocialPreview({
-  title,
-  description,
-  image,
-}: {
-  title: string;
-  description: string;
-  image: string;
-}) {
-  return (
-    <div>
-      <div className="mb-1.5 text-xs font-semibold text-foreground">Card preview</div>
-      <div className="overflow-hidden rounded-lg border border-border bg-background">
-        {image ? (
-          <img src={image} alt="" className="aspect-[1.91/1] w-full object-cover" />
-        ) : (
-          <div className="flex aspect-[1.91/1] items-center justify-center bg-muted text-xs text-muted-foreground">
-            Social image preview
-          </div>
-        )}
-        <div className="p-3">
-          <div className="text-[10px] uppercase text-muted-foreground">
-            diplomacylens.com
-          </div>
-          <div className="mt-1 line-clamp-1 text-sm font-semibold text-foreground">
-            {title || "Article title"}
-          </div>
-          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-            {description || "Article description"}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function statusTone(status: ArticleStatus) {
-  return status === "published"
-    ? ("success" as const)
-    : status === "review"
-      ? ("warning" as const)
-      : status === "scheduled"
-        ? ("info" as const)
-        : status === "archived"
-          ? ("accent" as const)
-          : ("neutral" as const);
-}
-
-function slugPreview(title: string) {
-  return (
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "")
-      .slice(0, 80) || "article-slug"
-  );
-}
-
 function toDateTimeLocal(value: string | null | undefined) {
   if (!value) return "";
   const date = new Date(value);
@@ -1645,12 +987,3 @@ function toDateTimeLocal(value: string | null | undefined) {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-xs font-semibold text-foreground">{label}</span>
-      {hint && <span className="ml-2 text-[11px] font-normal text-muted-foreground">{hint}</span>}
-      <div className="mt-1.5">{children}</div>
-    </label>
-  );
-}

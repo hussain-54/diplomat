@@ -4,6 +4,8 @@ export { ArticlesDashboardPage } from "./articles-dashboard-page";
 export { ArticlesToolPage } from "./articles-tool-page";
 export { ArticleInspector } from "./article-inspector";
 export { ArticleAiAssistantPanel } from "./ai-assistant-panel";
+export { ArticleSettingsDrawer } from "./article-settings-drawer";
+export type { ArticleSettingsSection } from "./article-settings-drawer";
 export {
   ARTICLES_NAV,
   ARTICLES_PRIMARY_TABS,

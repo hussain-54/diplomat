@@ -10,12 +10,20 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
-  PanelRightClose,
-  PanelRightOpen,
+  MoreHorizontal,
+  Settings2,
   Share2,
+  Sparkles,
 } from "lucide-react";
 import type { WritingStats } from "@/lib/writing-stats";
-import { cmsButton, cmsGhostButton, cmsSecondaryButton } from "@/components/cms";
+import { cmsButton, cmsGhostButton } from "@/components/cms";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 export type DocumentViewMode = "edit" | "focus" | "fullscreen" | "reading";
@@ -28,8 +36,6 @@ export function DocumentEditorBar({
   lastSavedAt,
   stats,
   seoScore,
-  sidebarOpen,
-  onToggleSidebar,
   mode,
   onModeChange,
   onSave,
@@ -43,6 +49,9 @@ export function DocumentEditorBar({
   onDuplicate,
   onArchive,
   onShare,
+  onOpenSettings,
+  onOpenSeo,
+  onOpenAi,
 }: {
   title: string;
   statusLabel: string;
@@ -51,8 +60,6 @@ export function DocumentEditorBar({
   lastSavedAt: Date | null;
   stats: WritingStats;
   seoScore: number;
-  sidebarOpen: boolean;
-  onToggleSidebar: () => void;
   mode: DocumentViewMode;
   onModeChange: (mode: DocumentViewMode) => void;
   onSave: () => void;
@@ -66,6 +73,9 @@ export function DocumentEditorBar({
   onDuplicate?: () => void;
   onArchive?: () => void;
   onShare?: () => void;
+  onOpenSettings: () => void;
+  onOpenSeo: () => void;
+  onOpenAi?: () => void;
 }) {
   const savedLabel = saving
     ? "Saving…"
@@ -75,51 +85,64 @@ export function DocumentEditorBar({
         ? `Saved ${formatRelative(lastSavedAt)}`
         : "All changes saved";
 
+  const seoTone =
+    seoScore >= 75 ? "text-cat-green" : seoScore >= 50 ? "text-cat-amber" : "text-cat-rose";
+
   return (
-    <header className="sticky top-0 z-40 border-b border-border/50 bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
-      <div className="flex flex-wrap items-center gap-3 px-3 py-2.5 sm:px-4">
+    <header className="sticky top-0 z-40 border-b border-border/50 bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
+      <div className="flex h-12 items-center gap-2 px-3 sm:gap-3 sm:px-4">
         <Link
           to="/admin/articles/all"
-          className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+          className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" />
           <span className="hidden sm:inline">Articles</span>
         </Link>
 
+        <div className="h-4 w-px shrink-0 bg-border/80" />
+
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold tracking-tight text-foreground">
-            {title.trim() || (isNew ? "Untitled article" : "Edit article")}
-          </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               {saving ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : dirty ? (
-                <span className="h-1.5 w-1.5 rounded-full bg-gold" />
+                <span className="h-1.5 w-1.5 rounded-full bg-cat-amber" />
               ) : (
                 <Check className="h-3 w-3 text-cat-green" />
               )}
-              {savedLabel}
+              <span className="hidden xs:inline sm:inline">{savedLabel}</span>
             </span>
-            <span className="capitalize">{statusLabel}</span>
-            <span>
+            <span className="rounded-md bg-muted/70 px-1.5 py-0.5 text-[10px] font-semibold capitalize text-foreground">
+              {statusLabel}
+            </span>
+            <span className="hidden md:inline">
               <strong className="font-semibold text-foreground">{stats.words}</strong> words
             </span>
-            <span>
+            <span className="hidden md:inline">
               <strong className="font-semibold text-foreground">
                 {stats.readingMinutes || "—"}
               </strong>{" "}
               min
             </span>
-            <span>
-              SEO{" "}
-              <strong className="font-semibold text-foreground">{seoScore}</strong>
+            <button
+              type="button"
+              onClick={onOpenSeo}
+              className={cn(
+                "rounded-md px-1.5 py-0.5 text-[10px] font-bold cms-transition hover:bg-accent",
+                seoTone,
+              )}
+              title="Open SEO settings"
+            >
+              SEO {seoScore}/100
+            </button>
+            <span className="hidden truncate font-medium text-foreground lg:inline">
+              {title.trim() || (isNew ? "Untitled article" : "Edit article")}
             </span>
-            <span className="hidden md:inline">{stats.readabilityLabel}</span>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex shrink-0 items-center gap-1">
           <IconToggle
             active={mode === "focus"}
             title="Focus mode"
@@ -130,6 +153,7 @@ export function DocumentEditorBar({
           <IconToggle
             active={mode === "fullscreen"}
             title="Full screen"
+            className="hidden sm:inline-flex"
             onClick={() => onModeChange(mode === "fullscreen" ? "edit" : "fullscreen")}
           >
             {mode === "fullscreen" ? (
@@ -141,22 +165,33 @@ export function DocumentEditorBar({
           <IconToggle
             active={mode === "reading"}
             title="Reading mode"
+            className="hidden sm:inline-flex"
             onClick={() => onModeChange(mode === "reading" ? "edit" : "reading")}
           >
             <BookOpen className="h-3.5 w-3.5" />
           </IconToggle>
-          <IconToggle
-            active={sidebarOpen && mode === "edit"}
-            title={sidebarOpen ? "Hide panel" : "Show panel"}
-            onClick={onToggleSidebar}
-            disabled={mode === "focus" || mode === "fullscreen"}
+
+          {onOpenAi ? (
+            <button
+              type="button"
+              className={cmsGhostButton}
+              onClick={onOpenAi}
+              title="AI assistant"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="hidden xl:inline">AI</span>
+            </button>
+          ) : null}
+
+          <button
+            type="button"
+            className={cmsGhostButton}
+            onClick={onOpenSettings}
+            title="Article settings"
           >
-            {sidebarOpen ? (
-              <PanelRightClose className="h-3.5 w-3.5" />
-            ) : (
-              <PanelRightOpen className="h-3.5 w-3.5" />
-            )}
-          </IconToggle>
+            <Settings2 className="h-3.5 w-3.5" />
+            <span className="hidden lg:inline">Settings</span>
+          </button>
 
           {!isNew ? (
             <Link
@@ -168,37 +203,38 @@ export function DocumentEditorBar({
               <span className="hidden lg:inline">Preview</span>
             </Link>
           ) : null}
-          {publicSlug || onShare ? (
-            <button
-              type="button"
-              className={cmsGhostButton}
-              onClick={onShare}
-              title="Copy public link"
-            >
-              <Share2 className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
-          {canDuplicate && onDuplicate ? (
-            <button type="button" className={cmsGhostButton} onClick={onDuplicate} title="Duplicate">
-              <Copy className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
-          {canArchive && onArchive ? (
-            <button type="button" className={cmsGhostButton} onClick={onArchive} title="Archive">
-              <Archive className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={cmsGhostButton} aria-label="More actions">
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              {publicSlug || onShare ? (
+                <DropdownMenuItem onSelect={() => onShare?.()}>
+                  <Share2 className="h-3.5 w-3.5" /> Copy link
+                </DropdownMenuItem>
+              ) : null}
+              {canDuplicate && onDuplicate ? (
+                <DropdownMenuItem onSelect={() => onDuplicate()}>
+                  <Copy className="h-3.5 w-3.5" /> Duplicate
+                </DropdownMenuItem>
+              ) : null}
+              {canArchive && onArchive ? (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => onArchive()}>
+                    <Archive className="h-3.5 w-3.5" /> Archive
+                  </DropdownMenuItem>
+                </>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <button
             type="button"
-            className={cn(cmsSecondaryButton, "hidden sm:inline-flex")}
-            disabled={!canSave || saving}
-            onClick={onSave}
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
-          <button
-            type="button"
-            className={cmsButton}
+            className={cn(cmsButton, "h-8 px-3")}
             disabled={!canSave || saving}
             onClick={onSave}
           >
@@ -215,12 +251,14 @@ function IconToggle({
   title,
   onClick,
   disabled,
+  className,
   children,
 }: {
   active?: boolean;
   title: string;
   onClick: () => void;
   disabled?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -230,8 +268,9 @@ function IconToggle({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex h-8 w-8 items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40",
+        "inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground cms-transition hover:bg-accent hover:text-foreground disabled:opacity-40",
         active && "bg-accent text-foreground",
+        className,
       )}
     >
       {children}
