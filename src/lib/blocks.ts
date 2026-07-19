@@ -26,11 +26,12 @@ export type ListStyle = "bullet" | "numbered" | "check";
 export type ListItem = { text: string; checked?: boolean };
 export type ImageAlign = "left" | "center" | "right" | "full";
 export type ImageSize = "small" | "medium" | "large" | "full";
-export type HeadingLevel = 1 | 2 | 3 | 4;
+export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+export type TextAlign = "left" | "center" | "right" | "justify";
 
 export type BlockData = {
-  paragraph: { text: string };
-  heading: { text: string; level: HeadingLevel };
+  paragraph: { text: string; align?: TextAlign };
+  heading: { text: string; level: HeadingLevel; align?: TextAlign };
   image: {
     url: string;
     alt: string;
@@ -280,8 +281,18 @@ function normalizeBlock(raw: unknown): Block | null {
   const data = { ...base.data, ...(b.data ?? {}) } as BlockData[typeof type];
 
   if (type === "heading") {
-    const level = Number((data as BlockData["heading"]).level);
-    (data as BlockData["heading"]).level = ([1, 2, 3, 4].includes(level) ? level : 2) as HeadingLevel;
+    const heading = data as BlockData["heading"];
+    const level = Number(heading.level);
+    heading.level = ([1, 2, 3, 4, 5, 6].includes(level) ? level : 2) as HeadingLevel;
+    if (heading.align && !["left", "center", "right", "justify"].includes(heading.align)) {
+      delete heading.align;
+    }
+  }
+  if (type === "paragraph") {
+    const para = data as BlockData["paragraph"];
+    if (para.align && !["left", "center", "right", "justify"].includes(para.align)) {
+      delete para.align;
+    }
   }
   if (type === "image") {
     const img = data as BlockData["image"];
@@ -348,6 +359,9 @@ export function stripInlineMarks(text: string): string {
     .replace(/__(.+?)__/g, "$1")
     .replace(/\*(.+?)\*/g, "$1")
     .replace(/~~(.+?)~~/g, "$1")
+    .replace(/==(.+?)==/g, "$1")
+    .replace(/\{#([0-9a-fA-F]{3,8})\}(.+?)\{\/\}/g, "$2")
+    .replace(/\{size:(sm|lg|xl)\}(.+?)\{\/size\}/g, "$2")
     .replace(/`(.+?)`/g, "$1")
     .replace(/\[(.+?)\]\((.+?)\)/g, "$1");
 }

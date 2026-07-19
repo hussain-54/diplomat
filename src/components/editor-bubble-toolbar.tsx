@@ -1,7 +1,25 @@
-import { Bold, Italic, Link2, Strikethrough, Underline } from "lucide-react";
+import { useState } from "react";
+import {
+  Bold,
+  Highlighter,
+  Italic,
+  Link2,
+  Palette,
+  Strikethrough,
+  Underline,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type BubblePos = { top: number; left: number };
+
+export const EDITOR_TEXT_COLORS = [
+  { label: "Ink", hex: "0f172a" },
+  { label: "Slate", hex: "475569" },
+  { label: "Crimson", hex: "b91c1c" },
+  { label: "Indigo", hex: "4338ca" },
+  { label: "Emerald", hex: "047857" },
+  { label: "Amber", hex: "b45309" },
+] as const;
 
 export function EditorBubbleToolbar({
   pos,
@@ -10,6 +28,8 @@ export function EditorBubbleToolbar({
   onItalic,
   onUnderline,
   onStrike,
+  onHighlight,
+  onColor,
   onLink,
 }: {
   pos: BubblePos;
@@ -18,13 +38,17 @@ export function EditorBubbleToolbar({
   onItalic: () => void;
   onUnderline: () => void;
   onStrike: () => void;
+  onHighlight: () => void;
+  onColor: (hex: string) => void;
   onLink: () => void;
 }) {
+  const [colorOpen, setColorOpen] = useState(false);
+
   return (
     <div
       role="toolbar"
       aria-label="Text formatting"
-      className="pointer-events-auto fixed z-50 flex -translate-x-1/2 -translate-y-full items-center gap-0.5 border border-border bg-card px-1 py-1 shadow-lg"
+      className="pointer-events-auto fixed z-50 flex -translate-x-1/2 -translate-y-full items-center gap-0.5 rounded-lg border border-border/80 bg-card/95 px-1.5 py-1 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-card/90"
       style={{ top: pos.top - 8, left: pos.left }}
       onMouseDown={(event) => {
         // Keep textarea selection when clicking toolbar buttons.
@@ -43,7 +67,37 @@ export function EditorBubbleToolbar({
       <BubbleBtn title="Strikethrough" disabled={disabled} onClick={onStrike}>
         <Strikethrough className="h-3.5 w-3.5" />
       </BubbleBtn>
+      <BubbleBtn title="Highlight" disabled={disabled} onClick={onHighlight}>
+        <Highlighter className="h-3.5 w-3.5" />
+      </BubbleBtn>
       <span className="mx-0.5 h-4 w-px bg-border" />
+      <div className="relative">
+        <BubbleBtn
+          title="Text color"
+          disabled={disabled}
+          onClick={() => setColorOpen((open) => !open)}
+        >
+          <Palette className="h-3.5 w-3.5" />
+        </BubbleBtn>
+        {colorOpen ? (
+          <div className="absolute left-1/2 top-full z-10 mt-1 flex -translate-x-1/2 gap-1 rounded-lg border border-border bg-card p-1.5 shadow-md">
+            {EDITOR_TEXT_COLORS.map((color) => (
+              <button
+                key={color.hex}
+                type="button"
+                title={color.label}
+                disabled={disabled}
+                onClick={() => {
+                  onColor(color.hex);
+                  setColorOpen(false);
+                }}
+                className="h-5 w-5 rounded-full border border-border/60 shadow-sm transition hover:scale-110 disabled:opacity-40"
+                style={{ backgroundColor: `#${color.hex}` }}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
       <BubbleBtn title="Link" disabled={disabled} onClick={onLink}>
         <Link2 className="h-3.5 w-3.5" />
       </BubbleBtn>
@@ -69,7 +123,7 @@ function BubbleBtn({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "inline-flex h-7 w-7 items-center justify-center text-foreground hover:bg-accent disabled:opacity-40",
+        "inline-flex h-7 w-7 items-center justify-center rounded-md text-foreground hover:bg-accent disabled:opacity-40",
       )}
     >
       {children}

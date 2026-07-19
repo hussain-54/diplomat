@@ -6,10 +6,16 @@ export function InlineRichText({ text }: { text: string }) {
   return <>{parseInline(text)}</>;
 }
 
+const SIZE_CLASS: Record<string, string> = {
+  sm: "text-[0.875em]",
+  lg: "text-[1.125em]",
+  xl: "text-[1.25em]",
+};
+
 function parseInline(input: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   const pattern =
-    /(\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|~~(.+?)~~|`(.+?)`|\[(.+?)\]\((https?:\/\/[^\s)]+)\))/g;
+    /(\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|~~(.+?)~~|==(.+?)==|\{#([0-9a-fA-F]{3,8})\}(.+?)\{\/\}|\{size:(sm|lg|xl)\}(.+?)\{\/size\}|`(.+?)`|\[(.+?)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\))/g;
   let last = 0;
   let match: RegExpExecArray | null;
   let key = 0;
@@ -23,20 +29,38 @@ function parseInline(input: string): ReactNode[] {
     else if (match[5]) nodes.push(<s key={key++}>{match[5]}</s>);
     else if (match[6])
       nodes.push(
-        <code key={key++} className="rounded bg-secondary px-1 text-[0.9em]">
+        <mark key={key++} className="rounded-sm bg-amber-200/80 px-0.5 text-inherit dark:bg-amber-500/30">
           {match[6]}
-        </code>,
+        </mark>,
       );
     else if (match[7] && match[8])
       nodes.push(
+        <span key={key++} style={{ color: `#${match[7]}` }}>
+          {match[8]}
+        </span>,
+      );
+    else if (match[9] && match[10])
+      nodes.push(
+        <span key={key++} className={SIZE_CLASS[match[9]] ?? ""}>
+          {match[10]}
+        </span>,
+      );
+    else if (match[11])
+      nodes.push(
+        <code key={key++} className="rounded bg-secondary px-1 text-[0.9em]">
+          {match[11]}
+        </code>,
+      );
+    else if (match[12] && match[13])
+      nodes.push(
         <a
           key={key++}
-          href={match[8]}
+          href={match[13]}
           className="text-crimson underline underline-offset-2"
-          target="_blank"
-          rel="noopener noreferrer"
+          target={match[13].startsWith("http") ? "_blank" : undefined}
+          rel={match[13].startsWith("http") ? "noopener noreferrer" : undefined}
         >
-          {match[7]}
+          {match[12]}
         </a>,
       );
     last = match.index + match[0].length;

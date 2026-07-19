@@ -1,7 +1,24 @@
 import type { ReactNode } from "react";
-import { Bot, Sparkles, Type, AlignLeft, FileText } from "lucide-react";
+import {
+  AlignLeft,
+  Bot,
+  FileText,
+  Hash,
+  Share2,
+  Sparkles,
+  Type,
+  Wand2,
+} from "lucide-react";
 import { CmsPanel, cmsSecondaryButton } from "@/components/cms";
 import { blocksToPlainText, createBlock, type Block } from "@/lib/blocks";
+import {
+  draftSocialPost,
+  expandText,
+  fixGrammar,
+  improveWriting,
+  shortenText,
+  suggestTags,
+} from "@/lib/desk-ai";
 import { cn } from "@/lib/utils";
 
 /** Local desk helpers for create/edit — full model AI ships in Phase 20. */
@@ -21,7 +38,12 @@ export function ArticleAiAssistantPanel({
   readOnly?: boolean;
   onApplyTitle: (title: string) => void;
   onApplyDeck: (deck: string) => void;
-  onApplyMeta: (meta: { seo_title?: string; meta_description?: string; focus_keyword?: string }) => void;
+  onApplyMeta: (meta: {
+    seo_title?: string;
+    meta_description?: string;
+    focus_keyword?: string;
+    og_description?: string;
+  }) => void;
   onInsertSummaryBlock: (blocks: Block[]) => void;
 }) {
   const plain = blocksToPlainText(blocks).trim();
@@ -46,19 +68,77 @@ export function ArticleAiAssistantPanel({
       .filter((w) => w.length > 3)
       .slice(0, 3)
       .join(" ") || "diplomacy";
+  const tagSuggestions = suggestTags(title, plain);
+  const social = draftSocialPost(title, deckOption);
+
+  const mapTextBlocks = (transform: (text: string) => string) => {
+    const next: Block[] = blocks.map((block) => {
+      if (block.type === "paragraph") {
+        return { ...block, data: { ...block.data, text: transform(block.data.text) } };
+      }
+      if (block.type === "heading") {
+        return { ...block, data: { ...block.data, text: transform(block.data.text) } };
+      }
+      if (block.type === "quote") {
+        return { ...block, data: { ...block.data, text: transform(block.data.text) } };
+      }
+      if (block.type === "pullquote") {
+        return { ...block, data: { ...block.data, text: transform(block.data.text) } };
+      }
+      return block;
+    });
+    onInsertSummaryBlock(next);
+  };
 
   return (
     <CmsPanel title="AI Assistant" description="Desk helpers · full AI writing in Phase 20">
       <div className="space-y-4 p-5">
-        <div className="flex items-start gap-3 border border-border bg-muted/20 px-3 py-3">
-          <div className="flex h-9 w-9 items-center justify-center bg-foreground text-background">
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 px-3 py-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-foreground text-background">
             <Bot className="h-4 w-4" />
           </div>
           <div className="min-w-0 text-xs leading-relaxed text-muted-foreground">
-            Generate headline variants, decks, SEO drafts, and a summary block from the story on the
-            canvas. Suggestions stay local until the AI Writing service is connected.
+            Generate headlines, polish body copy, draft SEO/social text, and suggest tags from the
+            story on the canvas. Suggestions stay local until the AI Writing service is connected.
           </div>
         </div>
+
+        <AssistantGroup icon={Wand2} label="Rewrite body" disabled={readOnly || !plain}>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              disabled={readOnly || !plain}
+              className={cn(cmsSecondaryButton, "justify-start")}
+              onClick={() => mapTextBlocks(improveWriting)}
+            >
+              Improve writing
+            </button>
+            <button
+              type="button"
+              disabled={readOnly || !plain}
+              className={cn(cmsSecondaryButton, "justify-start")}
+              onClick={() => mapTextBlocks(shortenText)}
+            >
+              Shorten
+            </button>
+            <button
+              type="button"
+              disabled={readOnly || !plain}
+              className={cn(cmsSecondaryButton, "justify-start")}
+              onClick={() => mapTextBlocks(expandText)}
+            >
+              Expand
+            </button>
+            <button
+              type="button"
+              disabled={readOnly || !plain}
+              className={cn(cmsSecondaryButton, "justify-start")}
+              onClick={() => mapTextBlocks(fixGrammar)}
+            >
+              Fix grammar
+            </button>
+          </div>
+        </AssistantGroup>
 
         <AssistantGroup
           icon={Type}
@@ -104,6 +184,25 @@ export function ArticleAiAssistantPanel({
           >
             Apply SEO title, meta description, and focus keyword
           </button>
+        </AssistantGroup>
+
+        <AssistantGroup icon={Share2} label="Social post" disabled={readOnly || !social}>
+          <button
+            type="button"
+            disabled={readOnly || !social}
+            className={cn(cmsSecondaryButton, "w-full justify-start text-left whitespace-normal")}
+            onClick={() => onApplyMeta({ og_description: social.slice(0, 200) })}
+          >
+            {social || "Add a headline or deck first"}
+          </button>
+        </AssistantGroup>
+
+        <AssistantGroup icon={Hash} label="Suggested tags" disabled={!tagSuggestions.length}>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {tagSuggestions.length
+              ? tagSuggestions.join(" · ")
+              : "Add a title or body text to suggest tags"}
+          </p>
         </AssistantGroup>
 
         <AssistantGroup icon={FileText} label="Insert summary block" disabled={readOnly || !deckOption}>

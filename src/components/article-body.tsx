@@ -32,6 +32,15 @@ const HEADING_CLASS: Record<HeadingLevel, string> = {
   2: "mb-4 mt-8 font-serif text-2xl font-semibold text-ink",
   3: "mb-3 mt-6 font-serif text-xl font-semibold text-ink",
   4: "mb-2 mt-5 font-serif text-lg font-medium text-ink",
+  5: "mb-2 mt-4 font-serif text-base font-medium text-ink",
+  6: "mb-2 mt-3 font-serif text-sm font-medium uppercase tracking-wide text-ink",
+};
+
+const TEXT_ALIGN_CLASS: Record<string, string> = {
+  left: "text-left",
+  center: "text-center",
+  right: "text-right",
+  justify: "text-justify",
 };
 
 const IMAGE_SIZE_CLASS: Record<ImageSize, string> = {
@@ -46,19 +55,21 @@ function BlockView({ block }: { block: Block }) {
     case "paragraph":
       if (!block.data.text.trim()) return null;
       return (
-        <p className="whitespace-pre-wrap">
+        <p className={`whitespace-pre-wrap ${TEXT_ALIGN_CLASS[block.data.align ?? "left"] ?? ""}`}>
           <InlineRichText text={block.data.text} />
         </p>
       );
     case "heading": {
       if (!block.data.text.trim()) return null;
       const level = block.data.level;
-      const className = HEADING_CLASS[level];
+      const className = `${HEADING_CLASS[level]} ${TEXT_ALIGN_CLASS[block.data.align ?? "left"] ?? ""}`.trim();
       const content = <InlineRichText text={block.data.text} />;
       if (level === 1) return <h1 className={className}>{content}</h1>;
       if (level === 2) return <h2 className={className}>{content}</h2>;
       if (level === 3) return <h3 className={className}>{content}</h3>;
-      return <h4 className={className}>{content}</h4>;
+      if (level === 4) return <h4 className={className}>{content}</h4>;
+      if (level === 5) return <h5 className={className}>{content}</h5>;
+      return <h6 className={className}>{content}</h6>;
     }
     case "image": {
       if (!block.data.url) return null;

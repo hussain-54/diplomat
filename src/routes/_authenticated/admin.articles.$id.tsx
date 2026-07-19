@@ -861,6 +861,7 @@ function EditArticle() {
                     onChange={changeBlocks}
                     readOnly={readOnly}
                     onUploadImage={mayUploadMedia ? uploadImage : undefined}
+                    onOpenAi={() => openSettings("ai")}
                     className="border-0 bg-transparent"
                   />
                 </div>

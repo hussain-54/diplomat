@@ -7,6 +7,7 @@ export type RichEditorProps = {
   onChange: (blocks: Block[]) => void;
   readOnly?: boolean;
   onUploadImage?: (file: File) => Promise<string>;
+  onOpenAi?: () => void;
   className?: string;
   emptyHint?: ReactNode;
 };
@@ -17,6 +18,7 @@ export function RichEditor({
   onChange,
   readOnly,
   onUploadImage,
+  onOpenAi,
   className,
 }: RichEditorProps) {
   return (
@@ -26,6 +28,7 @@ export function RichEditor({
         onChange={onChange}
         readOnly={readOnly}
         onUploadImage={onUploadImage}
+        onOpenAi={onOpenAi}
       />
     </div>
   );

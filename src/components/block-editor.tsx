@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlignCenter,
+  AlignJustify,
   AlignLeft,
   AlignRight,
   Bold,
@@ -15,6 +16,7 @@ import {
   GripVertical,
   Headphones,
   Heading2,
+  Highlighter,
   Image as ImageIcon,
   Images,
   Italic,
@@ -25,13 +27,16 @@ import {
   Maximize2,
   Megaphone,
   Minus,
+  Palette,
   Plus,
   Quote,
   Radio,
   Redo2,
+  Sparkles,
   Strikethrough,
   Table2,
   Trash2,
+  Type,
   Underline,
   Undo2,
   Video,
@@ -51,8 +56,10 @@ import {
   type ImageAlign,
   type ImageSize,
   type ListStyle,
+  type TextAlign,
 } from "@/lib/blocks";
 import {
+  EDITOR_TEXT_COLORS,
   EditorBubbleToolbar,
   selectionBubblePos,
   type BubblePos,
@@ -65,6 +72,13 @@ import {
   pasteToListItems,
   splitPasteParagraphs,
 } from "@/lib/paste-cleanup";
+import {
+  expandText,
+  fixGrammar,
+  improveWriting,
+  shortenText,
+  transformSelection,
+} from "@/lib/desk-ai";
 import { wrapSelection } from "@/lib/writing-stats";
 
 function insertAtCaret(
@@ -132,6 +146,7 @@ type Props = {
   onChange: (blocks: Block[]) => void;
   readOnly?: boolean;
   onUploadImage?: (file: File) => Promise<string>;
+  onOpenAi?: () => void;
 };
 
 type ActiveField = {
@@ -139,7 +154,7 @@ type ActiveField = {
   el: HTMLTextAreaElement | HTMLInputElement;
 };
 
-export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props) {
+export function BlockEditor({ value, onChange, readOnly, onUploadImage, onOpenAi }: Props) {
   const past = useRef<Block[][]>([]);
   const future = useRef<Block[][]>([]);
   const lastPush = useRef<{ at: number; blockId: string | null }>({ at: 0, blockId: null });
@@ -153,6 +168,9 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
   const [convertOpenId, setConvertOpenId] = useState<string | null>(null);
   const [bubblePos, setBubblePos] = useState<BubblePos | null>(null);
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
+  const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
+  const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const bubbleBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const focusedBlock = value.find((b) => b.id === focusedBlockId) ?? null;
@@ -312,6 +330,33 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
     });
   };
 
+  const applyTextTransform = (transform: (selected: string) => string) => {
+    if (readOnly || !activeField) return;
+    const { el, blockId } = activeField;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const result = transformSelection(el.value, start, end, transform);
+    const block = value.find((b) => b.id === blockId);
+    if (!block) return;
+
+    let nextData: Block["data"] | null = null;
+    if (block.type === "paragraph" || block.type === "heading" || block.type === "quote" || block.type === "pullquote") {
+      nextData = { ...block.data, text: result.text };
+    } else if (block.type === "code" || block.type === "html") {
+      nextData = { ...block.data, code: result.text };
+    } else if (block.type === "live") {
+      nextData = { ...block.data, text: result.text };
+    }
+    if (!nextData) return;
+
+    updateBlock(blockId, nextData);
+    setAiMenuOpen(false);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(result.selectionStart, result.selectionEnd);
+    });
+  };
+
   const insertLink = () => {
     if (readOnly || !activeField) return;
     const url = window.prompt("Link URL", "https://");
@@ -320,8 +365,32 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
   };
 
   const setHeadingLevel = (level: HeadingLevel) => {
-    if (!focusedBlock || focusedBlock.type !== "heading") return;
-    updateBlock(focusedBlock.id, { ...focusedBlock.data, level });
+    if (!focusedBlock) return;
+    if (focusedBlock.type === "heading") {
+      updateBlock(focusedBlock.id, { ...focusedBlock.data, level });
+      return;
+    }
+    if (
+      focusedBlock.type === "paragraph" ||
+      focusedBlock.type === "quote" ||
+      focusedBlock.type === "pullquote"
+    ) {
+      const converted = convertBlockType(focusedBlock, "heading");
+      if (converted.type === "heading") {
+        converted.data.level = level;
+      }
+      apply(
+        value.map((b) => (b.id === focusedBlock.id ? converted : b)),
+        focusedBlock.id,
+      );
+    }
+  };
+
+  const setTextAlign = (align: TextAlign) => {
+    if (!focusedBlock) return;
+    if (focusedBlock.type === "paragraph" || focusedBlock.type === "heading") {
+      updateBlock(focusedBlock.id, { ...focusedBlock.data, align });
+    }
   };
 
   const setImageAlign = (align: ImageAlign) => {
@@ -397,15 +466,18 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
       {bubblePos && !readOnly && (
         <EditorBubbleToolbar
           pos={bubblePos}
+          disabled={!activeField}
           onBold={() => applyMark("**")}
           onItalic={() => applyMark("*")}
           onUnderline={() => applyMark("__")}
           onStrike={() => applyMark("~~")}
+          onHighlight={() => applyMark("==")}
+          onColor={(hex) => applyMark(`{#${hex}}`, "{/}")}
           onLink={insertLink}
         />
       )}
       {/* Sticky formatting toolbar */}
-      <div className="sticky top-0 z-20 -mx-2 mb-2 flex flex-wrap items-center gap-1 border-b border-border/40 bg-background/90 px-2 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+      <div className="sticky top-0 z-20 -mx-2 mb-2 flex flex-wrap items-center gap-1 rounded-lg border border-border/50 bg-background/95 px-2 py-1.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <ToolButton
           title="Undo (Ctrl+Z)"
           disabled={readOnly || !past.current.length}
@@ -433,22 +505,128 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
         <ToolButton title="Strikethrough" disabled={readOnly || !activeField} onClick={() => applyMark("~~")}>
           <Strikethrough className="h-3.5 w-3.5" />
         </ToolButton>
+        <ToolButton title="Highlight" disabled={readOnly || !activeField} onClick={() => applyMark("==")}>
+          <Highlighter className="h-3.5 w-3.5" />
+        </ToolButton>
         <ToolButton title="Insert link" disabled={readOnly || !activeField} onClick={insertLink}>
           <Link2 className="h-3.5 w-3.5" />
         </ToolButton>
 
-        {focusedBlock?.type === "heading" && (
+        <div className="relative">
+          <ToolButton
+            title="Text color"
+            disabled={readOnly || !activeField}
+            active={colorMenuOpen}
+            onClick={() => {
+              setColorMenuOpen((open) => !open);
+              setSizeMenuOpen(false);
+              setAiMenuOpen(false);
+            }}
+          >
+            <Palette className="h-3.5 w-3.5" />
+          </ToolButton>
+          {colorMenuOpen ? (
+            <div className="absolute left-0 top-full z-30 mt-1 flex gap-1 rounded-lg border border-border bg-card p-1.5 shadow-md">
+              {EDITOR_TEXT_COLORS.map((color) => (
+                <button
+                  key={color.hex}
+                  type="button"
+                  title={color.label}
+                  disabled={readOnly || !activeField}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    applyMark(`{#${color.hex}}`, "{/}");
+                    setColorMenuOpen(false);
+                  }}
+                  className="h-5 w-5 rounded-full border border-border/60 transition hover:scale-110 disabled:opacity-40"
+                  style={{ backgroundColor: `#${color.hex}` }}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="relative">
+          <ToolButton
+            title="Font size"
+            disabled={readOnly || !activeField}
+            active={sizeMenuOpen}
+            onClick={() => {
+              setSizeMenuOpen((open) => !open);
+              setColorMenuOpen(false);
+              setAiMenuOpen(false);
+            }}
+          >
+            <Type className="h-3.5 w-3.5" />
+          </ToolButton>
+          {sizeMenuOpen ? (
+            <div className="absolute left-0 top-full z-30 mt-1 min-w-[7rem] rounded-lg border border-border bg-card py-1 shadow-md">
+              {(
+                [
+                  ["sm", "Small"],
+                  ["lg", "Large"],
+                  ["xl", "Extra large"],
+                ] as const
+              ).map(([size, label]) => (
+                <button
+                  key={size}
+                  type="button"
+                  disabled={readOnly || !activeField}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    applyMark(`{size:${size}}`, "{/size}");
+                    setSizeMenuOpen(false);
+                  }}
+                  className="flex w-full px-3 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-40"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <ToolbarSep />
+        {([1, 2, 3, 4, 5, 6] as HeadingLevel[]).map((level) => (
+          <ToolButton
+            key={level}
+            title={`Heading ${level}`}
+            active={focusedBlock?.type === "heading" && focusedBlock.data.level === level}
+            disabled={
+              readOnly ||
+              !(
+                focusedBlock &&
+                (focusedBlock.type === "heading" ||
+                  focusedBlock.type === "paragraph" ||
+                  focusedBlock.type === "quote" ||
+                  focusedBlock.type === "pullquote")
+              )
+            }
+            onClick={() => setHeadingLevel(level)}
+          >
+            <span className="text-[11px] font-bold">H{level}</span>
+          </ToolButton>
+        ))}
+
+        {(focusedBlock?.type === "paragraph" || focusedBlock?.type === "heading") && (
           <>
             <ToolbarSep />
-            {([1, 2, 3, 4] as HeadingLevel[]).map((level) => (
+            {(
+              [
+                ["left", AlignLeft],
+                ["center", AlignCenter],
+                ["right", AlignRight],
+                ["justify", AlignJustify],
+              ] as const
+            ).map(([align, Icon]) => (
               <ToolButton
-                key={level}
-                title={`Heading ${level}`}
-                active={focusedBlock.data.level === level}
+                key={align}
+                title={`Align ${align}`}
+                active={(focusedBlock.data.align ?? "left") === align}
                 disabled={readOnly}
-                onClick={() => setHeadingLevel(level)}
+                onClick={() => setTextAlign(align)}
               >
-                <span className="text-[11px] font-bold">H{level}</span>
+                <Icon className="h-3.5 w-3.5" />
               </ToolButton>
             ))}
           </>
@@ -497,9 +675,64 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage }: Props)
           </>
         )}
 
-        <div className="ml-auto hidden text-[10px] text-muted-foreground sm:block">
-          <kbd className="rounded border border-border px-1">/</kbd> blocks ·{" "}
-          <kbd className="rounded border border-border px-1">Ctrl+Enter</kbd> paragraph
+        <div className="relative ml-auto flex items-center gap-1">
+          <div className="relative">
+            <ToolButton
+              title="Desk AI helpers"
+              disabled={readOnly}
+              active={aiMenuOpen}
+              onClick={() => {
+                setAiMenuOpen((open) => !open);
+                setColorMenuOpen(false);
+                setSizeMenuOpen(false);
+              }}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+            </ToolButton>
+            {aiMenuOpen ? (
+              <div className="absolute right-0 top-full z-30 mt-1 min-w-[11rem] rounded-lg border border-border bg-card py-1 shadow-md">
+                {(
+                  [
+                    ["Improve writing", improveWriting],
+                    ["Shorten", shortenText],
+                    ["Expand", expandText],
+                    ["Fix grammar", fixGrammar],
+                  ] as const
+                ).map(([label, fn]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    disabled={readOnly || !activeField}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => applyTextTransform(fn)}
+                    className="flex w-full px-3 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-40"
+                  >
+                    {label}
+                  </button>
+                ))}
+                {onOpenAi ? (
+                  <>
+                    <div className="my-1 border-t border-border" />
+                    <button
+                      type="button"
+                      disabled={readOnly}
+                      onClick={() => {
+                        setAiMenuOpen(false);
+                        onOpenAi();
+                      }}
+                      className="flex w-full px-3 py-1.5 text-left text-xs font-medium hover:bg-accent disabled:opacity-40"
+                    >
+                      Open AI panel…
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+          <div className="hidden text-[10px] text-muted-foreground sm:block">
+            <kbd className="rounded border border-border px-1">/</kbd> blocks ·{" "}
+            <kbd className="rounded border border-border px-1">Ctrl+Enter</kbd> paragraph
+          </div>
         </div>
       </div>
 
@@ -886,6 +1119,36 @@ function BlockFields({
     onKeyUp: () => onSelectField?.(),
   };
 
+  const uploadDroppedImage = async (file: File, mode: "image" | "paragraph") => {
+    if (!onUploadImage || readOnly) return;
+    if (!file.type.startsWith("image/")) return;
+    try {
+      const url = await onUploadImage(file);
+      if (mode === "image" && block.type === "image") {
+        onChange({
+          ...block.data,
+          url,
+          alt: block.data.alt || file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
+        });
+      } else if (mode === "paragraph") {
+        onReplaceBlock({
+          id: block.id,
+          type: "image",
+          data: {
+            url,
+            alt: file.name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
+            caption: "",
+            credit: "",
+            align: "full",
+            size: "large",
+          },
+        });
+      }
+    } catch {
+      /* ignore upload errors */
+    }
+  };
+
   const pasteClipboardImage = async (
     e: React.ClipboardEvent,
     mode: "image" | "paragraph",
@@ -897,20 +1160,7 @@ function BlockFields({
     const file = imageItem.getAsFile();
     if (!file) return false;
     e.preventDefault();
-    try {
-      const url = await onUploadImage(file);
-      if (mode === "image" && block.type === "image") {
-        onChange({ ...block.data, url });
-      } else if (mode === "paragraph") {
-        onReplaceBlock({
-          id: block.id,
-          type: "image",
-          data: { url, alt: "", caption: "", credit: "", align: "full", size: "large" },
-        });
-      }
-    } catch {
-      /* ignore upload errors */
-    }
+    await uploadDroppedImage(file, mode);
     return true;
   };
 
@@ -982,7 +1232,15 @@ function BlockFields({
               { allowMultiBlock: true },
             );
           }}
-          className={`${canvasField} font-serif text-[1.125rem] leading-8`}
+          className={`${canvasField} font-serif text-[1.125rem] leading-8 ${
+            block.data.align === "center"
+              ? "text-center"
+              : block.data.align === "right"
+                ? "text-right"
+                : block.data.align === "justify"
+                  ? "text-justify"
+                  : "text-left"
+          }`}
         />
       );
     case "heading": {
@@ -993,7 +1251,11 @@ function BlockFields({
             ? "text-2xl font-semibold"
             : block.data.level === 3
               ? "text-xl font-semibold"
-              : "text-lg font-medium";
+              : block.data.level === 4
+                ? "text-lg font-medium"
+                : block.data.level === 5
+                  ? "text-base font-medium"
+                  : "text-sm font-medium uppercase tracking-wide";
       return (
         <div className="flex items-start gap-2">
           <input
@@ -1006,7 +1268,15 @@ function BlockFields({
                 onChange({ ...block.data, text }),
               )
             }
-            className={`${canvasField} font-serif ${size}`}
+            className={`${canvasField} font-serif ${size} ${
+              block.data.align === "center"
+                ? "text-center"
+                : block.data.align === "right"
+                  ? "text-right"
+                  : block.data.align === "justify"
+                    ? "text-justify"
+                    : "text-left"
+            }`}
           />
           <select
             disabled={readOnly}
@@ -1020,18 +1290,38 @@ function BlockFields({
             <option value={2}>H2</option>
             <option value={3}>H3</option>
             <option value={4}>H4</option>
+            <option value={5}>H5</option>
+            <option value={6}>H6</option>
           </select>
         </div>
       );
     }
     case "image":
       return (
-        <div className="space-y-2" onPaste={(e) => void pasteClipboardImage(e, "image")}>
-          {block.data.url && (
+        <div
+          className="space-y-2"
+          onPaste={(e) => void pasteClipboardImage(e, "image")}
+          onDragOver={(e) => {
+            if (!onUploadImage || readOnly) return;
+            if (Array.from(e.dataTransfer.types).includes("Files")) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }
+          }}
+          onDrop={(e) => {
+            if (!onUploadImage || readOnly) return;
+            const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/"));
+            if (!file) return;
+            e.preventDefault();
+            e.stopPropagation();
+            void uploadDroppedImage(file, "image");
+          }}
+        >
+          {block.data.url ? (
             <img
               src={block.data.url}
               alt={block.data.alt}
-              className={`max-h-72 border border-border/50 object-contain ${
+              className={`max-h-72 rounded-md border border-border/50 object-contain ${
                 IMAGE_SIZE_PREVIEW[block.data.size ?? "large"]
               } ${
                 block.data.align === "left"
@@ -1043,6 +1333,15 @@ function BlockFields({
                       : ""
               }`}
             />
+          ) : (
+            !readOnly && (
+              <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center">
+                <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">
+                  Drop an image here, paste from clipboard, upload, or pick from the library
+                </p>
+              </div>
+            )
           )}
           <div className="flex flex-wrap items-center gap-2">
             <div className="min-w-0 flex-1">
@@ -1051,14 +1350,14 @@ function BlockFields({
                 url={block.data.url}
                 onUrl={(url) => onChange({ ...block.data, url })}
                 onUploadImage={onUploadImage}
-                placeholder="Image URL or paste image"
+                placeholder="Image URL, upload, or drop file"
               />
             </div>
             {!readOnly && (
               <button
                 type="button"
                 onClick={() => setDamOpen(true)}
-                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <FolderOpen className="h-3.5 w-3.5" /> Library
               </button>
@@ -1081,13 +1380,22 @@ function BlockFields({
             }}
           />
           <div className="grid gap-2 sm:grid-cols-2">
-            <input
-              {...common}
-              value={block.data.alt}
-              placeholder="Alt text"
-              onChange={(e) => onChange({ ...block.data, alt: e.target.value })}
-              className={`${canvasField} text-xs`}
-            />
+            <div>
+              <input
+                {...common}
+                value={block.data.alt}
+                placeholder="Alt text (required for accessibility)"
+                onChange={(e) => onChange({ ...block.data, alt: e.target.value })}
+                className={`${canvasField} text-xs ${
+                  block.data.url && !block.data.alt.trim() ? "ring-1 ring-amber-400/60" : ""
+                }`}
+              />
+              {block.data.url && !block.data.alt.trim() ? (
+                <p className="mt-1 text-[10px] text-amber-700 dark:text-amber-400">
+                  Add alt text so screen readers can describe this image
+                </p>
+              ) : null}
+            </div>
             <input
               {...common}
               value={block.data.caption}
@@ -1981,6 +2289,7 @@ function MediaUrlInput({
   const [draft, setDraft] = useState(url);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
   useEffect(() => setDraft(url), [url]);
 
   const commit = (value: string) => {
@@ -1988,8 +2297,40 @@ function MediaUrlInput({
     if (clearAfterAdd) setDraft("");
   };
 
+  const uploadFile = async (file: File) => {
+    if (!onUploadImage) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const uploaded = await onUploadImage(file);
+      commit(uploaded);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div>
+    <div
+      onDragOver={(e) => {
+        if (!onUploadImage || readOnly) return;
+        if (Array.from(e.dataTransfer.types).includes("Files")) {
+          e.preventDefault();
+          setDragOver(true);
+        }
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        if (!onUploadImage || readOnly) return;
+        const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/"));
+        if (!file) return;
+        e.preventDefault();
+        setDragOver(false);
+        void uploadFile(file);
+      }}
+      className={dragOver ? "rounded-md ring-2 ring-ring/40" : undefined}
+    >
       <div className="flex gap-2">
         <input
           disabled={readOnly}
@@ -2008,7 +2349,7 @@ function MediaUrlInput({
           className={`${canvasField} text-xs`}
         />
         {onUploadImage && !readOnly && (
-          <label className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-sm px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
+          <label className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground">
             {busy ? "Uploading…" : "Upload"}
             <input
               type="file"
@@ -2019,16 +2360,7 @@ function MediaUrlInput({
                 const file = e.target.files?.[0];
                 e.target.value = "";
                 if (!file) return;
-                setBusy(true);
-                setError(null);
-                try {
-                  const uploaded = await onUploadImage(file);
-                  commit(uploaded);
-                } catch (err) {
-                  setError((err as Error).message);
-                } finally {
-                  setBusy(false);
-                }
+                await uploadFile(file);
               }}
             />
           </label>
