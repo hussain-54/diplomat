@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ImagePlus } from "lucide-react";
 import {
   applyArticleWorkflowAction,
   duplicateArticle,
@@ -21,17 +20,17 @@ import {
 import { getSections } from "@/lib/content.functions";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import type { Database } from "@/integrations/supabase/types";
-import { RichEditor } from "@/components/cms";
-import { ArticleBody } from "@/components/article-body";
 import {
   DocumentEditorBar,
   type DocumentViewMode,
 } from "@/components/articles/document-editor-chrome";
 import {
-  ArticleSettingsDrawer,
-  type ArticleSettingsSection,
-} from "@/components/articles/article-settings-drawer";
+  ArticleInspectorRail,
+  type InspectorCardId,
+} from "@/components/articles/article-inspector-rail";
+import { ArticleWritingCanvas } from "@/components/articles/article-writing-canvas";
 import { computeArticleSeoScore } from "@/components/articles/articles-filters";
+import { computeEditorSeoInsights } from "@/lib/editor-seo-insights";
 import {
   clearArticleDraftCache,
   loadArticleDraftCache,
@@ -141,12 +140,10 @@ function EditArticle() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [draftRecovery, setDraftRecovery] = useState<ArticleDraftCachePayload | null>(null);
   const [viewMode, setViewMode] = useState<DocumentViewMode>("edit");
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsSection, setSettingsSection] =
-    useState<ArticleSettingsSection>("publishing");
+  const [inspectorCard, setInspectorCard] = useState<InspectorCardId | null>("publishing");
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const hydratedRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const coverInputRef = useRef<HTMLInputElement>(null);
   const cacheKey = isNew ? "new" : id;
 
   const { connected: realtimeConnected, remoteUpdatedAt } = useArticleEditRealtime(
@@ -166,6 +163,17 @@ function EditArticle() {
         robots_index: seo.robots_index,
       }),
     [seo.seo_title, seo.meta_description, seo.focus_keyword, seo.robots_index],
+  );
+  const seoInsights = useMemo(
+    () =>
+      computeEditorSeoInsights({
+        title: form.title,
+        deck: form.deck,
+        blocks,
+        seo,
+        seoScore,
+      }),
+    [form.title, form.deck, blocks, seo, seoScore],
   );
 
   useEffect(() => {
@@ -644,9 +652,11 @@ function EditArticle() {
   const publicSlug = form.status === "published" && form.slug ? form.slug : undefined;
   const fullscreen = viewMode === "fullscreen";
   const focusLike = viewMode === "focus" || viewMode === "fullscreen";
-  const openSettings = (section: ArticleSettingsSection = "publishing") => {
-    setSettingsSection(section);
-    setSettingsOpen(true);
+  const openInspector = (section: InspectorCardId = "publishing") => {
+    setInspectorCard(section);
+    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1280px)").matches) {
+      setMobileInspectorOpen(true);
+    }
   };
   const saveLabel =
     form.status === "published"
@@ -663,7 +673,7 @@ function EditArticle() {
     ? !form.title.trim()
       ? "Add a title to save"
       : !form.section_id
-        ? "Pick a category in Settings to save or publish"
+        ? "Pick a category in the story settings rail to save or publish"
         : form.status === "scheduled" && !form.scheduled_at
           ? "Set a schedule date before saving"
           : null
@@ -700,8 +710,8 @@ function EditArticle() {
   return (
     <div
       className={cn(
-        "min-h-[calc(100vh-4rem)]",
-        fullscreen && "fixed inset-0 z-50 flex flex-col overflow-hidden bg-background",
+        "cms-app flex min-h-[calc(100vh-4rem)] flex-col bg-[#f7f8fa]",
+        fullscreen && "fixed inset-0 z-50 overflow-hidden bg-background",
       )}
     >
       <DocumentEditorBar
@@ -743,9 +753,9 @@ function EditArticle() {
           if (window.confirm("Move this article to trash (archived)?")) archive.mutate();
         }}
         onShare={publicSlug || !isNew ? copyShareLink : undefined}
-        onOpenSettings={() => openSettings("publishing")}
-        onOpenSeo={() => openSettings("seo")}
-        onOpenAi={() => openSettings("ai")}
+        onOpenSettings={() => openInspector("publishing")}
+        onOpenSeo={() => openInspector("seo")}
+        onOpenAi={() => openInspector("ai")}
       />
 
       {draftRecovery ? (
@@ -795,253 +805,132 @@ function EditArticle() {
             e.preventDefault();
           }
         }}
-        className={cn(
-          "flex min-h-0",
-          fullscreen ? "flex-1 overflow-hidden" : "min-h-[calc(100vh-8rem)]",
-        )}
+        className={cn("flex min-h-0 flex-1", fullscreen && "overflow-hidden")}
       >
         <main
           className={cn(
-            "min-w-0 flex-1 overflow-y-auto bg-muted/20",
-            focusLike ? "px-4 py-8 sm:px-10 sm:py-12" : "px-3 py-6 sm:px-6 sm:py-8",
+            "min-w-0 flex-1 overflow-y-auto",
+            focusLike ? "px-4 py-8 sm:px-8 sm:py-10" : "px-3 py-5 sm:px-6 sm:py-7 xl:px-8",
           )}
         >
-          <div
-            className={cn(
-              "mx-auto w-full rounded-xl bg-background shadow-[var(--cms-shadow)]",
-              focusLike ? "max-w-[720px]" : "max-w-[960px]",
-              "px-8 py-10 sm:px-14 sm:py-14",
-            )}
-          >
-            {viewMode === "reading" ? (
-              form.hero_image_url ? (
-                <img
-                  src={form.hero_image_url}
-                  alt=""
-                  className="-mx-8 mb-8 max-h-80 w-[calc(100%+4rem)] object-cover sm:-mx-14 sm:w-[calc(100%+7rem)]"
-                />
-              ) : null
-            ) : mayUploadMedia && !readOnly ? (
-              <div className="group relative -mx-8 mb-8 sm:-mx-14">
-                <input
-                  ref={coverInputRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void uploadHero(file);
-                    e.target.value = "";
-                  }}
-                />
-                {form.hero_image_url ? (
-                  <button
-                    type="button"
-                    onClick={() => coverInputRef.current?.click()}
-                    className="relative block w-full overflow-hidden"
-                  >
-                    <img
-                      src={form.hero_image_url}
-                      alt=""
-                      className="max-h-72 w-full object-cover"
-                    />
-                    <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent px-4 py-3 text-left text-xs font-medium text-white opacity-0 transition-opacity group-hover:opacity-100">
-                      {uploadBusy ? "Uploading…" : "Change cover"}
-                    </span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => coverInputRef.current?.click()}
-                    disabled={uploadBusy}
-                    className="flex w-full items-center justify-center gap-2 border border-dashed border-border/70 bg-muted/30 py-10 text-xs font-medium text-muted-foreground transition-colors hover:border-border hover:bg-muted/50 hover:text-foreground"
-                  >
-                    <ImagePlus className="h-4 w-4" />
-                    {uploadBusy ? "Uploading…" : "Add cover image"}
-                  </button>
-                )}
-                {uploadError ? (
-                  <p className="mt-2 px-8 text-xs text-crimson sm:px-14">{uploadError}</p>
-                ) : null}
-              </div>
-            ) : form.hero_image_url ? (
-              <img
-                src={form.hero_image_url}
-                alt=""
-                className="-mx-8 mb-8 max-h-72 w-[calc(100%+4rem)] object-cover sm:-mx-14 sm:w-[calc(100%+7rem)]"
-              />
-            ) : null}
-
-            {viewMode === "reading" ? (
-              <article>
-                <h1 className="font-serif text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-                  {form.title || "Untitled"}
-                </h1>
-                {form.deck ? (
-                  <p className="mt-4 font-serif text-xl leading-relaxed text-muted-foreground">
-                    {form.deck}
-                  </p>
-                ) : null}
-                <div className="mt-6 flex items-center gap-3 border-b border-border/40 pb-6">
-                  <AuthorRow name={authorName} avatarUrl={authorAvatar} />
-                </div>
-                <div className="mt-8">
-                  <ArticleBody body={serializeBlocks(blocks)} />
-                </div>
-              </article>
-            ) : (
-              <>
-                <input
-                  ref={titleInputRef}
-                  required
-                  disabled={readOnly}
-                  value={form.title}
-                  onChange={(e) => patchForm({ title: e.target.value })}
-                  placeholder="Article title"
-                  className="w-full border-0 bg-transparent font-serif text-4xl font-semibold leading-tight tracking-tight text-foreground outline-none placeholder:text-muted-foreground/40 sm:text-5xl"
-                />
-                <textarea
-                  disabled={readOnly}
-                  value={form.deck}
-                  onChange={(e) => patchForm({ deck: e.target.value })}
-                  rows={2}
-                  placeholder="Write a subtitle…"
-                  className="mt-4 w-full resize-none border-0 bg-transparent font-serif text-xl leading-relaxed text-muted-foreground outline-none placeholder:text-muted-foreground/35 sm:text-2xl"
-                />
-                <div className="mt-6 flex items-center gap-3 border-b border-border/40 pb-6">
-                  <AuthorRow
-                    name={authorName}
-                    avatarUrl={authorAvatar}
-                    note={
-                      !isNew && articleQ.data?.created_at
-                        ? new Date(articleQ.data.created_at).toLocaleDateString()
-                        : undefined
-                    }
-                  />
-                </div>
-                <div className="mt-2">
-                  <RichEditor
-                    value={blocks}
-                    onChange={changeBlocks}
-                    readOnly={readOnly}
-                    onUploadImage={mayUploadMedia ? uploadImage : undefined}
-                    onOpenAi={() => openSettings("ai")}
-                    className="border-0 bg-transparent"
-                  />
-                </div>
-              </>
-            )}
-          </div>
+          <ArticleWritingCanvas
+            viewMode={viewMode}
+            readOnly={readOnly}
+            form={{
+              title: form.title,
+              deck: form.deck,
+              slug: form.slug,
+              hero_image_url: form.hero_image_url,
+            }}
+            onTitleChange={(title) => patchForm({ title })}
+            onDeckChange={(deck) => patchForm({ deck })}
+            onSlugChange={(slug) => {
+              patchForm({ slug });
+              setDirty(true);
+            }}
+            titleInputRef={titleInputRef}
+            authorName={authorName}
+            authorAvatar={authorAvatar}
+            authorNote={
+              !isNew && articleQ.data?.created_at
+                ? new Date(articleQ.data.created_at).toLocaleDateString()
+                : isNew
+                  ? "You will be credited as the author."
+                  : undefined
+            }
+            blocks={blocks}
+            onBlocksChange={changeBlocks}
+            onUploadImage={mayUploadMedia ? uploadImage : undefined}
+            onOpenAi={() => openInspector("ai")}
+            focusLike={focusLike}
+          />
         </main>
 
-        <ArticleSettingsDrawer
-          open={settingsOpen}
-          onOpenChange={setSettingsOpen}
-          section={settingsSection}
-          onSectionChange={setSettingsSection}
-          form={form}
-          patchForm={(partial) => {
-            patchForm(partial);
-            setDirty(true);
-          }}
-          seo={seo}
-          patchSeo={(partial) => {
-            patchSeo(partial);
-            setDirty(true);
-          }}
-          hreflangRows={hreflangRows}
-          onHreflangChange={(rows) => {
-            setHreflangRows(rows);
-            setDirty(true);
-          }}
-          readOnly={readOnly}
-          isNew={isNew}
-          articleId={id}
-          canPublish={canPublish}
-          canSubmitReview={canSubmitReview}
-          canReview={canReview}
-          workflowPending={workflow.isPending || save.isPending}
-          onWorkflow={(action, note) => workflow.mutate({ action, note })}
-          workflowError={workflow.error?.message ?? save.error?.message}
-          dirty={dirty}
-          sections={(sectionsQ.data ?? []).map((sec) => ({ id: sec.id, name: sec.name }))}
-          tagNames={tagNames}
-          tagDraft={tagDraft}
-          setTagDraft={setTagDraft}
-          onAddTag={addTag}
-          onRemoveTag={(tag) => {
-            setTagNames((prev) => prev.filter((t) => t !== tag));
-            setDirty(true);
-          }}
-          allTags={(allTagsQ.data ?? []).map((t) => ({ id: t.id, name: t.name }))}
-          mayManageTags={mayManageTags}
-          mayUploadMedia={mayUploadMedia}
-          uploadBusy={uploadBusy}
-          uploadError={uploadError}
-          onUploadHero={(file) => void uploadHero(file)}
-          authorName={authorName}
-          authorAvatar={authorAvatar}
-          authorNote={
-            isNew
-              ? "You will be credited as the author."
-              : articleQ.data?.created_at
-                ? `Created ${new Date(articleQ.data.created_at).toLocaleDateString()}`
-                : undefined
-          }
-          blocks={blocks}
-          onApplyTitle={(next) => {
-            patchForm({ title: next });
-            setDirty(true);
-          }}
-          onApplyDeck={(next) => {
-            patchForm({ deck: next });
-            setDirty(true);
-          }}
-          onApplyMeta={(patch) => {
-            patchSeo(patch);
-            setDirty(true);
-          }}
-          onInsertSummaryBlock={(next) => {
-            changeBlocks(next);
-            setDirty(true);
-          }}
-          canWriteEditorialNotes={canWriteEditorialNotes}
-          canWriteFactCheckNotes={canWriteFactCheckNotes}
-          revisions={revisionsQ.data}
-          revisionsLoading={revisionsQ.isLoading}
-          revisionsError={revisionsQ.error?.message}
-          restorePending={restore.isPending}
-          restoreError={restore.error?.message}
-          onRestore={(revisionId) => restore.mutate(revisionId)}
-        />
+        {!focusLike ? (
+          <ArticleInspectorRail
+            mobileOpen={mobileInspectorOpen}
+            onMobileOpenChange={setMobileInspectorOpen}
+            openCard={inspectorCard}
+            onOpenCard={setInspectorCard}
+            form={form}
+            patchForm={(partial) => {
+              patchForm(partial);
+              setDirty(true);
+            }}
+            seo={seo}
+            patchSeo={(partial) => {
+              patchSeo(partial);
+              setDirty(true);
+            }}
+            hreflangRows={hreflangRows}
+            onHreflangChange={(rows) => {
+              setHreflangRows(rows);
+              setDirty(true);
+            }}
+            readOnly={readOnly}
+            isNew={isNew}
+            articleId={id}
+            canPublish={canPublish}
+            canSubmitReview={canSubmitReview}
+            canReview={canReview}
+            workflowPending={workflow.isPending || save.isPending}
+            onWorkflow={(action, note) => workflow.mutate({ action, note })}
+            workflowError={workflow.error?.message ?? save.error?.message}
+            dirty={dirty}
+            sections={(sectionsQ.data ?? []).map((sec) => ({ id: sec.id, name: sec.name }))}
+            tagNames={tagNames}
+            tagDraft={tagDraft}
+            setTagDraft={setTagDraft}
+            onAddTag={addTag}
+            onRemoveTag={(tag) => {
+              setTagNames((prev) => prev.filter((t) => t !== tag));
+              setDirty(true);
+            }}
+            allTags={(allTagsQ.data ?? []).map((t) => ({ id: t.id, name: t.name }))}
+            mayManageTags={mayManageTags}
+            mayUploadMedia={mayUploadMedia}
+            uploadBusy={uploadBusy}
+            uploadError={uploadError}
+            onUploadHero={(file) => void uploadHero(file)}
+            authorName={authorName}
+            authorAvatar={authorAvatar}
+            authorNote={
+              isNew
+                ? "You will be credited as the author."
+                : articleQ.data?.created_at
+                  ? `Created ${new Date(articleQ.data.created_at).toLocaleDateString()}`
+                  : undefined
+            }
+            blocks={blocks}
+            insights={seoInsights}
+            onApplyTitle={(next) => {
+              patchForm({ title: next });
+              setDirty(true);
+            }}
+            onApplyDeck={(next) => {
+              patchForm({ deck: next });
+              setDirty(true);
+            }}
+            onApplyMeta={(patch) => {
+              patchSeo(patch);
+              setDirty(true);
+            }}
+            onInsertSummaryBlock={(next) => {
+              changeBlocks(next);
+              setDirty(true);
+            }}
+            canWriteEditorialNotes={canWriteEditorialNotes}
+            canWriteFactCheckNotes={canWriteFactCheckNotes}
+            revisions={revisionsQ.data}
+            revisionsLoading={revisionsQ.isLoading}
+            revisionsError={revisionsQ.error?.message}
+            restorePending={restore.isPending}
+            restoreError={restore.error?.message}
+            onRestore={(revisionId) => restore.mutate(revisionId)}
+          />
+        ) : null}
       </form>
     </div>
-  );
-}
-
-function AuthorRow({
-  name,
-  avatarUrl,
-  note,
-}: {
-  name: string;
-  avatarUrl?: string | null;
-  note?: string;
-}) {
-  return (
-    <>
-      {avatarUrl ? (
-        <img src={avatarUrl} alt={name} className="h-10 w-10 rounded-full border border-border object-cover" />
-      ) : (
-        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-bold text-muted-foreground">
-          {name.slice(0, 1).toUpperCase()}
-        </div>
-      )}
-      <div className="min-w-0">
-        <div className="truncate text-sm font-semibold text-foreground">{name}</div>
-        {note && <div className="text-xs text-muted-foreground">{note}</div>}
-      </div>
-    </>
   );
 }
 

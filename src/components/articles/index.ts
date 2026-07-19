@@ -6,6 +6,9 @@ export { ArticleInspector } from "./article-inspector";
 export { ArticleAiAssistantPanel } from "./ai-assistant-panel";
 export { ArticleSettingsDrawer } from "./article-settings-drawer";
 export type { ArticleSettingsSection } from "./article-settings-drawer";
+export { ArticleInspectorRail } from "./article-inspector-rail";
+export type { InspectorCardId } from "./article-inspector-rail";
+export { ArticleWritingCanvas } from "./article-writing-canvas";
 export {
   ARTICLES_NAV,
   ARTICLES_PRIMARY_TABS,
