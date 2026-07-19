@@ -442,7 +442,7 @@ export function ArticlesListPanel({
       {importMessage ? <CmsAlert>{importMessage}</CmsAlert> : null}
 
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2 gap-y-3">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1">
             <ArticlesAdvancedFilters
               filters={filters}
@@ -458,7 +458,7 @@ export function ArticlesListPanel({
             />
           </div>
 
-          <div className="relative flex shrink-0 items-center gap-3">
+          <div className="relative flex shrink-0 items-center gap-3 xl:pt-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" className={cmsSecondaryButton}>
@@ -484,7 +484,7 @@ export function ArticlesListPanel({
             </DropdownMenu>
 
             {columnsOpen ? (
-              <div className="absolute right-0 top-full z-20 mt-1 w-56 border border-border bg-card p-3 shadow-md">
+              <div className="absolute right-0 top-full z-20 mt-1 w-56 rounded-xl border border-border/80 bg-card p-3 shadow-md">
                 <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
                   Column visibility
                 </div>
