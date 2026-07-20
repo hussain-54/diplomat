@@ -20,6 +20,7 @@ export function RichEditor({
   onUploadImage,
   onOpenAi,
   className,
+  emptyHint: _emptyHint,
 }: RichEditorProps) {
   return (
     <div className={className}>

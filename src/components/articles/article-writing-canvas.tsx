@@ -2,8 +2,6 @@ import type { RefObject } from "react";
 import { useState } from "react";
 import {
   ChevronDown,
-  FileText,
-  Link2,
   Plus,
   Sparkles,
   Trash2,
@@ -127,78 +125,82 @@ export function ArticleWritingCanvas({
   }
 
   return (
-    <div className={cn("mx-auto w-full max-w-none space-y-4", focusLike && "max-w-[760px]")}>
-      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
-        <div>
-          <FieldLabel
-            label="Headline"
-            required
-            counter={`${form.title.length}/${HEADLINE_MAX}`}
-            counterTone={counterTone(form.title.length, HEADLINE_MAX, 40, 90)}
-          />
-          <input
-            ref={titleInputRef}
-            required
-            disabled={readOnly}
-            maxLength={HEADLINE_MAX}
-            value={form.title}
-            onChange={(e) => {
-              const next = e.target.value;
-              onTitleChange(next);
-              if (!form.slug.trim() && next.trim()) {
-                onSlugChange(slugify(next));
-              }
-            }}
-            placeholder="Write a compelling headline..."
-            className={fieldClass}
-          />
-        </div>
-
-        <div>
-          <FieldLabel
-            label="Short Headline"
-            optional
-            counter={`${form.deck.length}/${SHORT_HEADLINE_MAX}`}
-          />
-          <input
-            disabled={readOnly}
-            maxLength={SHORT_HEADLINE_MAX}
-            value={form.deck}
-            onChange={(e) => onDeckChange(e.target.value)}
-            placeholder="Short headline for mobile & push"
-            className={fieldClass}
-          />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
+    <div className={cn("mx-auto w-full max-w-none space-y-6", focusLike && "max-w-[760px]")}>
+      {/* Content form — matches reference: 2-col headline row, 2-col slug/type, full summary */}
+      <div className="space-y-5 rounded-lg border border-slate-200 bg-white p-5 sm:p-6">
+        <div className="grid gap-5 sm:grid-cols-2">
           <div>
-            <FieldLabel label="Slug" />
-            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3">
-              <Link2 className="h-4 w-4 shrink-0 text-slate-400" />
-              <input
-                disabled={readOnly}
-                value={form.slug}
-                onChange={(e) =>
-                  onSlugChange(
-                    e.target.value
-                      .toLowerCase()
-                      .replace(/[^a-z0-9-]+/g, "-")
-                      .replace(/-+/g, "-")
-                      .replace(/^-|-$/g, ""),
-                  )
+            <FieldLabel
+              label="Headline"
+              required
+              counter={`${form.title.length}/${HEADLINE_MAX}`}
+              counterTone={counterTone(form.title.length, HEADLINE_MAX, 40, 90)}
+            />
+            <input
+              ref={titleInputRef}
+              required
+              disabled={readOnly}
+              maxLength={HEADLINE_MAX}
+              value={form.title}
+              onChange={(e) => {
+                const next = e.target.value;
+                onTitleChange(next);
+                if (!form.slug.trim() && next.trim()) {
+                  onSlugChange(slugify(next));
                 }
-                placeholder="auto-generated-slug-will-appear-here"
-                className="h-11 w-full border-0 bg-transparent font-mono text-sm outline-none placeholder:text-slate-400"
-              />
-            </div>
+              }}
+              placeholder="Write a compelling headline..."
+              className={fieldClass}
+            />
           </div>
           <div>
-            <FieldLabel label="Article Type" />
+            <FieldLabel
+              label="Short Headline"
+              counter={`${form.deck.length}/${SHORT_HEADLINE_MAX}`}
+            />
+            <input
+              disabled={readOnly}
+              maxLength={SHORT_HEADLINE_MAX}
+              value={form.deck}
+              onChange={(e) => onDeckChange(e.target.value)}
+              placeholder="Short headline (optional)"
+              className={fieldClass}
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          <div>
+            <FieldLabel label="Slug" />
+            <input
+              disabled={readOnly}
+              value={form.slug}
+              onChange={(e) =>
+                onSlugChange(
+                  e.target.value
+                    .toLowerCase()
+                    .replace(/[^a-z0-9-]+/g, "-")
+                    .replace(/-+/g, "-")
+                    .replace(/^-|-$/g, ""),
+                )
+              }
+              placeholder="auto-generated-slug-will-appear-here"
+              className={cn(fieldClass, "font-mono text-[13px] text-slate-500")}
+            />
+          </div>
+          <div>
+            <FieldLabel
+              label="Article Type"
+              hint="News, analysis, opinion, and other desk formats"
+            />
             <select
               disabled={readOnly}
               value={form.badge_type || "news"}
               onChange={(e) => onBadgeChange(e.target.value)}
-              className={cn(fieldClass, "cursor-pointer")}
+              className={cn(fieldClass, "cursor-pointer appearance-none bg-[length:12px] bg-[right_0.75rem_center] bg-no-repeat pr-9")}
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%6494a3' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+              }}
             >
               {ARTICLE_TYPE_OPTIONS.map((type) => (
                 <option key={type.id} value={type.id}>
@@ -222,59 +224,55 @@ export function ArticleWritingCanvas({
             value={form.meta_description}
             onChange={(e) => onMetaDescriptionChange(e.target.value)}
             placeholder="Write a short summary for meta description..."
-            className={cn(fieldClass, "min-h-[88px] resize-y py-3")}
+            className={cn(fieldClass, "min-h-[96px] resize-y py-3")}
           />
         </div>
-      </section>
+      </div>
 
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
-            <FileText className="h-4 w-4 text-blue-600" />
-            Article body
+      {/* Rich Text Editor — labeled exactly as reference */}
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold text-slate-800">Rich Text Editor</h3>
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="flex items-center justify-end border-b border-slate-100 px-3 py-1.5">
+            {onOpenAi ? (
+              <button
+                type="button"
+                onClick={onOpenAi}
+                className="inline-flex items-center gap-1.5 rounded-md bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100"
+              >
+                <Sparkles className="h-3 w-3" />
+                AI Write
+              </button>
+            ) : null}
           </div>
-          {onOpenAi ? (
-            <button
-              type="button"
-              onClick={onOpenAi}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              AI Write
-            </button>
-          ) : null}
+          <div className="min-h-[260px] px-2 py-2 sm:px-3">
+            <RichEditor
+              value={blocks}
+              onChange={onBlocksChange}
+              readOnly={readOnly}
+              onUploadImage={onUploadImage}
+              onOpenAi={onOpenAi}
+              className="border-0 bg-transparent"
+              emptyHint={
+                <span className="text-slate-400">Start writing your article...</span>
+              }
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 bg-white px-4 py-2 text-[11px] text-slate-500">
+            <span>
+              Words: {writingStats?.words ?? 0}
+              <span className="mx-1.5 text-slate-300">·</span>
+              Characters: {writingStats?.characters ?? 0}
+              <span className="mx-1.5 text-slate-300">·</span>
+              Reading time: {writingStats?.readingMinutes ?? 0} min
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-slate-600">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {lastSavedAt ? `Saved ${formatRelative(lastSavedAt)}` : "Saved a few seconds ago"}
+            </span>
+          </div>
         </div>
-        <div className="min-h-[280px] px-3 py-3 sm:px-4">
-          <RichEditor
-            value={blocks}
-            onChange={onBlocksChange}
-            readOnly={readOnly}
-            onUploadImage={onUploadImage}
-            onOpenAi={onOpenAi}
-            className="border-0 bg-transparent"
-          />
-        </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 bg-slate-50/80 px-4 py-2 text-[11px] text-slate-500">
-          <span>
-            Words: <strong className="font-semibold text-slate-800">{writingStats?.words ?? 0}</strong>
-          </span>
-          <span>
-            Characters:{" "}
-            <strong className="font-semibold text-slate-800">
-              {writingStats?.characters ?? 0}
-            </strong>
-          </span>
-          <span>
-            Reading time:{" "}
-            <strong className="font-semibold text-slate-800">
-              {writingStats?.readingMinutes ?? 0} min
-            </strong>
-          </span>
-          <span className="ml-auto text-emerald-600">
-            {lastSavedAt ? `Saved ${formatRelative(lastSavedAt)}` : "Autosave on"}
-          </span>
-        </div>
-      </section>
+      </div>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5">
         <div className="mb-3 flex items-center justify-between">
@@ -494,7 +492,7 @@ export function ArticleWritingCanvas({
 }
 
 const fieldClass =
-  "h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:opacity-60";
+  "h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:opacity-60";
 
 function FieldLabel({
   label,
@@ -502,24 +500,34 @@ function FieldLabel({
   optional,
   counter,
   counterTone,
+  hint,
 }: {
   label: string;
   required?: boolean;
   optional?: boolean;
   counter?: string;
   counterTone?: string;
+  hint?: string;
 }) {
   return (
     <div className="mb-1.5 flex items-center justify-between gap-2">
-      <label className="text-xs font-semibold text-foreground">
+      <label className="inline-flex items-center gap-1 text-[13px] font-medium text-slate-700">
         {label}
-        {required ? <span className="text-destructive"> *</span> : null}
+        {required ? <span className="text-rose-500"> *</span> : null}
         {optional ? (
-          <span className="ml-1 font-normal text-muted-foreground">(optional)</span>
+          <span className="ml-1 font-normal text-slate-400">(optional)</span>
+        ) : null}
+        {hint ? (
+          <span
+            title={hint}
+            className="ml-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-slate-300 text-[9px] font-bold text-slate-400"
+          >
+            i
+          </span>
         ) : null}
       </label>
       {counter ? (
-        <span className={cn("text-[11px] tabular-nums text-muted-foreground", counterTone)}>
+        <span className={cn("text-[11px] tabular-nums text-slate-400", counterTone)}>
           {counter}
         </span>
       ) : null}

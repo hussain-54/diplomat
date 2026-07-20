@@ -1262,7 +1262,7 @@ function BlockFields({
         <AutoTextarea
           {...common}
           value={block.data.text}
-          placeholder="Type '/' for blocks, or start writing…"
+          placeholder="Start writing your article..."
           onChange={(text) => {
             onChange({ ...block.data, text });
             if (text === "/" || (text.startsWith("/") && !text.includes("\n") && text.length < 40)) {
