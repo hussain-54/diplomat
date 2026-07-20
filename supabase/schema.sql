@@ -316,6 +316,8 @@ CREATE TABLE IF NOT EXISTS public.articles (
   google_news BOOLEAN NOT NULL DEFAULT false,
   google_discover BOOLEAN NOT NULL DEFAULT false,
   language TEXT NOT NULL DEFAULT 'en',
+  cms_extras JSONB NOT NULL DEFAULT '{}'::jsonb,
+  expiry_at TIMESTAMPTZ,
   published_at TIMESTAMPTZ,
   scheduled_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),

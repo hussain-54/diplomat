@@ -257,6 +257,7 @@ export type Database = {
           badge_type: Database["public"]["Enums"]["badge_type"]
           body: string | null
           canonical_url: string | null
+          cms_extras: Json
           content_score: number
           created_at: string
           deck: string | null
@@ -264,6 +265,7 @@ export type Database = {
           deleted_at: string | null
           deleted_by: string | null
           eeat_score: number
+          expiry_at: string | null
           focus_keyword: string | null
           google_discover: boolean
           google_news: boolean
@@ -302,6 +304,7 @@ export type Database = {
           badge_type?: Database["public"]["Enums"]["badge_type"]
           body?: string | null
           canonical_url?: string | null
+          cms_extras?: Json
           content_score?: number
           created_at?: string
           deck?: string | null
@@ -309,6 +312,7 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           eeat_score?: number
+          expiry_at?: string | null
           focus_keyword?: string | null
           google_discover?: boolean
           google_news?: boolean
@@ -347,6 +351,7 @@ export type Database = {
           badge_type?: Database["public"]["Enums"]["badge_type"]
           body?: string | null
           canonical_url?: string | null
+          cms_extras?: Json
           content_score?: number
           created_at?: string
           deck?: string | null
@@ -354,6 +359,7 @@ export type Database = {
           deleted_at?: string | null
           deleted_by?: string | null
           eeat_score?: number
+          expiry_at?: string | null
           focus_keyword?: string | null
           google_discover?: boolean
           google_news?: boolean

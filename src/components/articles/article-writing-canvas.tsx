@@ -11,6 +11,7 @@ import {
 import { RichEditor } from "@/components/cms";
 import { ArticleBody } from "@/components/article-body";
 import { siteUrl } from "@/lib/seo";
+import { ARTICLE_TYPE_OPTIONS } from "@/lib/article-cms-extras";
 import {
   serializeBlocks,
   type ArticleBodyExtras,
@@ -18,19 +19,9 @@ import {
 } from "@/lib/blocks";
 import { cn } from "@/lib/utils";
 
-const HEADLINE_MAX = 120;
-const SHORT_HEADLINE_MAX = 80;
+const HEADLINE_MAX = 100;
+const SHORT_HEADLINE_MAX = 60;
 const SUMMARY_MAX = 160;
-
-const ARTICLE_TYPES = [
-  { id: "none", label: "News" },
-  { id: "breaking", label: "Breaking" },
-  { id: "live", label: "Live" },
-  { id: "exclusive", label: "Exclusive" },
-  { id: "opinion", label: "Opinion" },
-  { id: "premium", label: "Analysis" },
-  { id: "alert", label: "Alert" },
-] as const;
 
 export function ArticleWritingCanvas({
   viewMode,
@@ -55,6 +46,9 @@ export function ArticleWritingCanvas({
   onExtrasChange,
   writingStats,
   lastSavedAt,
+  relatedPanel,
+  referencesPanel,
+  customFieldsPanel,
 }: {
   viewMode: "edit" | "focus" | "fullscreen" | "reading";
   readOnly?: boolean;
@@ -86,6 +80,9 @@ export function ArticleWritingCanvas({
   onExtrasChange: (extras: ArticleBodyExtras) => void;
   writingStats?: { words: number; characters: number; readingMinutes: number };
   lastSavedAt?: Date | null;
+  relatedPanel?: React.ReactNode;
+  referencesPanel?: React.ReactNode;
+  customFieldsPanel?: React.ReactNode;
 }) {
   const [openRefs, setOpenRefs] = useState(false);
   const [openRelated, setOpenRelated] = useState(false);
@@ -146,7 +143,7 @@ export function ArticleWritingCanvas({
           maxLength={HEADLINE_MAX}
           value={form.title}
           onChange={(e) => onTitleChange(e.target.value)}
-          placeholder="Enter a clear, newsworthy headline"
+          placeholder="Write a compelling headline..."
           className={fieldClass}
         />
 
@@ -160,7 +157,7 @@ export function ArticleWritingCanvas({
           maxLength={SHORT_HEADLINE_MAX}
           value={form.deck}
           onChange={(e) => onDeckChange(e.target.value)}
-          placeholder="Optional shorter headline for cards and mobile"
+          placeholder="Short headline (optional)"
           className={fieldClass}
         />
 
@@ -197,7 +194,7 @@ export function ArticleWritingCanvas({
               onChange={(e) => onBadgeChange(e.target.value)}
               className={cn(fieldClass, "cursor-pointer")}
             >
-              {ARTICLE_TYPES.map((type) => (
+              {ARTICLE_TYPE_OPTIONS.map((type) => (
                 <option key={type.id} value={type.id}>
                   {type.label}
                 </option>
@@ -217,7 +214,7 @@ export function ArticleWritingCanvas({
           rows={3}
           value={form.meta_description}
           onChange={(e) => onMetaDescriptionChange(e.target.value)}
-          placeholder="Write a compelling summary for search results and social shares"
+          placeholder="Write a short summary for meta description..."
           className={cn(fieldClass, "min-h-[88px] resize-y py-3")}
         />
 
@@ -236,7 +233,7 @@ export function ArticleWritingCanvas({
         <div className="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <FileText className="h-4 w-4 text-primary" />
-            Article body
+            Rich text editor
           </div>
           {onOpenAi ? (
             <button
@@ -285,7 +282,12 @@ export function ArticleWritingCanvas({
 
       <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Highlights (key points)</h3>
+          <div>
+            <h3 className="text-sm font-semibold">Highlights (key points)</h3>
+            <p className="text-xs text-muted-foreground">
+              Bullet points that appear at the top of the article
+            </p>
+          </div>
           <button
             type="button"
             disabled={readOnly}
@@ -412,32 +414,34 @@ export function ArticleWritingCanvas({
         open={openRefs}
         onToggle={() => setOpenRefs((v) => !v)}
       >
-        <div className="space-y-2">
-          {references.map((ref, index) => (
-            <input
-              key={`ref-${index}`}
+        {referencesPanel ?? (
+          <div className="space-y-2">
+            {references.map((ref, index) => (
+              <input
+                key={`ref-${index}`}
+                disabled={readOnly}
+                value={ref}
+                onChange={(e) => {
+                  const next = [...references];
+                  next[index] = e.target.value;
+                  onExtrasChange({ ...extras, references: next });
+                }}
+                placeholder="https://source.example.com/…"
+                className={fieldClass}
+              />
+            ))}
+            <button
+              type="button"
               disabled={readOnly}
-              value={ref}
-              onChange={(e) => {
-                const next = [...references];
-                next[index] = e.target.value;
-                onExtrasChange({ ...extras, references: next });
-              }}
-              placeholder="https://source.example.com/…"
-              className={fieldClass}
-            />
-          ))}
-          <button
-            type="button"
-            disabled={readOnly}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
-            onClick={() =>
-              onExtrasChange({ ...extras, references: [...references, ""] })
-            }
-          >
-            <Plus className="h-3.5 w-3.5" /> Add source
-          </button>
-        </div>
+              className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+              onClick={() =>
+                onExtrasChange({ ...extras, references: [...references, ""] })
+              }
+            >
+              <Plus className="h-3.5 w-3.5" /> Add source
+            </button>
+          </div>
+        )}
       </Accordion>
 
       <Accordion
@@ -445,16 +449,18 @@ export function ArticleWritingCanvas({
         open={openRelated}
         onToggle={() => setOpenRelated((v) => !v)}
       >
-        <textarea
-          disabled={readOnly}
-          rows={3}
-          value={extras.related_notes ?? ""}
-          onChange={(e) =>
-            onExtrasChange({ ...extras, related_notes: e.target.value })
-          }
-          placeholder="Notes for editors: related slugs, internal links to include…"
-          className={cn(fieldClass, "min-h-[80px] resize-y py-3")}
-        />
+        {relatedPanel ?? (
+          <textarea
+            disabled={readOnly}
+            rows={3}
+            value={extras.related_notes ?? ""}
+            onChange={(e) =>
+              onExtrasChange({ ...extras, related_notes: e.target.value })
+            }
+            placeholder="Notes for editors: related slugs, internal links to include…"
+            className={cn(fieldClass, "min-h-[80px] resize-y py-3")}
+          />
+        )}
       </Accordion>
 
       <Accordion
@@ -462,10 +468,11 @@ export function ArticleWritingCanvas({
         open={openCustom}
         onToggle={() => setOpenCustom((v) => !v)}
       >
-        <p className="text-sm text-muted-foreground">
-          Category, tags, SEO, Google News, and schema fields live in the tabs above and the
-          inspector rail.
-        </p>
+        {customFieldsPanel ?? (
+          <p className="text-sm text-muted-foreground">
+            Category, tags, SEO, Google News, and schema fields live in the tabs above.
+          </p>
+        )}
       </Accordion>
 
       {onOpenAi ? (

@@ -8,6 +8,7 @@ import {
   getArticleTags,
   getMe,
   listTags,
+  listAdminArticles,
   recordArticleApproval,
   restoreArticleRevision,
   setArticleTags,
@@ -24,19 +25,34 @@ import {
   DocumentEditorBar,
   type DocumentViewMode,
 } from "@/components/articles/document-editor-chrome";
-import {
-  ArticleInspectorRail,
-  type InspectorCardId,
-} from "@/components/articles/article-inspector-rail";
 import { ArticleWritingCanvas } from "@/components/articles/article-writing-canvas";
 import {
   ArticleEditorTabs,
   ArticleLiveAnalysis,
   type ArticleEditorTabId,
 } from "@/components/articles/article-editor-tabs";
+import {
+  AiTabPanel,
+  CategoriesTabPanel,
+  EeatTabPanel,
+  GoogleNewsTabPanel,
+  LocalSeoTabPanel,
+  MediaTabPanel,
+  PublishingTabPanel,
+  SchemaTabPanel,
+  SeoTabPanel,
+  SocialTabPanel,
+  RelatedArticlesPanel,
+  ReferencesEditor,
+} from "@/components/articles/article-editor-tab-panels";
 import { computeArticleSeoScore } from "@/components/articles/articles-filters";
 import { computeAllArticleScores } from "@/lib/article-scores";
-import { computeEditorSeoInsights } from "@/lib/editor-seo-insights";
+import {
+  DEFAULT_CMS_EXTRAS,
+  mergeCmsExtras,
+  parseCmsExtras,
+  type ArticleCmsExtras,
+} from "@/lib/article-cms-extras";
 import {
   clearArticleDraftCache,
   loadArticleDraftCache,
@@ -107,6 +123,11 @@ function EditArticle() {
     enabled: !isNew,
   });
   const allTagsQ = useQuery({ queryKey: ["all-tags"], queryFn: () => listTags() });
+  const articlesListQ = useQuery({
+    queryKey: ["admin-articles"],
+    queryFn: listAdminArticles,
+    staleTime: 60_000,
+  });
 
   const [form, setForm] = useState({
     title: "",
@@ -140,6 +161,11 @@ function EditArticle() {
   const [hreflangRows, setHreflangRows] = useState<Array<{ locale: string; url: string }>>([]);
   const [blocks, setBlocks] = useState<Block[]>(() => parseBody(null));
   const [bodyExtras, setBodyExtras] = useState<ArticleBodyExtras>({});
+  const [cmsExtras, setCmsExtras] = useState<ArticleCmsExtras>(() => ({ ...DEFAULT_CMS_EXTRAS }));
+  const [googleNews, setGoogleNews] = useState(false);
+  const [isFeatured, setIsFeatured] = useState(false);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [expiryEnabled, setExpiryEnabled] = useState(false);
   const [tagNames, setTagNames] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -148,9 +174,9 @@ function EditArticle() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [draftRecovery, setDraftRecovery] = useState<ArticleDraftCachePayload | null>(null);
   const [viewMode, setViewMode] = useState<DocumentViewMode>("edit");
-  const [inspectorCard, setInspectorCard] = useState<InspectorCardId | null>("publishing");
+  // inspector rail replaced by dedicated tabs
   const [editorTab, setEditorTab] = useState<ArticleEditorTabId>("content");
-  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+  // mobile inspector replaced by tabs
   const [publishNotice, setPublishNotice] = useState<{ title: string; slug?: string } | null>(
     null,
   );
@@ -195,17 +221,6 @@ function EditArticle() {
         google_news: false,
       }),
     [form, seo, blocks, bodyExtras, meQ.data?.userId],
-  );
-  const seoInsights = useMemo(
-    () =>
-      computeEditorSeoInsights({
-        title: form.title,
-        deck: form.deck,
-        blocks,
-        seo,
-        seoScore,
-      }),
-    [form.title, form.deck, blocks, seo, seoScore],
   );
 
   useEffect(() => {
@@ -255,6 +270,12 @@ function EditArticle() {
       });
       setBlocks(parseBody(articleQ.data.body));
       setBodyExtras(parseBodyExtras(articleQ.data.body));
+      setCmsExtras(parseCmsExtras((articleQ.data as { cms_extras?: unknown }).cms_extras));
+      setGoogleNews(Boolean((articleQ.data as { google_news?: boolean }).google_news));
+      setIsFeatured(Boolean((articleQ.data as { is_featured?: boolean }).is_featured));
+      const expiry = (articleQ.data as { expiry_at?: string | null }).expiry_at;
+      setExpiryEnabled(Boolean(expiry));
+      setScheduleEnabled(Boolean(articleQ.data.scheduled_at));
       const hreflang = parseHreflang(articleQ.data.hreflang);
       setSeo({
         seo_title: articleQ.data.seo_title ?? "",
@@ -464,6 +485,13 @@ function EditArticle() {
           scheduled_at:
             nextStatus === "scheduled" && form.scheduled_at
               ? new Date(form.scheduled_at).toISOString()
+              : null,
+          google_news: googleNews,
+          is_featured: isFeatured,
+          cms_extras: cmsExtras as Record<string, unknown>,
+          expiry_at:
+            expiryEnabled && cmsExtras.expiry_at
+              ? new Date(cmsExtras.expiry_at).toISOString()
               : null,
         },
       });
@@ -720,12 +748,6 @@ function EditArticle() {
   const liveUrl = publicSlug ? `${siteUrl()}/article/${publicSlug}` : null;
   const fullscreen = viewMode === "fullscreen";
   const focusLike = viewMode === "focus" || viewMode === "fullscreen";
-  const openInspector = (section: InspectorCardId = "publishing") => {
-    setInspectorCard(section);
-    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches) {
-      setMobileInspectorOpen(true);
-    }
-  };
   const saveLabel =
     form.status === "published"
       ? "Save changes"
@@ -816,7 +838,7 @@ function EditArticle() {
             return;
           }
           if (next === "scheduled" && !form.scheduled_at) {
-            openInspector("publishing");
+            setEditorTab("publishing");
             patchForm({ status: "scheduled" });
             return;
           }
@@ -836,9 +858,9 @@ function EditArticle() {
           if (window.confirm("Move this article to trash (archived)?")) archive.mutate();
         }}
         onShare={publicSlug || !isNew ? copyShareLink : undefined}
-        onOpenSettings={() => openInspector("publishing")}
-        onOpenSeo={() => openInspector("seo")}
-        onOpenAi={() => openInspector("ai")}
+        onOpenSettings={() => setEditorTab("publishing")}
+        onOpenSeo={() => setEditorTab("seo")}
+        onOpenAi={() => setEditorTab("ai")}
         canSubmitReview={canSubmitReview && !readOnly}
         onSubmitReview={() => {
           if (!canSubmit) {
@@ -857,22 +879,6 @@ function EditArticle() {
           active={editorTab}
           onChange={(tab) => {
             setEditorTab(tab);
-            const map: Partial<Record<ArticleEditorTabId, InspectorCardId>> = {
-              media: "featured",
-              categories: "categories",
-              publishing: "publishing",
-              seo: "seo",
-              "local-seo": "seo",
-              "google-news": "publishing",
-              eeat: "seo",
-              schema: "seo",
-              social: "social",
-              ai: "ai",
-            };
-            if (map[tab]) {
-              setInspectorCard(map[tab]!);
-              setMobileInspectorOpen(true);
-            }
           }}
         />
       ) : null}
@@ -932,74 +938,388 @@ function EditArticle() {
             focusLike ? "px-4 py-8 sm:px-8 sm:py-10" : "px-3 py-5 sm:px-6 sm:py-7 xl:px-8",
           )}
         >
-          <ArticleWritingCanvas
-            viewMode={viewMode}
-            readOnly={readOnly}
-            form={{
-              title: form.title,
-              deck: form.deck,
-              slug: form.slug,
-              hero_image_url: form.hero_image_url,
-              badge_type: form.badge_type,
-              meta_description: seo.meta_description ?? "",
-              excerpt: bodyExtras.excerpt ?? "",
-            }}
-            onTitleChange={(title) => patchForm({ title })}
-            onDeckChange={(deck) => patchForm({ deck })}
-            onSlugChange={(slug) => {
-              patchForm({ slug });
-              setDirty(true);
-            }}
-            onBadgeChange={(badge) => patchForm({ badge_type: badge })}
-            onMetaDescriptionChange={(value) => patchSeo({ meta_description: value })}
-            onExcerptChange={(value) => {
-              setBodyExtras((current) => ({ ...current, excerpt: value }));
-              setDirty(true);
-            }}
-            titleInputRef={titleInputRef}
-            authorName={authorName}
-            authorAvatar={authorAvatar}
-            authorNote={
-              !isNew && articleQ.data?.created_at
-                ? new Date(articleQ.data.created_at).toLocaleDateString()
-                : isNew
-                  ? "You will be credited as the author."
-                  : undefined
-            }
-            blocks={blocks}
-            onBlocksChange={changeBlocks}
-            onUploadImage={mayUploadMedia ? uploadImage : undefined}
-            onOpenAi={() => openInspector("ai")}
-            focusLike={focusLike}
-            extras={bodyExtras}
-            onExtrasChange={(next) => {
-              setBodyExtras(next);
-              setDirty(true);
-            }}
-            writingStats={writingStats}
-            lastSavedAt={lastSavedAt}
-          />
+          {editorTab === "content" || focusLike ? (
+            <ArticleWritingCanvas
+              viewMode={viewMode}
+              readOnly={readOnly}
+              form={{
+                title: form.title,
+                deck: form.deck,
+                slug: form.slug,
+                hero_image_url: form.hero_image_url,
+                badge_type: cmsExtras.article_type || "news",
+                meta_description: seo.meta_description ?? "",
+                excerpt: bodyExtras.excerpt ?? "",
+              }}
+              onTitleChange={(title) => patchForm({ title })}
+              onDeckChange={(deck) => patchForm({ deck })}
+              onSlugChange={(slug) => {
+                patchForm({ slug });
+                setDirty(true);
+              }}
+              onBadgeChange={(badge) => {
+                setCmsExtras((c) => mergeCmsExtras(c, { article_type: badge }));
+                setDirty(true);
+              }}
+              onMetaDescriptionChange={(value) => patchSeo({ meta_description: value })}
+              onExcerptChange={(value) => {
+                setBodyExtras((current) => ({ ...current, excerpt: value }));
+                setDirty(true);
+              }}
+              titleInputRef={titleInputRef}
+              authorName={authorName}
+              authorAvatar={authorAvatar}
+              authorNote={
+                !isNew && articleQ.data?.created_at
+                  ? new Date(articleQ.data.created_at).toLocaleDateString()
+                  : isNew
+                    ? "You will be credited as the author."
+                    : undefined
+              }
+              blocks={blocks}
+              onBlocksChange={changeBlocks}
+              onUploadImage={mayUploadMedia ? uploadImage : undefined}
+              onOpenAi={() => setEditorTab("ai")}
+              focusLike={focusLike}
+              extras={bodyExtras}
+              onExtrasChange={(next) => {
+                setBodyExtras(next);
+                setDirty(true);
+              }}
+              writingStats={writingStats}
+              lastSavedAt={lastSavedAt}
+              relatedPanel={
+                <RelatedArticlesPanel
+                  articles={(articlesListQ.data ?? [])
+                    .filter((a) => a.id !== id)
+                    .map((a) => ({ id: a.id, title: a.title, slug: a.slug }))}
+                  selectedIds={cmsExtras.related_article_ids ?? []}
+                  onToggle={(articleId) => {
+                    const current = cmsExtras.related_article_ids ?? [];
+                    const next = current.includes(articleId)
+                      ? current.filter((x) => x !== articleId)
+                      : [...current, articleId];
+                    setCmsExtras((c) => mergeCmsExtras(c, { related_article_ids: next }));
+                    setDirty(true);
+                  }}
+                  notes={bodyExtras.related_notes ?? ""}
+                  onNotes={(v) => {
+                    setBodyExtras((b) => ({ ...b, related_notes: v }));
+                    setDirty(true);
+                  }}
+                  readOnly={readOnly}
+                />
+              }
+              referencesPanel={
+                <ReferencesEditor
+                  references={cmsExtras.references ?? []}
+                  onChange={(refs) => {
+                    setCmsExtras((c) => mergeCmsExtras(c, { references: refs }));
+                    setDirty(true);
+                  }}
+                  readOnly={readOnly}
+                />
+              }
+              customFieldsPanel={
+                <div className="space-y-3">
+                  <textarea
+                    disabled={readOnly}
+                    className="min-h-[72px] w-full rounded-xl border border-border/70 px-3 py-2.5 text-sm"
+                    placeholder="Editorial notes"
+                    value={cmsExtras.custom_fields?.editorial_notes ?? ""}
+                    onChange={(e) => {
+                      setCmsExtras((c) =>
+                        mergeCmsExtras(c, {
+                          custom_fields: {
+                            ...c.custom_fields,
+                            editorial_notes: e.target.value,
+                          },
+                        }),
+                      );
+                      setDirty(true);
+                    }}
+                  />
+                  <input
+                    disabled={readOnly}
+                    className="h-11 w-full rounded-xl border border-border/70 px-3 text-sm"
+                    placeholder="External ID"
+                    value={cmsExtras.custom_fields?.external_id ?? ""}
+                    onChange={(e) => {
+                      setCmsExtras((c) =>
+                        mergeCmsExtras(c, {
+                          custom_fields: {
+                            ...c.custom_fields,
+                            external_id: e.target.value,
+                          },
+                        }),
+                      );
+                      setDirty(true);
+                    }}
+                  />
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      disabled={readOnly}
+                      checked={Boolean(cmsExtras.custom_fields?.sponsored)}
+                      onChange={(e) => {
+                        setCmsExtras((c) =>
+                          mergeCmsExtras(c, {
+                            custom_fields: {
+                              ...c.custom_fields,
+                              sponsored: e.target.checked,
+                            },
+                          }),
+                        );
+                        setDirty(true);
+                      }}
+                    />
+                    Sponsored content
+                  </label>
+                </div>
+              }
+            />
+          ) : null}
+
+          {editorTab === "media" && !focusLike ? (
+            <MediaTabPanel
+              heroUrl={form.hero_image_url}
+              onHeroUrl={(url) => patchForm({ hero_image_url: url })}
+              media={cmsExtras.media ?? {}}
+              onMedia={(media) => {
+                setCmsExtras((c) => mergeCmsExtras(c, { media }));
+                setDirty(true);
+              }}
+              readOnly={readOnly}
+              mayUpload={mayUploadMedia}
+              onUpload={uploadImage}
+              uploadBusy={uploadBusy}
+              uploadError={uploadError}
+            />
+          ) : null}
+
+          {editorTab === "categories" && !focusLike ? (
+            <CategoriesTabPanel
+              sectionId={form.section_id}
+              onSectionId={(section_id) => patchForm({ section_id })}
+              sections={(sectionsQ.data ?? []).map((s) => ({ id: s.id, name: s.name }))}
+              tagNames={tagNames}
+              tagDraft={tagDraft}
+              onTagDraft={setTagDraft}
+              onAddTag={() => {
+                const name = tagDraft.trim();
+                if (!name || tagNames.includes(name)) return;
+                setTagNames((t) => [...t, name]);
+                setTagDraft("");
+                setDirty(true);
+              }}
+              onRemoveTag={(name) => {
+                setTagNames((t) => t.filter((x) => x !== name));
+                setDirty(true);
+              }}
+              allTags={(allTagsQ.data ?? []).map((t) => ({ id: t.id, name: t.name }))}
+              featured={isFeatured}
+              onFeatured={(v) => {
+                setIsFeatured(v);
+                setDirty(true);
+              }}
+              onSelectExistingTag={(name) => {
+                if (!name || tagNames.includes(name)) return;
+                setTagNames((t) => [...t, name]);
+                setDirty(true);
+              }}
+              readOnly={readOnly}
+            />
+          ) : null}
+
+          {editorTab === "publishing" && !focusLike ? (
+            <PublishingTabPanel
+              status={form.status}
+              scheduledAt={form.scheduled_at}
+              expiryAt={cmsExtras.expiry_at ? toDateTimeLocal(cmsExtras.expiry_at) : ""}
+              region={form.region}
+              visibility={cmsExtras.visibility ?? "public"}
+              articleType={cmsExtras.article_type ?? "news"}
+              onStatus={(status) => patchForm({ status })}
+              onScheduledAt={(scheduled_at) => patchForm({ scheduled_at })}
+              onExpiryAt={(v) => {
+                setCmsExtras((c) => mergeCmsExtras(c, { expiry_at: v || null }));
+                setExpiryEnabled(Boolean(v));
+                setDirty(true);
+              }}
+              onRegion={(region) => patchForm({ region })}
+              onVisibility={(visibility) => {
+                setCmsExtras((c) => mergeCmsExtras(c, { visibility }));
+                setDirty(true);
+              }}
+              onArticleType={(article_type) => {
+                setCmsExtras((c) => mergeCmsExtras(c, { article_type }));
+                setDirty(true);
+              }}
+              readOnly={readOnly}
+              canPublish={canPublish}
+            />
+          ) : null}
+
+          {editorTab === "seo" && !focusLike ? (
+            <SeoTabPanel
+              seo={seo}
+              onSeo={(patch) => patchSeo(patch)}
+              secondaryKeywords={cmsExtras.secondary_keywords ?? ""}
+              onSecondaryKeywords={(secondary_keywords) => {
+                setCmsExtras((c) => mergeCmsExtras(c, { secondary_keywords }));
+                setDirty(true);
+              }}
+              readOnly={readOnly}
+              seoScore={Math.max(seoScore, allScores.seo_score)}
+              slug={form.slug}
+              titleFallback={form.title}
+              deckFallback={form.deck}
+              heroImageUrl={form.hero_image_url}
+              hreflangRows={hreflangRows}
+              onHreflangChange={(rows) => {
+                setHreflangRows(rows);
+                setDirty(true);
+              }}
+            />
+          ) : null}
+
+          {editorTab === "local-seo" && !focusLike ? (
+            <LocalSeoTabPanel
+              local={cmsExtras.local_seo ?? {}}
+              onLocal={(local_seo) => {
+                setCmsExtras((c) => mergeCmsExtras(c, { local_seo }));
+                setDirty(true);
+              }}
+              readOnly={readOnly}
+            />
+          ) : null}
+
+          {editorTab === "google-news" && !focusLike ? (
+            <GoogleNewsTabPanel
+              gnews={cmsExtras.google_news ?? {}}
+              onGnews={(google_news) => {
+                setCmsExtras((c) => mergeCmsExtras(c, { google_news }));
+                setDirty(true);
+              }}
+              googleNewsFlag={googleNews}
+              onGoogleNewsFlag={(v) => {
+                setGoogleNews(v);
+                setDirty(true);
+              }}
+              readOnly={readOnly}
+            />
+          ) : null}
+
+          {editorTab === "eeat" && !focusLike ? (
+            <EeatTabPanel
+              eeat={cmsExtras.eeat ?? {}}
+              onEeat={(eeat) => {
+                setCmsExtras((c) => mergeCmsExtras(c, { eeat }));
+                setDirty(true);
+              }}
+              eeatScore={allScores.eeat_score}
+              readOnly={readOnly}
+            />
+          ) : null}
+
+          {editorTab === "schema" && !focusLike ? (
+            <SchemaTabPanel
+              schemaType={seo.schema_type}
+              onSchemaType={(schema_type) => patchSeo({ schema_type })}
+              title={form.title}
+              slug={form.slug}
+              metaDescription={seo.meta_description ?? ""}
+              faqEnabled={bodyExtras.faq_enabled}
+              faqItems={bodyExtras.faq_items}
+              readOnly={readOnly}
+            />
+          ) : null}
+
+          {editorTab === "social" && !focusLike ? (
+            <SocialTabPanel
+              seo={seo}
+              onSeo={(patch) => patchSeo(patch)}
+              title={form.title}
+              readOnly={readOnly}
+            />
+          ) : null}
+
+          {editorTab === "ai" && !focusLike ? (
+            <AiTabPanel
+              title={form.title}
+              deck={form.deck}
+              blocks={blocks}
+              readOnly={readOnly}
+              onApplyTitle={(title) => patchForm({ title })}
+              onApplyDeck={(deck) => patchForm({ deck })}
+              onApplyMeta={(meta) => patchSeo(meta)}
+              onInsertSummaryBlock={(next) => changeBlocks(next)}
+            />
+          ) : null}
         </main>
 
         {!focusLike ? (
-          <div className="flex w-full max-w-[360px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-border/60 bg-[#f7f8fa] p-3 xl:max-w-[380px]">
+          <div className="hidden w-full max-w-[340px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-border/60 bg-[#f7f8fa] p-3 lg:flex xl:max-w-[360px]">
             <ArticleLiveAnalysis
               wordCount={allScores.word_count || writingStats.words}
-              readingMinutes={allScores.reading_minutes || Math.max(1, Math.ceil(writingStats.words / 220))}
+              readingMinutes={
+                allScores.reading_minutes || Math.max(1, Math.ceil(writingStats.words / 220))
+              }
               seoScore={Math.max(seoScore, allScores.seo_score)}
               contentScore={allScores.content_score}
               eeatScore={allScores.eeat_score}
               checklist={[
                 { label: "SEO Title", ok: Boolean((seo.seo_title || form.title).trim()) },
-                { label: "Meta Description", ok: Boolean((seo.meta_description || "").length >= 50) },
+                {
+                  label: "Meta Description",
+                  ok: Boolean((seo.meta_description || "").length >= 50),
+                },
                 { label: "Focus Keyword", ok: Boolean(seo.focus_keyword?.trim()) },
-                { label: "Featured Image", ok: Boolean(form.hero_image_url) },
-                { label: "Category selected", ok: Boolean(form.section_id) },
-                { label: "Slug set", ok: Boolean(form.slug.trim()) },
+                {
+                  label: "Image Alt Text",
+                  ok: Boolean(cmsExtras.media?.alt_text?.trim() || form.hero_image_url),
+                },
+                {
+                  label: "Internal Links",
+                  ok: (cmsExtras.related_article_ids?.length ?? 0) > 0,
+                },
+                {
+                  label: "External Links",
+                  ok: Boolean(cmsExtras.references?.some((r) => r.url.trim())),
+                },
+                { label: "Schema Markup", ok: Boolean(seo.schema_type) },
+                {
+                  label: "Open Graph",
+                  ok: Boolean(
+                    (seo.og_title || form.title).trim() &&
+                      (seo.og_description || seo.meta_description),
+                  ),
+                },
+                { label: "Readability Score", ok: writingStats.words >= 200 },
                 { label: "Content Length", ok: allScores.word_count >= 300 },
               ]}
               status={form.status}
               scheduledAt={form.scheduled_at}
+              expiryAt={cmsExtras.expiry_at ?? undefined}
+              scheduleEnabled={scheduleEnabled}
+              expiryEnabled={expiryEnabled}
+              onScheduleEnabled={(v) => {
+                setScheduleEnabled(v);
+                if (v && !form.scheduled_at) setEditorTab("publishing");
+                if (!v) {
+                  patchForm({
+                    scheduled_at: "",
+                    status: form.status === "scheduled" ? "draft" : form.status,
+                  });
+                }
+              }}
+              onExpiryEnabled={(v) => {
+                setExpiryEnabled(v);
+                if (!v) {
+                  setCmsExtras((c) => mergeCmsExtras(c, { expiry_at: null }));
+                  setDirty(true);
+                }
+              }}
               canChangeStatus={!readOnly && (canPublish || canSubmitReview)}
               readOnly={readOnly}
               onStatusChange={(next) => {
@@ -1014,97 +1334,16 @@ function EditArticle() {
                   scheduled_at: value,
                   status: value ? "scheduled" : form.status === "scheduled" ? "draft" : form.status,
                 });
+                setScheduleEnabled(Boolean(value));
               }}
-              onOpenPublishing={() => openInspector("publishing")}
+              onExpiryAtChange={(value) => {
+                setCmsExtras((c) => mergeCmsExtras(c, { expiry_at: value || null }));
+                setExpiryEnabled(Boolean(value));
+                setDirty(true);
+              }}
+              onOpenPublishing={() => setEditorTab("publishing")}
+              onOpenSeo={() => setEditorTab("seo")}
             />
-            <ArticleInspectorRail
-            mobileOpen={mobileInspectorOpen}
-            onMobileOpenChange={setMobileInspectorOpen}
-            openCard={inspectorCard}
-            onOpenCard={setInspectorCard}
-            form={form}
-            patchForm={(partial) => {
-              patchForm(partial);
-              setDirty(true);
-            }}
-            seo={seo}
-            patchSeo={(partial) => {
-              patchSeo(partial);
-              setDirty(true);
-            }}
-            hreflangRows={hreflangRows}
-            onHreflangChange={(rows) => {
-              setHreflangRows(rows);
-              setDirty(true);
-            }}
-            readOnly={readOnly}
-            isNew={isNew}
-            articleId={id}
-            canPublish={canPublish}
-            canSubmitReview={canSubmitReview}
-            canReview={canReview}
-            workflowPending={workflow.isPending || save.isPending}
-            onWorkflow={(action, note) => {
-              if (action === "publish") {
-                requestPublish();
-                return;
-              }
-              workflow.mutate({ action, note });
-            }}
-            onRequestPublish={requestPublish}
-            workflowError={workflow.error?.message ?? save.error?.message}
-            dirty={dirty}
-            sections={(sectionsQ.data ?? []).map((sec) => ({ id: sec.id, name: sec.name }))}
-            tagNames={tagNames}
-            tagDraft={tagDraft}
-            setTagDraft={setTagDraft}
-            onAddTag={addTag}
-            onRemoveTag={(tag) => {
-              setTagNames((prev) => prev.filter((t) => t !== tag));
-              setDirty(true);
-            }}
-            allTags={(allTagsQ.data ?? []).map((t) => ({ id: t.id, name: t.name }))}
-            mayManageTags={mayManageTags}
-            mayUploadMedia={mayUploadMedia}
-            uploadBusy={uploadBusy}
-            uploadError={uploadError}
-            onUploadHero={(file) => void uploadHero(file)}
-            authorName={authorName}
-            authorAvatar={authorAvatar}
-            authorNote={
-              isNew
-                ? "You will be credited as the author."
-                : articleQ.data?.created_at
-                  ? `Created ${new Date(articleQ.data.created_at).toLocaleDateString()}`
-                  : undefined
-            }
-            blocks={blocks}
-            insights={seoInsights}
-            onApplyTitle={(next) => {
-              patchForm({ title: next });
-              setDirty(true);
-            }}
-            onApplyDeck={(next) => {
-              patchForm({ deck: next });
-              setDirty(true);
-            }}
-            onApplyMeta={(patch) => {
-              patchSeo(patch);
-              setDirty(true);
-            }}
-            onInsertSummaryBlock={(next) => {
-              changeBlocks(next);
-              setDirty(true);
-            }}
-            canWriteEditorialNotes={canWriteEditorialNotes}
-            canWriteFactCheckNotes={canWriteFactCheckNotes}
-            revisions={revisionsQ.data}
-            revisionsLoading={revisionsQ.isLoading}
-            revisionsError={revisionsQ.error?.message}
-            restorePending={restore.isPending}
-            restoreError={restore.error?.message}
-            onRestore={(revisionId) => restore.mutate(revisionId)}
-          />
           </div>
         ) : null}
       </form>

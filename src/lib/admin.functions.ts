@@ -1025,6 +1025,12 @@ export const upsertArticle = async ({
     status: ArticleStatus;
     slug?: string;
     scheduled_at?: string | null;
+    google_news?: boolean;
+    google_discover?: boolean;
+    is_featured?: boolean;
+    language?: string;
+    cms_extras?: Record<string, unknown>;
+    expiry_at?: string | null;
   };
 }) => {
   const { user, roles } = await requireNewsroomRole();
@@ -1112,14 +1118,22 @@ export const upsertArticle = async ({
       body: data.body,
       hero_image_url: data.hero_image_url,
       author_id: user.id,
+      google_news: data.google_news,
     });
+    const placement: Record<string, unknown> = {
+      seo_score: scores.seo_score,
+      content_score: scores.content_score,
+      eeat_score: scores.eeat_score,
+    };
+    if (typeof data.google_news === "boolean") placement.google_news = data.google_news;
+    if (typeof data.google_discover === "boolean") placement.google_discover = data.google_discover;
+    if (typeof data.is_featured === "boolean") placement.is_featured = data.is_featured;
+    if (data.language) placement.language = data.language;
+    if (data.cms_extras) placement.cms_extras = data.cms_extras;
+    if (data.expiry_at !== undefined) placement.expiry_at = data.expiry_at;
     void supabase
       .from("articles")
-      .update({
-        seo_score: scores.seo_score,
-        content_score: scores.content_score,
-        eeat_score: scores.eeat_score,
-      })
+      .update(placement as Database["public"]["Tables"]["articles"]["Update"])
       .eq("id", viaRpc.id);
     return viaRpc;
   }

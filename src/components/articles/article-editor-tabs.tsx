@@ -26,7 +26,7 @@ export function ArticleEditorTabs({
 }) {
   return (
     <nav
-      className="flex gap-0.5 overflow-x-auto border-b border-border/60 bg-card px-2 py-0"
+      className="flex gap-0 overflow-x-auto border-b border-border/60 bg-card px-2"
       aria-label="Article editor sections"
     >
       {ARTICLE_EDITOR_TABS.map((tab) => (
@@ -57,9 +57,16 @@ export function ArticleLiveAnalysis({
   checklist,
   status,
   scheduledAt,
+  expiryAt,
   onStatusChange,
   onScheduledAtChange,
+  onExpiryAtChange,
   onOpenPublishing,
+  onOpenSeo,
+  scheduleEnabled,
+  onScheduleEnabled,
+  expiryEnabled,
+  onExpiryEnabled,
   canChangeStatus,
   readOnly,
 }: {
@@ -71,19 +78,27 @@ export function ArticleLiveAnalysis({
   checklist: Array<{ label: string; ok: boolean }>;
   status?: string;
   scheduledAt?: string;
+  expiryAt?: string;
   onStatusChange?: (status: string) => void;
   onScheduledAtChange?: (value: string) => void;
+  onExpiryAtChange?: (value: string) => void;
   onOpenPublishing?: () => void;
+  onOpenSeo?: () => void;
+  scheduleEnabled?: boolean;
+  onScheduleEnabled?: (v: boolean) => void;
+  expiryEnabled?: boolean;
+  onExpiryEnabled?: (v: boolean) => void;
   canChangeStatus?: boolean;
   readOnly?: boolean;
 }) {
   const readability = wordCount > 400 ? 82 : wordCount > 200 ? 68 : 45;
   const engagement = Math.min(95, Math.round(contentScore * 0.9 + (wordCount > 300 ? 8 : 0)));
   const originality = Math.min(95, Math.round(eeatScore * 0.85 + 12));
-  const scheduleOn = Boolean(scheduledAt);
+  const passed = checklist.filter((c) => c.ok).length;
+  const total = Math.max(checklist.length, 1);
 
   return (
-    <aside className="space-y-3">
+    <aside className="sticky top-4 space-y-3">
       <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
         <h3 className="mb-3 text-sm font-semibold">Publish</h3>
         <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -107,7 +122,7 @@ export function ArticleLiveAnalysis({
         </div>
 
         <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Publish / schedule date
+          Publish date
         </label>
         <div className="relative mb-3">
           <CalendarClock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -120,24 +135,34 @@ export function ArticleLiveAnalysis({
           />
         </div>
 
-        <div className="mb-3 flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2.5">
-          <span className="text-xs font-medium">Schedule</span>
-          <span
-            className={cn(
-              "text-[10px] font-semibold uppercase tracking-wide",
-              scheduleOn ? "text-primary" : "text-muted-foreground",
-            )}
-          >
-            {scheduleOn ? "On" : "Off"}
-          </span>
-        </div>
+        <ToggleRow
+          label="Schedule"
+          on={Boolean(scheduleEnabled ?? scheduledAt)}
+          disabled={readOnly}
+          onToggle={(v) => onScheduleEnabled?.(v)}
+        />
+        <ToggleRow
+          label="Expiry date"
+          on={Boolean(expiryEnabled ?? expiryAt)}
+          disabled={readOnly}
+          onToggle={(v) => onExpiryEnabled?.(v)}
+        />
+        {(expiryEnabled || expiryAt) && (
+          <input
+            type="datetime-local"
+            disabled={readOnly}
+            value={toLocalInput(expiryAt)}
+            onChange={(e) => onExpiryAtChange?.(e.target.value)}
+            className="mb-3 mt-1 h-10 w-full rounded-xl border border-border/70 bg-background px-3 text-sm outline-none"
+          />
+        )}
 
         <button
           type="button"
           onClick={onOpenPublishing}
-          className="text-xs font-semibold text-primary hover:underline"
+          className="mt-1 text-xs font-semibold text-primary hover:underline"
         >
-          Advanced publishing options
+          + Advanced publishing options
         </button>
       </div>
 
@@ -151,9 +176,23 @@ export function ArticleLiveAnalysis({
               ? "Good progress — tighten a few SEO items."
               : "Needs work before publish."
         }
-        onViewReport={onOpenPublishing}
-      >
-        <ul className="mt-3 space-y-1.5">
+        onViewReport={onOpenSeo}
+      />
+
+      <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold">SEO checklist</h3>
+          <span className="text-xs font-bold tabular-nums text-muted-foreground">
+            {passed} / {total}
+          </span>
+        </div>
+        <div className="mb-3 h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-primary cms-transition"
+            style={{ width: `${(passed / total) * 100}%` }}
+          />
+        </div>
+        <ul className="space-y-1.5">
           {checklist.map((item) => (
             <li key={item.label} className="flex items-center gap-2 text-xs">
               {item.ok ? (
@@ -167,7 +206,7 @@ export function ArticleLiveAnalysis({
             </li>
           ))}
         </ul>
-      </ScoreCard>
+      </div>
 
       <ScoreCard
         title="Content score"
@@ -185,11 +224,47 @@ export function ArticleLiveAnalysis({
           <Bar label="Engagement" value={engagement} />
           <Bar label="Originality" value={originality} />
           <p className="pt-1 text-[11px] text-muted-foreground">
-            {wordCount.toLocaleString()} words · {readingMinutes} min read · EEAT {eeatScore}
+            {wordCount.toLocaleString()} words · {readingMinutes} min · EEAT {eeatScore}
           </p>
         </div>
       </ScoreCard>
     </aside>
+  );
+}
+
+function ToggleRow({
+  label,
+  on,
+  disabled,
+  onToggle,
+}: {
+  label: string;
+  on: boolean;
+  disabled?: boolean;
+  onToggle?: (v: boolean) => void;
+}) {
+  return (
+    <div className="mb-2 flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2.5">
+      <span className="text-xs font-medium">{label}</span>
+      <button
+        type="button"
+        disabled={disabled}
+        role="switch"
+        aria-checked={on}
+        onClick={() => onToggle?.(!on)}
+        className={cn(
+          "relative h-5 w-9 rounded-full cms-transition disabled:opacity-50",
+          on ? "bg-primary" : "bg-muted-foreground/30",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow cms-transition",
+            on ? "left-4" : "left-0.5",
+          )}
+        />
+      </button>
+    </div>
   );
 }
 
@@ -225,7 +300,7 @@ function ScoreCard({
             onClick={onViewReport}
             className="text-[11px] font-semibold text-primary hover:underline"
           >
-            View report
+            View full report
           </button>
         ) : null}
       </div>
