@@ -227,6 +227,7 @@ export function WorkflowActions({
   disabled,
   dirty,
   onAction,
+  onRequestPublish,
 }: {
   status: string;
   canSubmitReview: boolean;
@@ -235,6 +236,7 @@ export function WorkflowActions({
   disabled?: boolean;
   dirty?: boolean;
   onAction: (action: ArticleApprovalAction, note?: string) => void;
+  onRequestPublish?: () => void;
 }) {
   return (
     <div className="space-y-2 border-t border-border pt-4">
@@ -243,7 +245,7 @@ export function WorkflowActions({
       </div>
       {dirty ? (
         <p className="text-[11px] text-cat-amber">
-          Unsaved edits will be saved automatically before this action runs.
+          Unsaved edits will be saved when you confirm publish or run a workflow action.
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">
@@ -262,8 +264,8 @@ export function WorkflowActions({
             type="button"
             className={cn(cmsButton)}
             disabled={disabled}
-            title="Save current content and publish live"
-            onClick={() => onAction("publish")}
+            title="Opens confirm dialog — publish only after you confirm"
+            onClick={() => (onRequestPublish ? onRequestPublish() : onAction("publish"))}
           >
             {status === "review" ? "Approve & publish" : "Publish now"}
           </button>

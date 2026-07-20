@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import {
   Archive,
   BookOpen,
@@ -6,6 +7,7 @@ import {
   ChevronDown,
   ChevronLeft,
   Copy,
+  ExternalLink,
   Eye,
   Focus,
   Loader2,
@@ -16,9 +18,20 @@ import {
   Settings2,
   Share2,
   Sparkles,
+  X,
 } from "lucide-react";
 import type { WritingStats } from "@/lib/writing-stats";
 import { cmsButton, cmsGhostButton } from "@/components/cms";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,6 +90,7 @@ export function DocumentEditorBar({
   title,
   status,
   saving,
+  publishing,
   dirty,
   lastSavedAt,
   stats,
@@ -92,6 +106,10 @@ export function DocumentEditorBar({
   canPublish,
   onStatusChange,
   canChangeStatus,
+  publishNotice,
+  onDismissPublishNotice,
+  liveUrl,
+  publishIntentKey,
   articleId,
   isNew,
   publicSlug,
@@ -107,6 +125,7 @@ export function DocumentEditorBar({
   title: string;
   status: EditorWorkflowStatus;
   saving: boolean;
+  publishing?: boolean;
   dirty: boolean;
   lastSavedAt: Date | null;
   stats: WritingStats;
@@ -122,6 +141,11 @@ export function DocumentEditorBar({
   canPublish?: boolean;
   onStatusChange?: (status: EditorWorkflowStatus) => void;
   canChangeStatus?: boolean;
+  publishNotice?: { title: string; slug?: string } | null;
+  onDismissPublishNotice?: () => void;
+  liveUrl?: string | null;
+  /** Increment to open the confirm-publish dialog from outside (e.g. Story settings). */
+  publishIntentKey?: number;
   articleId: string;
   isNew: boolean;
   publicSlug?: string;
@@ -134,13 +158,18 @@ export function DocumentEditorBar({
   onOpenSeo: () => void;
   onOpenAi?: () => void;
 }) {
-  const savedLabel = saving
-    ? "Saving…"
-    : dirty
-      ? "Unsaved changes"
-      : lastSavedAt
-        ? `Saved ${formatRelative(lastSavedAt)}`
-        : "All changes saved";
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+
+  const savedLabel =
+    saving || publishing
+      ? publishing
+        ? "Publishing…"
+        : "Saving…"
+      : dirty
+        ? "Unsaved changes"
+        : lastSavedAt
+          ? `Saved ${formatRelative(lastSavedAt)}`
+          : "All changes saved";
 
   const seoTone =
     seoScore >= 75 ? "text-cat-green" : seoScore >= 50 ? "text-cat-amber" : "text-cat-rose";
@@ -148,10 +177,28 @@ export function DocumentEditorBar({
   const meta = STATUS_META[status] ?? STATUS_META.draft;
   const isLive = status === "published";
   const showPublishNow = Boolean(canPublish && onPublish && !isLive && status !== "archived");
+  const busy = saving || Boolean(publishing);
+
+  useEffect(() => {
+    if (publishIntentKey && publishIntentKey > 0 && canSave && !busy && onPublish) {
+      setPublishDialogOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publishIntentKey]);
 
   const statusOptions: EditorWorkflowStatus[] = canPublish
     ? ["draft", "review", "scheduled", "published", "archived"]
     : ["draft", "review"];
+
+  const requestPublish = () => {
+    if (!canSave || busy || !onPublish) return;
+    setPublishDialogOpen(true);
+  };
+
+  const confirmPublish = () => {
+    setPublishDialogOpen(false);
+    onPublish?.();
+  };
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/50 bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
@@ -193,10 +240,16 @@ export function DocumentEditorBar({
                     return (
                       <DropdownMenuItem
                         key={key}
-                        onSelect={() => onStatusChange(key)}
+                        onSelect={() => {
+                          if (key === "published") {
+                            requestPublish();
+                            return;
+                          }
+                          onStatusChange(key);
+                        }}
                         className="flex flex-col items-start gap-0.5 py-2"
                       >
-                        <span className="inline-flex items-center gap-2 text-xs font-semibold">
+                        <span className="inline-flex w-full items-center gap-2 text-xs font-semibold">
                           <span className={cn("h-1.5 w-1.5 rounded-full", option.dot)} />
                           {option.label}
                           {key === "draft" ? (
@@ -207,7 +260,9 @@ export function DocumentEditorBar({
                           ) : null}
                         </span>
                         <span className="pl-3.5 text-[10px] text-muted-foreground">
-                          {option.hint}
+                          {key === "published"
+                            ? "Requires your confirmation — never automatic"
+                            : option.hint}
                         </span>
                       </DropdownMenuItem>
                     );
@@ -231,7 +286,7 @@ export function DocumentEditorBar({
             )}
 
             <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              {saving ? (
+              {busy ? (
                 <Loader2 className="h-3 w-3 animate-spin" />
               ) : dirty ? (
                 <span className="h-1.5 w-1.5 rounded-full bg-cat-amber" />
@@ -369,12 +424,15 @@ export function DocumentEditorBar({
           <div className="ml-1 flex items-center gap-1.5 border-l border-border/70 pl-2">
             <button
               type="button"
-              className={cn(cmsGhostButton, "h-8 rounded-lg px-3 text-xs font-semibold")}
-              disabled={!canSave || saving}
+              className={cn(
+                cmsGhostButton,
+                "h-8 rounded-lg border border-border/80 bg-background px-3 text-xs font-semibold shadow-sm",
+              )}
+              disabled={!canSave || busy}
               onClick={onSave}
-              title={saveBlockedHint || saveLabel}
+              title={saveBlockedHint || "Save without publishing"}
             >
-              {saving && !showPublishNow ? "Saving…" : saveLabel}
+              {saving && !publishing ? "Saving…" : saveLabel}
             </button>
 
             {showPublishNow ? (
@@ -384,15 +442,15 @@ export function DocumentEditorBar({
                   cmsButton,
                   "h-8 gap-1.5 rounded-lg px-3.5 text-xs font-semibold shadow-sm",
                 )}
-                disabled={!canSave || saving}
-                onClick={onPublish}
+                disabled={!canSave || busy}
+                onClick={requestPublish}
                 title={
                   saveBlockedHint
                     ? saveBlockedHint
-                    : "Save and publish this article live now"
+                    : "Review and publish — only when you confirm"
                 }
               >
-                {saving ? (
+                {publishing ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     Publishing…
@@ -405,18 +463,117 @@ export function DocumentEditorBar({
                 )}
               </button>
             ) : isLive && canPublish ? (
-              <button
-                type="button"
-                className={cn(cmsButton, "h-8 rounded-lg px-3.5 text-xs font-semibold")}
-                disabled={!canSave || saving}
-                onClick={onSave}
-              >
-                {saving ? "Updating…" : "Update live"}
-              </button>
+              <>
+                {liveUrl ? (
+                  <a
+                    href={liveUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={cn(
+                      cmsGhostButton,
+                      "h-8 gap-1 rounded-lg px-2.5 text-xs font-semibold",
+                    )}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">View live</span>
+                  </a>
+                ) : null}
+                <button
+                  type="button"
+                  className={cn(cmsButton, "h-8 rounded-lg px-3.5 text-xs font-semibold")}
+                  disabled={!canSave || busy}
+                  onClick={onSave}
+                >
+                  {saving ? "Updating…" : "Update live"}
+                </button>
+              </>
             ) : null}
           </div>
         </div>
       </div>
+
+      {publishNotice ? (
+        <div className="flex flex-col gap-2 border-b border-emerald-200/80 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-50">
+          <div className="flex min-w-0 items-start gap-2">
+            <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            <div className="min-w-0">
+              <div className="font-semibold">Article published</div>
+              <div className="truncate text-xs text-emerald-800/80 dark:text-emerald-100/80">
+                {publishNotice.title || "Untitled"} is live
+                {publishNotice.slug ? ` · /article/${publishNotice.slug}` : ""}
+              </div>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {liveUrl ? (
+              <a
+                href={liveUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex h-7 items-center gap-1 rounded-md bg-emerald-700 px-2.5 text-xs font-semibold text-white hover:bg-emerald-800"
+              >
+                <ExternalLink className="h-3 w-3" /> View live
+              </a>
+            ) : null}
+            {onShare ? (
+              <button
+                type="button"
+                onClick={onShare}
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-emerald-300/80 bg-white/70 px-2.5 text-xs font-semibold text-emerald-900 hover:bg-white dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-50"
+              >
+                <Share2 className="h-3 w-3" /> Copy link
+              </button>
+            ) : null}
+            {onDismissPublishNotice ? (
+              <button
+                type="button"
+                onClick={onDismissPublishNotice}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md text-emerald-800/70 hover:bg-emerald-100 hover:text-emerald-950 dark:hover:bg-emerald-900"
+                aria-label="Dismiss"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      <AlertDialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Publish this article now?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Publishing only happens when you confirm. Autosave never publishes — drafts stay
+                  private until you choose to go live.
+                </p>
+                <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5 text-left text-xs text-foreground">
+                  <div className="font-semibold">{title.trim() || "Untitled article"}</div>
+                  <div className="mt-1 text-muted-foreground">
+                    Status will change to <strong>Published</strong> and the story will appear on
+                    the public site.
+                  </div>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!canSave || busy}
+              onClick={(event) => {
+                event.preventDefault();
+                confirmPublish();
+              }}
+              className="gap-1.5"
+            >
+              <Send className="h-3.5 w-3.5" />
+              Confirm publish
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </header>
   );
 }

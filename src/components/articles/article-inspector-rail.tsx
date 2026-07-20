@@ -86,6 +86,7 @@ type InspectorProps = {
   canReview: boolean;
   workflowPending: boolean;
   onWorkflow: (action: ArticleApprovalAction, note?: string) => void;
+  onRequestPublish?: () => void;
   workflowError?: string | null;
   dirty?: boolean;
   sections: Array<{ id: string; name: string }>;
@@ -526,6 +527,7 @@ function PublishingCard(props: InspectorProps) {
     workflowPending,
     dirty,
     onWorkflow,
+    onRequestPublish,
     workflowError,
     authorName,
     authorAvatar,
@@ -551,11 +553,18 @@ function PublishingCard(props: InspectorProps) {
       <Field label="Status">
         <select
           value={form.status}
-          onChange={(e) => patchForm({ status: e.target.value as ArticleStatus })}
+          onChange={(e) => {
+            const next = e.target.value as ArticleStatus;
+            if (next === "published" && form.status !== "published") {
+              onRequestPublish?.();
+              return;
+            }
+            patchForm({ status: next });
+          }}
           disabled={readOnly}
           className={cmsInput}
         >
-          <option value="draft">Draft</option>
+          <option value="draft">Draft · Private</option>
           <option value="review">In review</option>
           {canPublish ? (
             <>
@@ -567,8 +576,7 @@ function PublishingCard(props: InspectorProps) {
         </select>
       </Field>
       <p className="text-[10px] text-muted-foreground">
-        “Approved” is logged via workflow approval notes while status remains In review until
-        publish.
+        Going live requires Confirm publish — autosave and Save draft never publish.
       </p>
       {form.status === "scheduled" ? (
         <Field label="Publish date & time">
@@ -597,6 +605,7 @@ function PublishingCard(props: InspectorProps) {
           disabled={workflowPending}
           dirty={dirty}
           onAction={onWorkflow}
+          onRequestPublish={onRequestPublish}
         />
       ) : null}
       {workflowError ? (

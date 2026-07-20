@@ -33,6 +33,7 @@ import {
 import { cn } from "@/lib/utils";
 import { FloatingQuickActions } from "@/components/dashboard/primitives";
 import { FLOATING_QUICK_ACTIONS } from "@/components/dashboard/quick-actions-view";
+import { Toaster } from "@/components/ui/sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -535,6 +536,7 @@ export function AdminLayout() {
   return (
     <AdminShell>
       <Outlet />
+      <Toaster />
     </AdminShell>
   );
 }

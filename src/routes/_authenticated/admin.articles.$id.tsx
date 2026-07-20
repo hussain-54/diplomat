@@ -46,6 +46,7 @@ import { computeWritingStats } from "@/lib/writing-stats";
 import { parseHreflang, siteUrl } from "@/lib/seo";
 import { ARTICLES_STATIC_SEGMENTS } from "@/components/articles/nav";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
 
@@ -142,6 +143,11 @@ function EditArticle() {
   const [viewMode, setViewMode] = useState<DocumentViewMode>("edit");
   const [inspectorCard, setInspectorCard] = useState<InspectorCardId | null>("publishing");
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+  const [publishNotice, setPublishNotice] = useState<{ title: string; slug?: string } | null>(
+    null,
+  );
+  const [publishing, setPublishing] = useState(false);
+  const [publishIntentKey, setPublishIntentKey] = useState(0);
   const hydratedRef = useRef(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const cacheKey = isNew ? "new" : id;
@@ -395,7 +401,23 @@ function EditArticle() {
       statusOverride,
     }: { auto?: boolean; statusOverride?: ArticleStatus } = {}) => {
       const previousStatus = articleQ.data?.status;
-      const nextStatus = statusOverride ?? form.status;
+      // Autosave never publishes — only explicit Publish now / statusOverride does.
+      let nextStatus = statusOverride ?? form.status;
+      if (_auto) {
+        nextStatus =
+          form.status === "published" || form.status === "scheduled" || form.status === "archived"
+            ? ((articleQ.data?.status as ArticleStatus) ?? "draft")
+            : form.status;
+        if (nextStatus === "published" || nextStatus === "scheduled") {
+          nextStatus = "draft";
+        }
+      } else if (!statusOverride) {
+        // Save draft / Update live never promote to published — only Confirm publish does.
+        if (nextStatus === "published" && previousStatus !== "published") {
+          nextStatus = (previousStatus as ArticleStatus) ?? "draft";
+        }
+      }
+      if (statusOverride === "published") setPublishing(true);
       const article = await upsertArticle({
         data: {
           id: isNew ? undefined : id,
@@ -465,6 +487,7 @@ function EditArticle() {
       const nextStatus = result?.nextStatus;
       setDirty(false);
       setLastSavedAt(new Date());
+      setPublishing(false);
       clearArticleDraftCache(cacheKey);
       if (article && nextStatus) {
         setForm((prev) => ({
@@ -472,6 +495,16 @@ function EditArticle() {
           status: nextStatus,
           slug: article.slug ?? prev.slug,
         }));
+      }
+      // Success banner only after an explicit Publish now action — never on autosave/update.
+      if (variables?.statusOverride === "published") {
+        setPublishNotice({
+          title: article?.title ?? form.title,
+          slug: article?.slug ?? form.slug,
+        });
+        toast.success("Article published", {
+          description: "It’s live on the public site.",
+        });
       }
       if (isNew && article?.id) {
         moveArticleDraftCache("new", article.id);
@@ -495,6 +528,9 @@ function EditArticle() {
       if (isNew && article?.id && !variables?.auto) {
         navigate({ to: "/admin/articles/$id", params: { id: article.id }, replace: true });
       }
+    },
+    onError: () => {
+      setPublishing(false);
     },
   });
 
@@ -650,6 +686,7 @@ function EditArticle() {
     ? meQ.data?.profile?.avatar_url
     : author?.avatar_url;
   const publicSlug = form.status === "published" && form.slug ? form.slug : undefined;
+  const liveUrl = publicSlug ? `${siteUrl()}/article/${publicSlug}` : null;
   const fullscreen = viewMode === "fullscreen";
   const focusLike = viewMode === "focus" || viewMode === "fullscreen";
   const openInspector = (section: InspectorCardId = "publishing") => {
@@ -678,6 +715,20 @@ function EditArticle() {
   // Show Publish now whenever the editor may publish — disabled until title + category are set.
   const showQuickPublish =
     canPublish && !readOnly && !["published", "archived"].includes(form.status);
+
+  const runPublish = () => {
+    if (!canSubmit) return;
+    setPublishing(true);
+    save.mutate({ statusOverride: "published" });
+  };
+
+  const requestPublish = () => {
+    if (!canSubmit) {
+      toast.error(saveBlockedHint ?? "Add a title and category before publishing");
+      return;
+    }
+    setPublishIntentKey((k) => k + 1);
+  };
 
   const copyShareLink = () => {
     const url = publicSlug
@@ -710,7 +761,8 @@ function EditArticle() {
       <DocumentEditorBar
         title={form.title}
         status={form.status}
-        saving={save.isPending || workflow.isPending}
+        saving={save.isPending && !publishing}
+        publishing={publishing}
         dirty={dirty}
         lastSavedAt={lastSavedAt}
         stats={writingStats}
@@ -724,17 +776,12 @@ function EditArticle() {
         saveBlockedHint={saveBlockedHint}
         canPublish={showQuickPublish || (canPublish && form.status === "published")}
         canChangeStatus={!readOnly && (canPublish || canSubmitReview)}
+        publishNotice={publishNotice}
+        onDismissPublishNotice={() => setPublishNotice(null)}
+        liveUrl={liveUrl}
         onStatusChange={(next) => {
           if (next === "published") {
-            if (
-              window.confirm(
-                isNew
-                  ? "Save and publish this article live now?"
-                  : "Publish this article live with your latest edits?",
-              )
-            ) {
-              save.mutate({ statusOverride: "published" });
-            }
+            // Dialog in the bar handles confirmation; this path is unused for published.
             return;
           }
           if (next === "scheduled" && !form.scheduled_at) {
@@ -744,17 +791,8 @@ function EditArticle() {
           }
           patchForm({ status: next });
         }}
-        onPublish={() => {
-          if (
-            window.confirm(
-              isNew
-                ? "Save and publish this article live now?"
-                : "Publish this article live with your latest edits?",
-            )
-          ) {
-            save.mutate({ statusOverride: "published" });
-          }
-        }}
+        onPublish={runPublish}
+        publishIntentKey={publishIntentKey}
         articleId={id}
         isNew={isNew}
         publicSlug={publicSlug}
@@ -888,7 +926,14 @@ function EditArticle() {
             canSubmitReview={canSubmitReview}
             canReview={canReview}
             workflowPending={workflow.isPending || save.isPending}
-            onWorkflow={(action, note) => workflow.mutate({ action, note })}
+            onWorkflow={(action, note) => {
+              if (action === "publish") {
+                requestPublish();
+                return;
+              }
+              workflow.mutate({ action, note });
+            }}
+            onRequestPublish={requestPublish}
             workflowError={workflow.error?.message ?? save.error?.message}
             dirty={dirty}
             sections={(sectionsQ.data ?? []).map((sec) => ({ id: sec.id, name: sec.name }))}
