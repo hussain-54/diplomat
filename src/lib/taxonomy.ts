@@ -10,6 +10,13 @@ export type TaxonomyCategory = {
   color: string | null;
   sort_order: number;
   created_at?: string;
+  updated_at?: string;
+  featured?: boolean;
+  seo_score?: number | null;
+  news_eligible?: boolean;
+  discover_eligible?: boolean;
+  language?: string | null;
+  country?: string | null;
   articles?: Array<{ count: number }> | null;
 };
 

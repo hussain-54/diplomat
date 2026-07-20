@@ -18,22 +18,28 @@ export const Route = createFileRoute("/section/$slug")({
     return data;
   },
   head: ({ loaderData }) => {
-    const name = loaderData?.section?.name ?? "Section";
-    const title = `${name} — Diplomacy Lens`;
-    const description = `Latest ${name} coverage from Diplomacy Lens.`;
-    const canonical = absoluteUrl(`/section/${loaderData?.section?.slug ?? ""}`);
+    const section = loaderData?.section;
+    const name = section?.name ?? "Section";
+    const title = section?.seo_title || `${name} — Diplomacy Lens`;
+    const description =
+      section?.meta_description ||
+      section?.short_description ||
+      `Latest ${name} coverage from Diplomacy Lens.`;
+    const canonical = section?.canonical_url || absoluteUrl(`/section/${section?.slug ?? ""}`);
+    const ogTitle = section?.og_title || title;
+    const ogDescription = section?.og_description || description;
     return {
       meta: [
         { title },
         { name: "description", content: description },
         { name: "robots", content: "index,follow" },
         { property: "og:type", content: "website" },
-        { property: "og:title", content: title },
-        { property: "og:description", content: description },
+        { property: "og:title", content: ogTitle },
+        { property: "og:description", content: ogDescription },
         { property: "og:url", content: canonical },
         { name: "twitter:card", content: "summary" },
-        { name: "twitter:title", content: title },
-        { name: "twitter:description", content: description },
+        { name: "twitter:title", content: section?.twitter_title || ogTitle },
+        { name: "twitter:description", content: section?.twitter_description || ogDescription },
       ],
       links: [{ rel: "canonical", href: canonical }],
     };

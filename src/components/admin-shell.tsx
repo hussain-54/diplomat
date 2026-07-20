@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { ArticlesSidebarMenu } from "@/components/articles/articles-sidebar-menu";
+import { CategoriesSidebarMenu } from "@/components/categories/categories-sidebar-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { getDashboardMetrics, getMe } from "@/lib/admin.functions";
 import {
@@ -59,6 +60,8 @@ const NAV_GROUPS: Array<{
     badgeKey?: "review" | "comments";
     /** Rendered as expandable Articles accordion instead of a flat link */
     expandableArticles?: boolean;
+    /** Rendered as expandable Categories accordion */
+    expandableCategories?: boolean;
   }>;
 }> = [
   {
@@ -102,6 +105,7 @@ const NAV_GROUPS: Array<{
         label: "Categories",
         icon: FolderTree,
         permission: "categories:manage",
+        expandableCategories: true,
       },
       {
         to: "/admin/staff",
@@ -303,6 +307,15 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 if (item.expandableArticles) {
                   return (
                     <ArticlesSidebarMenu
+                      key={item.to}
+                      collapsed={collapsed}
+                      roles={roles}
+                    />
+                  );
+                }
+                if (item.expandableCategories) {
+                  return (
+                    <CategoriesSidebarMenu
                       key={item.to}
                       collapsed={collapsed}
                       roles={roles}

@@ -90,16 +90,78 @@ CREATE TABLE IF NOT EXISTS public.sections (
   slug TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
+  short_description TEXT,
+  category_type TEXT DEFAULT 'standard',
+  icon_url TEXT,
+  cover_image_url TEXT,
+  featured BOOLEAN NOT NULL DEFAULT false,
   parent_id UUID REFERENCES public.sections(id) ON DELETE SET NULL,
   visibility TEXT NOT NULL DEFAULT 'public'
     CHECK (visibility IN ('public', 'hidden')),
   color TEXT,
   sort_order INT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  seo_title TEXT,
+  meta_description TEXT,
+  focus_keywords TEXT[] DEFAULT '{}',
+  canonical_url TEXT,
+  og_title TEXT,
+  og_description TEXT,
+  twitter_title TEXT,
+  twitter_description TEXT,
+  seo_score INT DEFAULT 0,
+  ai_summary TEXT,
+  topic_cluster TEXT,
+  search_intent TEXT,
+  semantic_keywords TEXT[] DEFAULT '{}',
+  entities JSONB DEFAULT '[]'::jsonb,
+  ai_score INT DEFAULT 0,
+  news_eligible BOOLEAN NOT NULL DEFAULT false,
+  news_sitemap BOOLEAN NOT NULL DEFAULT false,
+  news_priority INT DEFAULT 5,
+  breaking_news BOOLEAN NOT NULL DEFAULT false,
+  schema_type TEXT DEFAULT 'CollectionPage',
+  language TEXT DEFAULT 'en',
+  region TEXT,
+  country TEXT,
+  default_author_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  access_mode TEXT DEFAULT 'public',
+  discover_eligible BOOLEAN NOT NULL DEFAULT false,
   CONSTRAINT sections_parent_not_self CHECK (parent_id IS NULL OR parent_id <> id)
 );
 CREATE INDEX IF NOT EXISTS sections_parent_sort_idx ON public.sections(parent_id, sort_order, name);
 CREATE INDEX IF NOT EXISTS sections_visibility_idx ON public.sections(visibility, sort_order);
+CREATE INDEX IF NOT EXISTS sections_featured_idx ON public.sections(featured, sort_order);
+CREATE INDEX IF NOT EXISTS sections_updated_at_idx ON public.sections(updated_at DESC);
+CREATE INDEX IF NOT EXISTS sections_seo_score_idx ON public.sections(seo_score DESC);
+
+CREATE TABLE IF NOT EXISTS public.category_activity_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  section_id UUID REFERENCES public.sections(id) ON DELETE SET NULL,
+  actor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  details TEXT,
+  ip TEXT,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS category_activity_logs_section_idx ON public.category_activity_logs(section_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS category_activity_logs_actor_idx ON public.category_activity_logs(actor_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS public.category_module_settings (
+  id BOOLEAN PRIMARY KEY DEFAULT true CHECK (id = true),
+  general JSONB NOT NULL DEFAULT '{}'::jsonb,
+  seo_defaults JSONB NOT NULL DEFAULT '{}'::jsonb,
+  social JSONB NOT NULL DEFAULT '{}'::jsonb,
+  permissions JSONB NOT NULL DEFAULT '{}'::jsonb,
+  notifications JSONB NOT NULL DEFAULT '{}'::jsonb,
+  advanced JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL
+);
+INSERT INTO public.category_module_settings (id) VALUES (true) ON CONFLICT (id) DO NOTHING;
 
 -- Editor Section Access
 CREATE TABLE IF NOT EXISTS public.editor_section_access (

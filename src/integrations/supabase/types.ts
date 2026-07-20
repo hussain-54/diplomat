@@ -958,44 +958,249 @@ export type Database = {
       }
       sections: {
         Row: {
+          access_mode: string | null
+          ai_score: number | null
+          ai_summary: string | null
+          breaking_news: boolean
+          canonical_url: string | null
+          category_type: string | null
           color: string | null
+          country: string | null
+          cover_image_url: string | null
           created_at: string
+          created_by: string | null
+          default_author_id: string | null
           description: string | null
+          discover_eligible: boolean
+          entities: Json | null
+          featured: boolean
+          focus_keywords: string[] | null
+          icon_url: string | null
           id: string
+          language: string | null
+          meta_description: string | null
           name: string
+          news_eligible: boolean
+          news_priority: number | null
+          news_sitemap: boolean
+          og_description: string | null
+          og_title: string | null
           parent_id: string | null
+          region: string | null
+          schema_type: string | null
+          search_intent: string | null
+          semantic_keywords: string[] | null
+          seo_score: number | null
+          seo_title: string | null
+          short_description: string | null
           slug: string
           sort_order: number
+          topic_cluster: string | null
+          twitter_description: string | null
+          twitter_title: string | null
+          updated_at: string
           visibility: string
         }
         Insert: {
+          access_mode?: string | null
+          ai_score?: number | null
+          ai_summary?: string | null
+          breaking_news?: boolean
+          canonical_url?: string | null
+          category_type?: string | null
           color?: string | null
+          country?: string | null
+          cover_image_url?: string | null
           created_at?: string
+          created_by?: string | null
+          default_author_id?: string | null
           description?: string | null
+          discover_eligible?: boolean
+          entities?: Json | null
+          featured?: boolean
+          focus_keywords?: string[] | null
+          icon_url?: string | null
           id?: string
+          language?: string | null
+          meta_description?: string | null
           name: string
+          news_eligible?: boolean
+          news_priority?: number | null
+          news_sitemap?: boolean
+          og_description?: string | null
+          og_title?: string | null
           parent_id?: string | null
+          region?: string | null
+          schema_type?: string | null
+          search_intent?: string | null
+          semantic_keywords?: string[] | null
+          seo_score?: number | null
+          seo_title?: string | null
+          short_description?: string | null
           slug: string
           sort_order?: number
+          topic_cluster?: string | null
+          twitter_description?: string | null
+          twitter_title?: string | null
+          updated_at?: string
           visibility?: string
         }
         Update: {
+          access_mode?: string | null
+          ai_score?: number | null
+          ai_summary?: string | null
+          breaking_news?: boolean
+          canonical_url?: string | null
+          category_type?: string | null
           color?: string | null
+          country?: string | null
+          cover_image_url?: string | null
           created_at?: string
+          created_by?: string | null
+          default_author_id?: string | null
           description?: string | null
+          discover_eligible?: boolean
+          entities?: Json | null
+          featured?: boolean
+          focus_keywords?: string[] | null
+          icon_url?: string | null
           id?: string
+          language?: string | null
+          meta_description?: string | null
           name?: string
+          news_eligible?: boolean
+          news_priority?: number | null
+          news_sitemap?: boolean
+          og_description?: string | null
+          og_title?: string | null
           parent_id?: string | null
+          region?: string | null
+          schema_type?: string | null
+          search_intent?: string | null
+          semantic_keywords?: string[] | null
+          seo_score?: number | null
+          seo_title?: string | null
+          short_description?: string | null
           slug?: string
           sort_order?: number
+          topic_cluster?: string | null
+          twitter_description?: string | null
+          twitter_title?: string | null
+          updated_at?: string
           visibility?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "sections_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sections_default_author_id_fkey"
+            columns: ["default_author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "sections_parent_id_fkey"
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      category_activity_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          details: string | null
+          id: string
+          ip: string | null
+          payload: Json
+          section_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          ip?: string | null
+          payload?: Json
+          section_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          ip?: string | null
+          payload?: Json
+          section_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_activity_logs_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "category_activity_logs_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      category_module_settings: {
+        Row: {
+          advanced: Json
+          general: Json
+          id: boolean
+          notifications: Json
+          permissions: Json
+          seo_defaults: Json
+          social: Json
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          advanced?: Json
+          general?: Json
+          id?: boolean
+          notifications?: Json
+          permissions?: Json
+          seo_defaults?: Json
+          social?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          advanced?: Json
+          general?: Json
+          id?: boolean
+          notifications?: Json
+          permissions?: Json
+          seo_defaults?: Json
+          social?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "category_module_settings_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]

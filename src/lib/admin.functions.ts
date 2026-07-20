@@ -2051,102 +2051,28 @@ export const uploadMediaAssetsBulk = async ({
   };
 };
 
-// CATEGORIES / TAXONOMY
-export const listCategories = async () => {
-  await requirePermission("categories:manage");
-  const { data, error } = await supabase
-    .from("sections")
-    .select("*, articles(count)")
-    .order("sort_order")
-    .order("name");
-  if (error) throw toAppError(error);
-  return data ?? [];
-};
-
-export const upsertCategory = async ({
-  data,
-}: {
-  data: {
-    id?: string;
-    name: string;
-    slug?: string;
-    description?: string | null;
-    parent_id?: string | null;
-    visibility?: "public" | "hidden";
-    color?: string | null;
-    sort_order?: number;
-  };
-}) => {
-  await requirePermission("categories:manage");
-  if (data.id && data.parent_id === data.id) {
-    throw new Error("A category cannot be its own parent.");
-  }
-  const payload = {
-    name: data.name.trim(),
-    slug: data.slug?.trim() || slugify(data.name),
-    description: data.description?.trim() || null,
-    parent_id: data.parent_id || null,
-    visibility: data.visibility === "hidden" ? "hidden" : "public",
-    color: data.color || null,
-    sort_order: data.sort_order ?? 0,
-  };
-  if (!payload.name) throw new Error("Category name is required.");
-  const result = data.id
-    ? await supabase.from("sections").update(payload).eq("id", data.id)
-    : await supabase.from("sections").insert(payload);
-  if (result.error) throw toAppError(result.error);
-  return { ok: true };
-};
-
-export const reorderCategories = async ({
-  data,
-}: {
-  data: { items: Array<{ id: string; parent_id: string | null; sort_order: number }> };
-}) => {
-  await requirePermission("categories:manage");
-  if (!data.items.length) return { affected: 0 };
-  const { data: affected, error } = await supabase.rpc("admin_reorder_categories", {
-    p_items: data.items,
-  });
-  if (error) {
-    if (/admin_reorder_categories|schema cache|PGRST202/i.test(error.message)) {
-      // Fallback when the RPC migration has not been applied yet.
-      for (const item of data.items) {
-        const { error: updateError } = await supabase
-          .from("sections")
-          .update({ parent_id: item.parent_id, sort_order: item.sort_order })
-          .eq("id", item.id);
-        if (updateError) throw toAppError(updateError);
-      }
-      return { affected: data.items.length };
-    }
-    throw toAppError(error);
-  }
-  return { affected: affected ?? 0 };
-};
-
-export const deleteCategory = async ({ data }: { data: { id: string } }) => {
-  await requirePermission("categories:manage");
-  const { count, error: countError } = await supabase
-    .from("articles")
-    .select("id", { count: "exact", head: true })
-    .eq("section_id", data.id);
-  if (countError) throw toAppError(countError);
-  if (count) throw new Error("Move or delete articles in this category before deleting it.");
-
-  const { count: childCount, error: childError } = await supabase
-    .from("sections")
-    .select("id", { count: "exact", head: true })
-    .eq("parent_id", data.id);
-  if (childError) throw toAppError(childError);
-  if (childCount) {
-    throw new Error("Move or delete nested categories before deleting this parent.");
-  }
-
-  const { error } = await supabase.from("sections").delete().eq("id", data.id);
-  if (error) throw toAppError(error);
-  return { ok: true };
-};
+// CATEGORIES / TAXONOMY — see category.functions.ts for full CMS module
+export {
+  archiveCategory,
+  bulkArchiveCategories,
+  deleteCategory,
+  duplicateCategory,
+  exportCategories,
+  getCategoriesDashboard,
+  getCategoriesLibraryCounts,
+  getCategoryAnalytics,
+  getCategoryDetail,
+  getCategoryModuleSettings,
+  importCategories,
+  listCategories,
+  listCategoriesTable,
+  listCategoryActivity,
+  listCategoryArticles,
+  reorderCategories,
+  rowToWizardPayload,
+  updateCategoryModuleSettings,
+  upsertCategory,
+} from "@/lib/category.functions";
 
 // STAFF
 export const updateStaffProfile = async ({
