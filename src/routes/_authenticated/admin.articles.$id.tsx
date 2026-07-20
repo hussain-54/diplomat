@@ -47,7 +47,7 @@ import {
 import { useArticleEditRealtime } from "@/hooks/useArticleEditRealtime";
 import { hasPermission } from "@/lib/permissions";
 import { requirePermissionRoute } from "@/lib/route-guards";
-import { parseBody, serializeBlocks, type Block } from "@/lib/blocks";
+import { parseBody, parseBodyExtras, serializeBlocks, type ArticleBodyExtras, type Block } from "@/lib/blocks";
 import { computeWritingStats } from "@/lib/writing-stats";
 import { parseHreflang, siteUrl } from "@/lib/seo";
 import { ARTICLES_STATIC_SEGMENTS } from "@/components/articles/nav";
@@ -139,6 +139,7 @@ function EditArticle() {
   });
   const [hreflangRows, setHreflangRows] = useState<Array<{ locale: string; url: string }>>([]);
   const [blocks, setBlocks] = useState<Block[]>(() => parseBody(null));
+  const [bodyExtras, setBodyExtras] = useState<ArticleBodyExtras>({});
   const [tagNames, setTagNames] = useState<string[]>([]);
   const [tagDraft, setTagDraft] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -183,7 +184,7 @@ function EditArticle() {
         title: form.title,
         slug: form.slug,
         deck: form.deck,
-        body: serializeBlocks(blocks),
+        body: serializeBlocks(blocks, bodyExtras),
         seo_title: seo.seo_title,
         meta_description: seo.meta_description,
         focus_keyword: seo.focus_keyword,
@@ -193,7 +194,7 @@ function EditArticle() {
         robots_index: seo.robots_index,
         google_news: false,
       }),
-    [form, seo, blocks, meQ.data?.userId],
+    [form, seo, blocks, bodyExtras, meQ.data?.userId],
   );
   const seoInsights = useMemo(
     () =>
@@ -253,6 +254,7 @@ function EditArticle() {
         scheduled_at: toDateTimeLocal(articleQ.data.scheduled_at),
       });
       setBlocks(parseBody(articleQ.data.body));
+      setBodyExtras(parseBodyExtras(articleQ.data.body));
       const hreflang = parseHreflang(articleQ.data.hreflang);
       setSeo({
         seo_title: articleQ.data.seo_title ?? "",
@@ -372,6 +374,7 @@ function EditArticle() {
         savedAt: new Date().toISOString(),
         form: { ...form },
         blocks,
+        bodyExtras: { ...bodyExtras },
         tagNames,
         seo: { ...seo },
         hreflangRows,
@@ -379,7 +382,7 @@ function EditArticle() {
     }, 800);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dirty, form, blocks, tagNames, seo, hreflangRows, cacheKey, readOnly]);
+  }, [dirty, form, blocks, bodyExtras, tagNames, seo, hreflangRows, cacheKey, readOnly]);
 
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -407,6 +410,9 @@ function EditArticle() {
     });
     if (Array.isArray(cached.blocks) && cached.blocks.length) {
       setBlocks(cached.blocks as Block[]);
+    }
+    if (cached.bodyExtras) {
+      setBodyExtras(cached.bodyExtras as ArticleBodyExtras);
     }
     setTagNames(cached.tagNames ?? []);
     setSeo((current) => ({ ...current, ...(cached.seo as Partial<ArticleSeoInput>) }));
@@ -448,7 +454,7 @@ function EditArticle() {
           id: isNew ? undefined : id,
           title: form.title,
           deck: form.deck,
-          body: serializeBlocks(blocks),
+          body: serializeBlocks(blocks, bodyExtras),
           section_id: form.section_id,
           region: form.region,
           badge_type: form.badge_type,
@@ -833,6 +839,17 @@ function EditArticle() {
         onOpenSettings={() => openInspector("publishing")}
         onOpenSeo={() => openInspector("seo")}
         onOpenAi={() => openInspector("ai")}
+        canSubmitReview={canSubmitReview && !readOnly}
+        onSubmitReview={() => {
+          if (!canSubmit) {
+            toast.error(saveBlockedHint ?? "Add a title and category first");
+            return;
+          }
+          patchForm({ status: "review" });
+          save.mutate({ statusOverride: "review" });
+        }}
+        pageTitle={isNew ? "Create New Article" : undefined}
+        pageDescription="Create SEO-optimized, engaging, and newsworthy content for Diplomacy Lens."
       />
 
       {!focusLike ? (
@@ -923,11 +940,20 @@ function EditArticle() {
               deck: form.deck,
               slug: form.slug,
               hero_image_url: form.hero_image_url,
+              badge_type: form.badge_type,
+              meta_description: seo.meta_description ?? "",
+              excerpt: bodyExtras.excerpt ?? "",
             }}
             onTitleChange={(title) => patchForm({ title })}
             onDeckChange={(deck) => patchForm({ deck })}
             onSlugChange={(slug) => {
               patchForm({ slug });
+              setDirty(true);
+            }}
+            onBadgeChange={(badge) => patchForm({ badge_type: badge })}
+            onMetaDescriptionChange={(value) => patchSeo({ meta_description: value })}
+            onExcerptChange={(value) => {
+              setBodyExtras((current) => ({ ...current, excerpt: value }));
               setDirty(true);
             }}
             titleInputRef={titleInputRef}
@@ -945,11 +971,18 @@ function EditArticle() {
             onUploadImage={mayUploadMedia ? uploadImage : undefined}
             onOpenAi={() => openInspector("ai")}
             focusLike={focusLike}
+            extras={bodyExtras}
+            onExtrasChange={(next) => {
+              setBodyExtras(next);
+              setDirty(true);
+            }}
+            writingStats={writingStats}
+            lastSavedAt={lastSavedAt}
           />
         </main>
 
         {!focusLike ? (
-          <div className="flex w-full max-w-[420px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-border/60 bg-[#f7f8fa] p-3 xl:max-w-[440px]">
+          <div className="flex w-full max-w-[360px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-border/60 bg-[#f7f8fa] p-3 xl:max-w-[380px]">
             <ArticleLiveAnalysis
               wordCount={allScores.word_count || writingStats.words}
               readingMinutes={allScores.reading_minutes || Math.max(1, Math.ceil(writingStats.words / 220))}
@@ -957,13 +990,32 @@ function EditArticle() {
               contentScore={allScores.content_score}
               eeatScore={allScores.eeat_score}
               checklist={[
-                { label: "Keyword in title", ok: Boolean(seo.focus_keyword && form.title.toLowerCase().includes(seo.focus_keyword.toLowerCase())) },
-                { label: "Meta description", ok: Boolean((seo.meta_description || "").length >= 50) },
-                { label: "Featured image", ok: Boolean(form.hero_image_url) },
+                { label: "SEO Title", ok: Boolean((seo.seo_title || form.title).trim()) },
+                { label: "Meta Description", ok: Boolean((seo.meta_description || "").length >= 50) },
+                { label: "Focus Keyword", ok: Boolean(seo.focus_keyword?.trim()) },
+                { label: "Featured Image", ok: Boolean(form.hero_image_url) },
                 { label: "Category selected", ok: Boolean(form.section_id) },
                 { label: "Slug set", ok: Boolean(form.slug.trim()) },
-                { label: "Body length 300+", ok: allScores.word_count >= 300 },
+                { label: "Content Length", ok: allScores.word_count >= 300 },
               ]}
+              status={form.status}
+              scheduledAt={form.scheduled_at}
+              canChangeStatus={!readOnly && (canPublish || canSubmitReview)}
+              readOnly={readOnly}
+              onStatusChange={(next) => {
+                if (next === "published") {
+                  requestPublish();
+                  return;
+                }
+                patchForm({ status: next as ArticleStatus });
+              }}
+              onScheduledAtChange={(value) => {
+                patchForm({
+                  scheduled_at: value,
+                  status: value ? "scheduled" : form.status === "scheduled" ? "draft" : form.status,
+                });
+              }}
+              onOpenPublishing={() => openInspector("publishing")}
             />
             <ArticleInspectorRail
             mobileOpen={mobileInspectorOpen}

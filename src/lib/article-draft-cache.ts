@@ -12,6 +12,7 @@ export type ArticleDraftCachePayload = {
     scheduled_at: string;
   };
   blocks: unknown[];
+  bodyExtras?: Record<string, unknown>;
   tagNames: string[];
   seo: Record<string, unknown>;
   hreflangRows: Array<{ locale: string; url: string }>;

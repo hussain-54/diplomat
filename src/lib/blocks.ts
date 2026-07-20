@@ -74,7 +74,16 @@ export type Block = {
   [T in BlockType]: { id: string; type: T; data: BlockData[T] };
 }[BlockType];
 
-export type BlockDocument = { v: 1; blocks: Block[] };
+export type ArticleBodyExtras = {
+  highlights?: string[];
+  faq_enabled?: boolean;
+  faq_items?: Array<{ question: string; answer: string }>;
+  references?: string[];
+  related_notes?: string;
+  excerpt?: string;
+};
+
+export type BlockDocument = { v: 1; blocks: Block[]; extras?: ArticleBodyExtras };
 
 export const BLOCK_LABELS: Record<BlockType, string> = {
   paragraph: "Paragraph",
@@ -337,9 +346,43 @@ function normalizeBlock(raw: unknown): Block | null {
   return { id, type, data } as Block;
 }
 
-export function serializeBlocks(blocks: Block[]): string {
-  const doc: BlockDocument = { v: 1, blocks };
+export function serializeBlocks(blocks: Block[], extras?: ArticleBodyExtras): string {
+  const cleanedExtras = extras ? cleanExtras(extras) : undefined;
+  const doc: BlockDocument = cleanedExtras
+    ? { v: 1, blocks, extras: cleanedExtras }
+    : { v: 1, blocks };
   return JSON.stringify(doc);
+}
+
+function cleanExtras(extras: ArticleBodyExtras): ArticleBodyExtras | undefined {
+  const highlights = (extras.highlights ?? []).map((h) => h.trim()).filter(Boolean);
+  const faq_items = (extras.faq_items ?? [])
+    .map((item) => ({
+      question: item.question.trim(),
+      answer: item.answer.trim(),
+    }))
+    .filter((item) => item.question || item.answer);
+  const references = (extras.references ?? []).map((r) => r.trim()).filter(Boolean);
+  const related_notes = extras.related_notes?.trim() || undefined;
+  const excerpt = extras.excerpt?.trim() || undefined;
+  const next: ArticleBodyExtras = {};
+  if (highlights.length) next.highlights = highlights;
+  if (extras.faq_enabled) next.faq_enabled = true;
+  if (faq_items.length) next.faq_items = faq_items;
+  if (references.length) next.references = references;
+  if (related_notes) next.related_notes = related_notes;
+  if (excerpt) next.excerpt = excerpt;
+  return Object.keys(next).length ? next : undefined;
+}
+
+export function parseBodyExtras(body: string | null | undefined): ArticleBodyExtras {
+  if (!body?.trim().startsWith("{")) return {};
+  try {
+    const doc = JSON.parse(body.trim()) as Partial<BlockDocument>;
+    return doc.extras && typeof doc.extras === "object" ? doc.extras : {};
+  } catch {
+    return {};
+  }
 }
 
 /** Parse an article body: block JSON when present, otherwise legacy plain text. */

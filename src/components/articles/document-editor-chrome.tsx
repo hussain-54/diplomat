@@ -2,10 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   Archive,
-  BookOpen,
   Check,
   ChevronDown,
-  ChevronLeft,
   Copy,
   ExternalLink,
   Eye,
@@ -17,7 +15,6 @@ import {
   Send,
   Settings2,
   Share2,
-  Sparkles,
   X,
 } from "lucide-react";
 import type { WritingStats } from "@/lib/writing-stats";
@@ -128,6 +125,10 @@ export function DocumentEditorBar({
   onOpenSettings,
   onOpenSeo,
   onOpenAi,
+  onSubmitReview,
+  canSubmitReview,
+  pageTitle,
+  pageDescription,
 }: {
   title: string;
   status: EditorWorkflowStatus;
@@ -164,6 +165,10 @@ export function DocumentEditorBar({
   onOpenSettings: () => void;
   onOpenSeo: () => void;
   onOpenAi?: () => void;
+  onSubmitReview?: () => void;
+  canSubmitReview?: boolean;
+  pageTitle?: string;
+  pageDescription?: string;
 }) {
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
 
@@ -193,10 +198,6 @@ export function DocumentEditorBar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [publishIntentKey]);
 
-  const statusOptions: EditorWorkflowStatus[] = canPublish
-    ? ["draft", "review", "approved", "scheduled", "published", "archived"]
-    : ["draft", "review"];
-
   const requestPublish = () => {
     if (!canSave || busy || !onPublish) return;
     setPublishDialogOpen(true);
@@ -209,266 +210,228 @@ export function DocumentEditorBar({
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/50 bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
-      <div className="flex h-14 items-center gap-2 px-3 sm:gap-3 sm:px-4">
-        <Link
-          to="/admin/articles/all"
-          className="inline-flex shrink-0 items-center gap-0.5 text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          <span className="hidden sm:inline">Articles</span>
-        </Link>
+      <div className="space-y-3 px-4 py-3 sm:px-5">
+        <nav className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <Link to="/admin" className="hover:text-foreground">
+            Home
+          </Link>
+          <span>/</span>
+          <Link to="/admin/articles" className="hover:text-foreground">
+            Articles
+          </Link>
+          <span>/</span>
+          <span className="font-medium text-foreground">
+            {isNew ? "Create Article" : "Edit Article"}
+          </span>
+        </nav>
 
-        <div className="h-5 w-px shrink-0 bg-border/80" />
-
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            {canChangeStatus && onStatusChange ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className={cn(
-                      "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-semibold ring-1 ring-inset cms-transition hover:brightness-[0.98]",
-                      meta.className,
-                    )}
-                    title={meta.hint}
-                  >
-                    <span className={cn("h-1.5 w-1.5 rounded-full", meta.dot)} />
-                    {meta.label}
-                    {status === "draft" ? (
-                      <span className="hidden font-medium opacity-70 sm:inline">· Private</span>
-                    ) : null}
-                    <ChevronDown className="h-3 w-3 opacity-60" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
-                  {statusOptions.map((key) => {
-                    const option = STATUS_META[key];
-                    return (
-                      <DropdownMenuItem
-                        key={key}
-                        onSelect={() => {
-                          if (key === "published") {
-                            requestPublish();
-                            return;
-                          }
-                          onStatusChange(key);
-                        }}
-                        className="flex flex-col items-start gap-0.5 py-2"
-                      >
-                        <span className="inline-flex w-full items-center gap-2 text-xs font-semibold">
-                          <span className={cn("h-1.5 w-1.5 rounded-full", option.dot)} />
-                          {option.label}
-                          {key === "draft" ? (
-                            <span className="font-normal text-muted-foreground">Private</span>
-                          ) : null}
-                          {key === status ? (
-                            <Check className="ml-auto h-3.5 w-3.5 text-cat-green" />
-                          ) : null}
-                        </span>
-                        <span className="pl-3.5 text-[10px] text-muted-foreground">
-                          {key === "published"
-                            ? "Requires your confirmation — never automatic"
-                            : option.hint}
-                        </span>
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
+                {pageTitle ?? (isNew ? "Create New Article" : title.trim() || "Edit Article")}
+              </h1>
               <span
                 className={cn(
-                  "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-semibold ring-1 ring-inset",
+                  "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[10px] font-semibold ring-1 ring-inset",
                   meta.className,
                 )}
-                title={meta.hint}
               >
                 <span className={cn("h-1.5 w-1.5 rounded-full", meta.dot)} />
                 {meta.label}
-                {status === "draft" ? (
-                  <span className="hidden font-medium opacity-70 sm:inline">· Private</span>
-                ) : null}
               </span>
-            )}
-
-            <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
-              {busy ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : dirty ? (
-                <span className="h-1.5 w-1.5 rounded-full bg-cat-amber" />
-              ) : (
-                <Check className="h-3 w-3 text-cat-green" />
-              )}
-              <span className="hidden sm:inline">{savedLabel}</span>
-            </span>
-
-            <span className="hidden text-[11px] text-muted-foreground md:inline">
-              <strong className="font-semibold text-foreground">{stats.words}</strong> words
-            </span>
-            <span className="hidden text-[11px] text-muted-foreground md:inline">
-              <strong className="font-semibold text-foreground">
-                {stats.readingMinutes || "—"}
-              </strong>{" "}
-              min
-            </span>
-            <button
-              type="button"
-              onClick={onOpenSeo}
-              className={cn(
-                "rounded-md px-1.5 py-0.5 text-[10px] font-bold cms-transition hover:bg-accent",
-                seoTone,
-              )}
-              title="Open SEO settings"
-            >
-              SEO {seoScore}/100
-            </button>
-            <span className="hidden truncate text-[11px] font-medium text-foreground xl:inline">
-              {title.trim() || (isNew ? "Untitled article" : "Edit article")}
-            </span>
-          </div>
-          {saveError || saveBlockedHint ? (
-            <p
-              className={cn(
-                "mt-0.5 truncate text-[10px]",
-                saveError ? "text-cat-rose" : "text-cat-amber",
-              )}
-            >
-              {saveError || saveBlockedHint}
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {pageDescription ??
+                "Create SEO-optimized, engaging, and newsworthy content for Diplomacy Lens."}
             </p>
-          ) : null}
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1">
-          <IconToggle
-            active={mode === "focus"}
-            title="Focus mode"
-            onClick={() => onModeChange(mode === "focus" ? "edit" : "focus")}
-          >
-            <Focus className="h-3.5 w-3.5" />
-          </IconToggle>
-          <IconToggle
-            active={mode === "fullscreen"}
-            title="Full screen"
-            className="hidden sm:inline-flex"
-            onClick={() => onModeChange(mode === "fullscreen" ? "edit" : "fullscreen")}
-          >
-            {mode === "fullscreen" ? (
-              <Minimize2 className="h-3.5 w-3.5" />
-            ) : (
-              <Maximize2 className="h-3.5 w-3.5" />
-            )}
-          </IconToggle>
-          <IconToggle
-            active={mode === "reading"}
-            title="Reading mode"
-            className="hidden sm:inline-flex"
-            onClick={() => onModeChange(mode === "reading" ? "edit" : "reading")}
-          >
-            <BookOpen className="h-3.5 w-3.5" />
-          </IconToggle>
-
-          {onOpenAi ? (
-            <button
-              type="button"
-              className={cmsGhostButton}
-              onClick={onOpenAi}
-              title="AI assistant"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span className="hidden xl:inline">AI</span>
-            </button>
-          ) : null}
-
-          <button
-            type="button"
-            className={cn(cmsGhostButton, "lg:hidden")}
-            onClick={onOpenSettings}
-            title="Article settings"
-          >
-            <Settings2 className="h-3.5 w-3.5" />
-          </button>
-
-          {!isNew ? (
-            <Link
-              to="/admin/articles/preview/$articleId"
-              params={{ articleId }}
-              className={cmsGhostButton}
-            >
-              <Eye className="h-3.5 w-3.5" />
-              <span className="hidden lg:inline">Preview</span>
-            </Link>
-          ) : null}
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button type="button" className={cmsGhostButton} aria-label="More actions">
-                <MoreHorizontal className="h-3.5 w-3.5" />
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                {busy ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : dirty ? (
+                  <span className="h-1.5 w-1.5 rounded-full bg-cat-amber" />
+                ) : (
+                  <Check className="h-3 w-3 text-cat-green" />
+                )}
+                {savedLabel}
+              </span>
+              <span>
+                <strong className="text-foreground">{stats.words}</strong> words
+              </span>
+              <button
+                type="button"
+                onClick={onOpenSeo}
+                className={cn("font-bold hover:underline", seoTone)}
+              >
+                SEO {seoScore}/100
               </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              {publicSlug || onShare ? (
-                <DropdownMenuItem onSelect={() => onShare?.()}>
-                  <Share2 className="h-3.5 w-3.5" /> Copy link
-                </DropdownMenuItem>
+              {saveError || saveBlockedHint ? (
+                <span className={saveError ? "text-cat-rose" : "text-cat-amber"}>
+                  {saveError || saveBlockedHint}
+                </span>
               ) : null}
-              {canDuplicate && onDuplicate ? (
-                <DropdownMenuItem onSelect={() => onDuplicate()}>
-                  <Copy className="h-3.5 w-3.5" /> Duplicate
-                </DropdownMenuItem>
-              ) : null}
-              {canArchive && onArchive ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => onArchive()}>
-                    <Archive className="h-3.5 w-3.5" /> Archive
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </div>
+          </div>
 
-          <div className="ml-1 flex items-center gap-1.5 border-l border-border/70 pl-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <IconToggle
+              active={mode === "focus"}
+              title="Focus mode"
+              onClick={() => onModeChange(mode === "focus" ? "edit" : "focus")}
+            >
+              <Focus className="h-3.5 w-3.5" />
+            </IconToggle>
+            <IconToggle
+              active={mode === "fullscreen"}
+              title="Full screen"
+              className="hidden sm:inline-flex"
+              onClick={() => onModeChange(mode === "fullscreen" ? "edit" : "fullscreen")}
+            >
+              {mode === "fullscreen" ? (
+                <Minimize2 className="h-3.5 w-3.5" />
+              ) : (
+                <Maximize2 className="h-3.5 w-3.5" />
+              )}
+            </IconToggle>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className={cmsGhostButton} aria-label="More actions">
+                  <MoreHorizontal className="h-3.5 w-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {publicSlug || onShare ? (
+                  <DropdownMenuItem onSelect={() => onShare?.()}>
+                    <Share2 className="h-3.5 w-3.5" /> Copy link
+                  </DropdownMenuItem>
+                ) : null}
+                {canDuplicate && onDuplicate ? (
+                  <DropdownMenuItem onSelect={() => onDuplicate()}>
+                    <Copy className="h-3.5 w-3.5" /> Duplicate
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onSelect={() => onOpenSettings()}>
+                  <Settings2 className="h-3.5 w-3.5" /> Settings
+                </DropdownMenuItem>
+                {canArchive && onArchive ? (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={() => onArchive()}>
+                      <Archive className="h-3.5 w-3.5" /> Archive
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             <button
               type="button"
               className={cn(
                 cmsGhostButton,
-                "h-8 rounded-lg border border-border/80 bg-background px-3 text-xs font-semibold shadow-sm",
+                "h-9 rounded-xl border border-border/80 bg-background px-3.5 text-xs font-semibold shadow-sm",
               )}
               disabled={!canSave || busy}
               onClick={onSave}
               title={saveBlockedHint || "Save without publishing"}
             >
-              {saving && !publishing ? "Saving…" : saveLabel}
+              {saving && !publishing ? "Saving…" : saveLabel || "Save Draft"}
             </button>
 
-            {showPublishNow ? (
+            {!isNew ? (
+              <Link
+                to="/admin/articles/preview/$articleId"
+                params={{ articleId }}
+                className={cn(
+                  cmsGhostButton,
+                  "h-9 rounded-xl border border-border/80 bg-background px-3.5 text-xs font-semibold shadow-sm",
+                )}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                Preview
+              </Link>
+            ) : (
               <button
                 type="button"
                 className={cn(
-                  cmsButton,
-                  "h-8 gap-1.5 rounded-lg px-3.5 text-xs font-semibold shadow-sm",
+                  cmsGhostButton,
+                  "h-9 rounded-xl border border-border/80 bg-background px-3.5 text-xs font-semibold shadow-sm",
+                )}
+                disabled
+                title="Save the article first to preview"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                Preview
+              </button>
+            )}
+
+            {canSubmitReview && onSubmitReview && status === "draft" ? (
+              <button
+                type="button"
+                className={cn(
+                  cmsGhostButton,
+                  "h-9 rounded-xl border border-primary/40 bg-background px-3.5 text-xs font-semibold text-primary shadow-sm",
                 )}
                 disabled={!canSave || busy}
-                onClick={requestPublish}
-                title={
-                  saveBlockedHint
-                    ? saveBlockedHint
-                    : "Review and publish — only when you confirm"
-                }
+                onClick={onSubmitReview}
               >
-                {publishing ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Publishing…
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-3.5 w-3.5" />
-                    Publish now
-                  </>
-                )}
+                Submit for Review
               </button>
+            ) : null}
+
+            {showPublishNow ? (
+              <div className="flex">
+                <button
+                  type="button"
+                  className={cn(
+                    cmsButton,
+                    "h-9 gap-1.5 rounded-l-xl rounded-r-none px-4 text-xs font-semibold shadow-sm",
+                  )}
+                  disabled={!canSave || busy}
+                  onClick={requestPublish}
+                >
+                  {publishing ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Publishing…
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-3.5 w-3.5" />
+                      Publish
+                    </>
+                  )}
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        cmsButton,
+                        "h-9 rounded-l-none rounded-r-xl border-l border-primary-foreground/20 px-2",
+                      )}
+                      disabled={!canSave || busy}
+                      aria-label="Publish options"
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onSelect={() => requestPublish()}>
+                      Publish now
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onSelect={() => {
+                        onStatusChange?.("scheduled");
+                        onOpenSettings();
+                      }}
+                    >
+                      Schedule…
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             ) : isLive && canPublish ? (
               <>
                 {liveUrl ? (
@@ -476,18 +439,15 @@ export function DocumentEditorBar({
                     href={liveUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={cn(
-                      cmsGhostButton,
-                      "h-8 gap-1 rounded-lg px-2.5 text-xs font-semibold",
-                    )}
+                    className={cn(cmsGhostButton, "h-9 gap-1 rounded-xl px-3 text-xs font-semibold")}
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
-                    <span className="hidden sm:inline">View live</span>
+                    View live
                   </a>
                 ) : null}
                 <button
                   type="button"
-                  className={cn(cmsButton, "h-8 rounded-lg px-3.5 text-xs font-semibold")}
+                  className={cn(cmsButton, "h-9 rounded-xl px-3.5 text-xs font-semibold")}
                   disabled={!canSave || busy}
                   onClick={onSave}
                 >
