@@ -660,31 +660,24 @@ function EditArticle() {
   };
   const saveLabel =
     form.status === "published"
-      ? articleQ.data?.status === "published"
-        ? "Update"
-        : "Publish"
+      ? "Save changes"
       : form.status === "scheduled"
-        ? "Schedule"
-        : isNew
-          ? "Add"
-          : "Save draft";
+        ? "Save schedule"
+        : "Save draft";
 
   const saveBlockedHint = !readOnly
     ? !form.title.trim()
       ? "Add a title to save"
       : !form.section_id
-        ? "Pick a category in the story settings rail to save or publish"
+        ? "Pick a category in Story settings to save or publish"
         : form.status === "scheduled" && !form.scheduled_at
           ? "Set a schedule date before saving"
           : null
     : null;
 
+  // Show Publish now whenever the editor may publish — disabled until title + category are set.
   const showQuickPublish =
-    canPublish &&
-    !readOnly &&
-    ["draft", "review"].includes(form.status) &&
-    !!form.title.trim() &&
-    !!form.section_id;
+    canPublish && !readOnly && !["published", "archived"].includes(form.status);
 
   const copyShareLink = () => {
     const url = publicSlug
@@ -716,7 +709,7 @@ function EditArticle() {
     >
       <DocumentEditorBar
         title={form.title}
-        statusLabel={form.status}
+        status={form.status}
         saving={save.isPending || workflow.isPending}
         dirty={dirty}
         lastSavedAt={lastSavedAt}
@@ -729,12 +722,33 @@ function EditArticle() {
         canSave={canSubmit}
         saveError={save.error?.message ?? workflow.error?.message ?? null}
         saveBlockedHint={saveBlockedHint}
-        canPublish={showQuickPublish}
+        canPublish={showQuickPublish || (canPublish && form.status === "published")}
+        canChangeStatus={!readOnly && (canPublish || canSubmitReview)}
+        onStatusChange={(next) => {
+          if (next === "published") {
+            if (
+              window.confirm(
+                isNew
+                  ? "Save and publish this article live now?"
+                  : "Publish this article live with your latest edits?",
+              )
+            ) {
+              save.mutate({ statusOverride: "published" });
+            }
+            return;
+          }
+          if (next === "scheduled" && !form.scheduled_at) {
+            openInspector("publishing");
+            patchForm({ status: "scheduled" });
+            return;
+          }
+          patchForm({ status: next });
+        }}
         onPublish={() => {
           if (
             window.confirm(
               isNew
-                ? "Add and publish this article live now?"
+                ? "Save and publish this article live now?"
                 : "Publish this article live with your latest edits?",
             )
           ) {
