@@ -58,7 +58,7 @@ export function ArticleEditorTabs({
 }) {
   return (
     <nav
-      className="flex gap-0 overflow-x-auto border-b border-border/60 bg-card px-2"
+      className="flex gap-0 overflow-x-auto border-b border-slate-200 bg-white px-4 sm:px-6 lg:px-8"
       aria-label="Article editor sections"
     >
       {ARTICLE_EDITOR_TABS.map((tab) => {
@@ -69,10 +69,10 @@ export function ArticleEditorTabs({
             type="button"
             onClick={() => onChange(tab.id)}
             className={cn(
-              "inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-xs font-semibold cms-transition",
+              "inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3.5 text-xs font-semibold cms-transition",
               active === tab.id
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground",
+                ? "border-blue-600 text-blue-700"
+                : "border-transparent text-slate-500 hover:text-slate-800",
             )}
           >
             <Icon className="h-3.5 w-3.5 opacity-80" />

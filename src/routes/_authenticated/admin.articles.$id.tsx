@@ -807,8 +807,8 @@ function EditArticle() {
   return (
     <div
       className={cn(
-        "cms-app flex min-h-[calc(100vh-4rem)] flex-col bg-[#f7f8fa]",
-        fullscreen && "fixed inset-0 z-50 overflow-hidden bg-background",
+        "cms-app flex min-h-[calc(100vh-3.5rem)] flex-col bg-[#f8fafc]",
+        fullscreen && "fixed inset-0 z-50 overflow-hidden bg-white",
       )}
     >
       <DocumentEditorBar
@@ -871,7 +871,7 @@ function EditArticle() {
           save.mutate({ statusOverride: "review" });
         }}
         pageTitle={isNew ? "Create New Article" : undefined}
-        pageDescription="Create SEO-optimized, engaging, and newsworthy content for Diplomacy Lens."
+        pageDescription="Create SEO optimized, engaging and newsworthy content."
       />
 
       {!focusLike ? (
@@ -935,7 +935,7 @@ function EditArticle() {
         <main
           className={cn(
             "min-w-0 flex-1 overflow-y-auto",
-            focusLike ? "px-4 py-8 sm:px-8 sm:py-10" : "px-3 py-5 sm:px-6 sm:py-7 xl:px-8",
+            focusLike ? "px-4 py-8 sm:px-8 sm:py-10" : "px-4 py-5 sm:px-6 lg:px-8",
           )}
         >
           {editorTab === "content" || focusLike ? (
@@ -1259,7 +1259,7 @@ function EditArticle() {
         </main>
 
         {!focusLike ? (
-          <div className="hidden w-full max-w-[340px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-border/60 bg-[#f7f8fa] p-3 lg:flex xl:max-w-[360px]">
+          <div className="hidden w-[320px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-slate-200 bg-[#f8fafc] p-4 xl:flex xl:w-[340px]">
             <ArticleLiveAnalysis
               wordCount={allScores.word_count || writingStats.words}
               readingMinutes={

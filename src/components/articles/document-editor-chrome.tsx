@@ -7,6 +7,7 @@ import {
   Copy,
   ExternalLink,
   Eye,
+  FileText,
   Focus,
   Loader2,
   Maximize2,
@@ -19,7 +20,6 @@ import {
   X,
 } from "lucide-react";
 import type { WritingStats } from "@/lib/writing-stats";
-import { cmsButton, cmsGhostButton } from "@/components/cms";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,48 +49,6 @@ export type EditorWorkflowStatus =
   | "published"
   | "archived";
 
-const STATUS_META: Record<
-  EditorWorkflowStatus,
-  { label: string; hint: string; className: string; dot: string }
-> = {
-  draft: {
-    label: "Draft",
-    hint: "Private — not on the public site",
-    className: "bg-slate-100 text-slate-700 ring-slate-200/80",
-    dot: "bg-slate-400",
-  },
-  review: {
-    label: "In review",
-    hint: "Waiting on editorial review",
-    className: "bg-amber-50 text-amber-800 ring-amber-200/80",
-    dot: "bg-amber-500",
-  },
-  approved: {
-    label: "Approved",
-    hint: "Cleared for schedule or publish",
-    className: "bg-violet-50 text-violet-800 ring-violet-200/80",
-    dot: "bg-violet-500",
-  },
-  scheduled: {
-    label: "Scheduled",
-    hint: "Will go live at the set time",
-    className: "bg-sky-50 text-sky-800 ring-sky-200/80",
-    dot: "bg-sky-500",
-  },
-  published: {
-    label: "Published",
-    hint: "Live on the public site",
-    className: "bg-emerald-50 text-emerald-800 ring-emerald-200/80",
-    dot: "bg-emerald-500",
-  },
-  archived: {
-    label: "Archived",
-    hint: "Removed from active publishing",
-    className: "bg-rose-50 text-rose-800 ring-rose-200/80",
-    dot: "bg-rose-500",
-  },
-};
-
 export function DocumentEditorBar({
   title,
   status,
@@ -98,19 +56,19 @@ export function DocumentEditorBar({
   publishing,
   dirty,
   lastSavedAt,
-  stats,
-  seoScore,
+  stats: _stats,
+  seoScore: _seoScore,
   mode,
   onModeChange,
   onSave,
-  saveLabel,
+  saveLabel: _saveLabel,
   canSave,
   saveError,
   saveBlockedHint,
   onPublish,
   canPublish,
   onStatusChange,
-  canChangeStatus,
+  canChangeStatus: _canChangeStatus,
   publishNotice,
   onDismissPublishNotice,
   liveUrl,
@@ -124,8 +82,8 @@ export function DocumentEditorBar({
   onArchive,
   onShare,
   onOpenSettings,
-  onOpenSeo,
-  onOpenAi,
+  onOpenSeo: _onOpenSeo,
+  onOpenAi: _onOpenAi,
   onSubmitReview,
   canSubmitReview,
   pageTitle,
@@ -184,10 +142,6 @@ export function DocumentEditorBar({
           ? `Saved ${formatRelative(lastSavedAt)}`
           : "All changes saved";
 
-  const seoTone =
-    seoScore >= 75 ? "text-cat-green" : seoScore >= 50 ? "text-cat-amber" : "text-cat-rose";
-
-  const meta = STATUS_META[status] ?? STATUS_META.draft;
   const isLive = status === "published";
   const showPublishNow = Boolean(canPublish && onPublish && !isLive && status !== "archived");
   const busy = saving || Boolean(publishing);
@@ -210,99 +164,84 @@ export function DocumentEditorBar({
   };
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/50 bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/85">
-      <div className="space-y-3 px-4 py-3 sm:px-5">
-        <nav className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-          <Link to="/admin" className="hover:text-foreground">
-            Home
+    <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white">
+      <div className="space-y-4 px-5 py-4 sm:px-6 lg:px-8">
+        <nav className="flex flex-wrap items-center gap-1.5 text-[12px] text-slate-500">
+          <Link to="/admin" className="hover:text-slate-800">
+            Content
           </Link>
-          <span>/</span>
-          <Link to="/admin/articles" className="hover:text-foreground">
+          <span className="text-slate-300">›</span>
+          <Link to="/admin/articles" className="hover:text-slate-800">
             Articles
           </Link>
-          <span>/</span>
-          <span className="font-medium text-foreground">
+          <span className="text-slate-300">›</span>
+          <span className="font-medium text-slate-700">
             {isNew ? "Create Article" : "Edit Article"}
           </span>
         </nav>
 
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
-                {pageTitle ?? (isNew ? "Create New Article" : title.trim() || "Edit Article")}
-              </h1>
-              <span
-                className={cn(
-                  "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[10px] font-semibold ring-1 ring-inset",
-                  meta.className,
-                )}
-              >
-                <span className={cn("h-1.5 w-1.5 rounded-full", meta.dot)} />
-                {meta.label}
-              </span>
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <FileText className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+                  {pageTitle ?? (isNew ? "Create New Article" : title.trim() || "Edit Article")}
+                </h1>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  {pageDescription ??
+                    "Create SEO optimized, engaging and newsworthy content."}
+                </p>
+              </div>
             </div>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {pageDescription ??
-                "Create SEO-optimized, engaging, and newsworthy content for Diplomacy Lens."}
-            </p>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-              <span className="inline-flex items-center gap-1">
-                {busy ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : dirty ? (
-                  <span className="h-1.5 w-1.5 rounded-full bg-cat-amber" />
-                ) : (
-                  <Check className="h-3 w-3 text-cat-green" />
-                )}
-                {savedLabel}
-              </span>
-              <span>
-                <strong className="text-foreground">{stats.words}</strong> words
-              </span>
-              <button
-                type="button"
-                onClick={onOpenSeo}
-                className={cn("font-bold hover:underline", seoTone)}
-              >
-                SEO {seoScore}/100
-              </button>
-              {saveError || saveBlockedHint ? (
-                <span className={saveError ? "text-cat-rose" : "text-cat-amber"}>
-                  {saveError || saveBlockedHint}
+            {(saveError || saveBlockedHint || busy || dirty || lastSavedAt) && (
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 pl-[3.25rem] text-[11px] text-slate-500">
+                <span className="inline-flex items-center gap-1">
+                  {busy ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : dirty ? (
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                  ) : (
+                    <Check className="h-3 w-3 text-emerald-500" />
+                  )}
+                  {savedLabel}
                 </span>
-              ) : null}
-            </div>
+                {saveError || saveBlockedHint ? (
+                  <span className={saveError ? "text-rose-600" : "text-amber-600"}>
+                    {saveError || saveBlockedHint}
+                  </span>
+                ) : null}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <IconToggle
-              active={mode === "focus"}
-              title="Focus mode"
-              onClick={() => onModeChange(mode === "focus" ? "edit" : "focus")}
-            >
-              <Focus className="h-3.5 w-3.5" />
-            </IconToggle>
-            <IconToggle
-              active={mode === "fullscreen"}
-              title="Full screen"
-              className="hidden sm:inline-flex"
-              onClick={() => onModeChange(mode === "fullscreen" ? "edit" : "fullscreen")}
-            >
-              {mode === "fullscreen" ? (
-                <Minimize2 className="h-3.5 w-3.5" />
-              ) : (
-                <Maximize2 className="h-3.5 w-3.5" />
-              )}
-            </IconToggle>
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button type="button" className={cmsGhostButton} aria-label="More actions">
-                  <MoreHorizontal className="h-3.5 w-3.5" />
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
+                  aria-label="More actions"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onSelect={() => onModeChange(mode === "focus" ? "edit" : "focus")}>
+                  <Focus className="h-3.5 w-3.5" /> Focus mode
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => onModeChange(mode === "fullscreen" ? "edit" : "fullscreen")}
+                >
+                  {mode === "fullscreen" ? (
+                    <Minimize2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  )}
+                  Full screen
+                </DropdownMenuItem>
                 {publicSlug || onShare ? (
                   <DropdownMenuItem onSelect={() => onShare?.()}>
                     <Share2 className="h-3.5 w-3.5" /> Copy link
@@ -314,7 +253,7 @@ export function DocumentEditorBar({
                   </DropdownMenuItem>
                 ) : null}
                 <DropdownMenuItem onSelect={() => onOpenSettings()}>
-                  <Settings2 className="h-3.5 w-3.5" /> Settings
+                  <Settings2 className="h-3.5 w-3.5" /> Publishing options
                 </DropdownMenuItem>
                 {canArchive && onArchive ? (
                   <>
@@ -329,10 +268,7 @@ export function DocumentEditorBar({
 
             <button
               type="button"
-              className={cn(
-                cmsGhostButton,
-                "h-9 rounded-xl border border-border/80 bg-background px-3.5 text-xs font-semibold shadow-sm",
-              )}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50"
               disabled={!canSave || busy}
               onClick={onSave}
               title={saveBlockedHint || "Save without publishing"}
@@ -342,7 +278,7 @@ export function DocumentEditorBar({
               ) : (
                 <>
                   <Save className="h-3.5 w-3.5" />
-                  {saveLabel || "Save Draft"}
+                  Save Draft
                 </>
               )}
             </button>
@@ -351,10 +287,7 @@ export function DocumentEditorBar({
               <Link
                 to="/admin/articles/preview/$articleId"
                 params={{ articleId }}
-                className={cn(
-                  cmsGhostButton,
-                  "h-9 rounded-xl border border-border/80 bg-background px-3.5 text-xs font-semibold shadow-sm",
-                )}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 shadow-sm hover:bg-slate-50"
               >
                 <Eye className="h-3.5 w-3.5" />
                 Preview
@@ -362,10 +295,7 @@ export function DocumentEditorBar({
             ) : (
               <button
                 type="button"
-                className={cn(
-                  cmsGhostButton,
-                  "h-9 rounded-xl border border-border/80 bg-background px-3.5 text-xs font-semibold shadow-sm",
-                )}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700 shadow-sm opacity-60"
                 disabled
                 title="Save the article first to preview"
               >
@@ -374,14 +304,11 @@ export function DocumentEditorBar({
               </button>
             )}
 
-            {canSubmitReview && onSubmitReview && status === "draft" ? (
+            {canSubmitReview && onSubmitReview ? (
               <button
                 type="button"
-                className={cn(
-                  cmsGhostButton,
-                  "h-9 rounded-xl border border-primary/40 bg-background px-3.5 text-xs font-semibold text-primary shadow-sm",
-                )}
-                disabled={!canSave || busy}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3.5 text-sm font-medium text-blue-700 shadow-sm hover:bg-blue-50 disabled:opacity-50"
+                disabled={!canSave || busy || status === "review"}
                 onClick={onSubmitReview}
               >
                 Submit for Review
@@ -392,10 +319,7 @@ export function DocumentEditorBar({
               <div className="flex">
                 <button
                   type="button"
-                  className={cn(
-                    cmsButton,
-                    "h-9 gap-1.5 rounded-l-xl rounded-r-none px-4 text-xs font-semibold shadow-sm",
-                  )}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-l-lg bg-blue-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
                   disabled={!canSave || busy}
                   onClick={requestPublish}
                 >
@@ -405,20 +329,14 @@ export function DocumentEditorBar({
                       Publishing…
                     </>
                   ) : (
-                    <>
-                      <Send className="h-3.5 w-3.5" />
-                      Publish
-                    </>
+                    "Publish"
                   )}
                 </button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
-                      className={cn(
-                        cmsButton,
-                        "h-9 rounded-l-none rounded-r-xl border-l border-primary-foreground/20 px-2",
-                      )}
+                      className="inline-flex h-9 items-center rounded-r-lg border-l border-blue-500 bg-blue-600 px-2 text-white hover:bg-blue-700 disabled:opacity-50"
                       disabled={!canSave || busy}
                       aria-label="Publish options"
                     >
@@ -447,7 +365,7 @@ export function DocumentEditorBar({
                     href={liveUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={cn(cmsGhostButton, "h-9 gap-1 rounded-xl px-3 text-xs font-semibold")}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-medium text-slate-700"
                   >
                     <ExternalLink className="h-3.5 w-3.5" />
                     View live
@@ -455,7 +373,7 @@ export function DocumentEditorBar({
                 ) : null}
                 <button
                   type="button"
-                  className={cn(cmsButton, "h-9 rounded-xl px-3.5 text-xs font-semibold")}
+                  className="inline-flex h-9 items-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                   disabled={!canSave || busy}
                   onClick={onSave}
                 >
@@ -550,38 +468,6 @@ export function DocumentEditorBar({
         </AlertDialogContent>
       </AlertDialog>
     </header>
-  );
-}
-
-function IconToggle({
-  active,
-  title,
-  onClick,
-  disabled,
-  className,
-  children,
-}: {
-  active?: boolean;
-  title: string;
-  onClick: () => void;
-  disabled?: boolean;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground cms-transition hover:bg-accent hover:text-foreground disabled:opacity-40",
-        active && "bg-accent text-foreground",
-        className,
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

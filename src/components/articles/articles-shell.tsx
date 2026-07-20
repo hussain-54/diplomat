@@ -36,6 +36,36 @@ function ArticlesShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => setMobileOpen(false), [location.pathname]);
 
+  // Full-bleed newsroom workspace — hide library chrome on create/edit.
+  const pathSeg = location.pathname.replace(/\/$/, "").split("/").pop() ?? "";
+  const staticSegs = new Set([
+    "all",
+    "drafts",
+    "review",
+    "approved",
+    "published",
+    "scheduled",
+    "archived",
+    "trash",
+    "create",
+    "workflow",
+    "settings",
+    "ai-writing",
+    "ai-seo",
+    "content-score",
+    "internal-linking",
+    "related",
+    "revisions",
+    "preview",
+  ]);
+  const isCreateOrEdit =
+    pathSeg === "new" ||
+    pathSeg === "create" ||
+    (!staticSegs.has(pathSeg) &&
+      location.pathname.startsWith("/admin/articles/") &&
+      !location.pathname.includes("/preview/") &&
+      !location.pathname.includes("/revisions/"));
+
   const primary = useMemo(
     () => ARTICLES_PRIMARY_TABS.filter((item) => hasPermission(roles, item.permission)),
     [roles],
@@ -45,6 +75,10 @@ function ArticlesShell({ children }: { children: React.ReactNode }) {
     [roles],
   );
   const moreActive = more.some((item) => isArticlesNavActive(location.pathname, item));
+
+  if (isCreateOrEdit) {
+    return <div className="min-h-[calc(100vh-3.5rem)] bg-[#f8fafc]">{children}</div>;
+  }
 
   return (
     <div className="space-y-6">

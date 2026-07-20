@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { RichEditor } from "@/components/cms";
 import { ArticleBody } from "@/components/article-body";
-import { siteUrl } from "@/lib/seo";
 import { ARTICLE_TYPE_OPTIONS } from "@/lib/article-cms-extras";
 import {
   serializeBlocks,
@@ -19,7 +18,7 @@ import {
 } from "@/lib/blocks";
 import { cn } from "@/lib/utils";
 
-const HEADLINE_MAX = 100;
+const HEADLINE_MAX = 120;
 const SHORT_HEADLINE_MAX = 60;
 const SUMMARY_MAX = 160;
 
@@ -32,7 +31,7 @@ export function ArticleWritingCanvas({
   onSlugChange,
   onBadgeChange,
   onMetaDescriptionChange,
-  onExcerptChange,
+  onExcerptChange: _onExcerptChange,
   titleInputRef,
   authorName,
   authorAvatar,
@@ -128,59 +127,54 @@ export function ArticleWritingCanvas({
   }
 
   return (
-    <div className={cn("mx-auto w-full space-y-5", focusLike ? "max-w-[760px]" : "max-w-[960px]")}>
-      <section className="space-y-4 rounded-2xl border border-border/60 bg-card p-5 shadow-sm sm:p-6">
-        <FieldLabel
-          label="Headline"
-          required
-          counter={`${form.title.length}/${HEADLINE_MAX}`}
-          counterTone={counterTone(form.title.length, HEADLINE_MAX, 40, 90)}
-        />
-        <input
-          ref={titleInputRef}
-          required
-          disabled={readOnly}
-          maxLength={HEADLINE_MAX}
-          value={form.title}
-          onChange={(e) => {
-            const next = e.target.value;
-            onTitleChange(next);
-            if (!form.slug.trim() && next.trim()) {
-              onSlugChange(slugify(next));
-            }
-          }}
-          placeholder="Write a compelling headline..."
-          className={fieldClass}
-        />
-        <HeadlineAnalysis
-          title={form.title}
-          onApplySuggestion={(text) => {
-            onTitleChange(text.slice(0, HEADLINE_MAX));
-            if (!form.slug.trim()) onSlugChange(slugify(text));
-          }}
-          onOpenAi={onOpenAi}
-          readOnly={readOnly}
-        />
+    <div className={cn("mx-auto w-full max-w-none space-y-4", focusLike && "max-w-[760px]")}>
+      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5 sm:p-6">
+        <div>
+          <FieldLabel
+            label="Headline"
+            required
+            counter={`${form.title.length}/${HEADLINE_MAX}`}
+            counterTone={counterTone(form.title.length, HEADLINE_MAX, 40, 90)}
+          />
+          <input
+            ref={titleInputRef}
+            required
+            disabled={readOnly}
+            maxLength={HEADLINE_MAX}
+            value={form.title}
+            onChange={(e) => {
+              const next = e.target.value;
+              onTitleChange(next);
+              if (!form.slug.trim() && next.trim()) {
+                onSlugChange(slugify(next));
+              }
+            }}
+            placeholder="Write a compelling headline..."
+            className={fieldClass}
+          />
+        </div>
 
-        <FieldLabel
-          label="Short headline"
-          optional
-          counter={`${form.deck.length}/${SHORT_HEADLINE_MAX}`}
-        />
-        <input
-          disabled={readOnly}
-          maxLength={SHORT_HEADLINE_MAX}
-          value={form.deck}
-          onChange={(e) => onDeckChange(e.target.value)}
-          placeholder="For mobile, push notifications, and Google News"
-          className={fieldClass}
-        />
+        <div>
+          <FieldLabel
+            label="Short Headline"
+            optional
+            counter={`${form.deck.length}/${SHORT_HEADLINE_MAX}`}
+          />
+          <input
+            disabled={readOnly}
+            maxLength={SHORT_HEADLINE_MAX}
+            value={form.deck}
+            onChange={(e) => onDeckChange(e.target.value)}
+            placeholder="Short headline for mobile & push"
+            className={fieldClass}
+          />
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <FieldLabel label="Slug" />
-            <div className="flex items-center gap-2 rounded-xl border border-border/70 bg-background px-3">
-              <Link2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3">
+              <Link2 className="h-4 w-4 shrink-0 text-slate-400" />
               <input
                 disabled={readOnly}
                 value={form.slug}
@@ -193,19 +187,16 @@ export function ArticleWritingCanvas({
                       .replace(/^-|-$/g, ""),
                   )
                 }
-                placeholder="auto-generated-from-headline"
-                className="h-11 w-full border-0 bg-transparent font-mono text-sm outline-none placeholder:text-muted-foreground/50"
+                placeholder="auto-generated-slug-will-appear-here"
+                className="h-11 w-full border-0 bg-transparent font-mono text-sm outline-none placeholder:text-slate-400"
               />
             </div>
-            <p className="mt-1 truncate text-[11px] text-muted-foreground">
-              {siteUrl().replace(/^https?:\/\//, "")}/article/{form.slug || "…"}
-            </p>
           </div>
           <div>
-            <FieldLabel label="Article type" />
+            <FieldLabel label="Article Type" />
             <select
               disabled={readOnly}
-              value={form.badge_type || "none"}
+              value={form.badge_type || "news"}
               onChange={(e) => onBadgeChange(e.target.value)}
               className={cn(fieldClass, "cursor-pointer")}
             >
@@ -218,50 +209,42 @@ export function ArticleWritingCanvas({
           </div>
         </div>
 
-        <FieldLabel
-          label="Summary (meta description)"
-          counter={`${form.meta_description.length}/${SUMMARY_MAX}`}
-          counterTone={counterTone(form.meta_description.length, SUMMARY_MAX, 70, 155)}
-        />
-        <textarea
-          disabled={readOnly}
-          maxLength={SUMMARY_MAX}
-          rows={3}
-          value={form.meta_description}
-          onChange={(e) => onMetaDescriptionChange(e.target.value)}
-          placeholder="Write a short summary for meta description..."
-          className={cn(fieldClass, "min-h-[88px] resize-y py-3")}
-        />
-
-        <FieldLabel label="Excerpt" optional />
-        <textarea
-          disabled={readOnly}
-          rows={2}
-          value={form.excerpt}
-          onChange={(e) => onExcerptChange(e.target.value)}
-          placeholder="Optional teaser used in listings and newsletters"
-          className={cn(fieldClass, "min-h-[72px] resize-y py-3")}
-        />
+        <div>
+          <FieldLabel
+            label="Summary (Meta Description)"
+            counter={`${form.meta_description.length}/${SUMMARY_MAX}`}
+            counterTone={counterTone(form.meta_description.length, SUMMARY_MAX, 70, 155)}
+          />
+          <textarea
+            disabled={readOnly}
+            maxLength={SUMMARY_MAX}
+            rows={3}
+            value={form.meta_description}
+            onChange={(e) => onMetaDescriptionChange(e.target.value)}
+            placeholder="Write a short summary for meta description..."
+            className={cn(fieldClass, "min-h-[88px] resize-y py-3")}
+          />
+        </div>
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
-        <div className="flex items-center justify-between border-b border-border/50 px-4 py-2.5">
-          <div className="flex items-center gap-2 text-sm font-semibold">
-            <FileText className="h-4 w-4 text-primary" />
-            Rich text editor
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+          <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <FileText className="h-4 w-4 text-blue-600" />
+            Article body
           </div>
           {onOpenAi ? (
             <button
               type="button"
               onClick={onOpenAi}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary cms-transition hover:bg-primary/15"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100"
             >
               <Sparkles className="h-3.5 w-3.5" />
               AI Write
             </button>
           ) : null}
         </div>
-        <div className="px-3 py-3 sm:px-4">
+        <div className="min-h-[280px] px-3 py-3 sm:px-4">
           <RichEditor
             value={blocks}
             onChange={onBlocksChange}
@@ -271,47 +254,45 @@ export function ArticleWritingCanvas({
             className="border-0 bg-transparent"
           />
         </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border/50 bg-muted/20 px-4 py-2 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 bg-slate-50/80 px-4 py-2 text-[11px] text-slate-500">
           <span>
-            <strong className="font-semibold text-foreground">{writingStats?.words ?? 0}</strong> words
+            Words: <strong className="font-semibold text-slate-800">{writingStats?.words ?? 0}</strong>
           </span>
           <span>
-            <strong className="font-semibold text-foreground">
+            Characters:{" "}
+            <strong className="font-semibold text-slate-800">
               {writingStats?.characters ?? 0}
-            </strong>{" "}
-            characters
+            </strong>
           </span>
           <span>
-            <strong className="font-semibold text-foreground">
-              {writingStats?.readingMinutes ?? 0}
-            </strong>{" "}
-            min read
+            Reading time:{" "}
+            <strong className="font-semibold text-slate-800">
+              {writingStats?.readingMinutes ?? 0} min
+            </strong>
           </span>
-          <span className="ml-auto">
-            {lastSavedAt
-              ? `Saved ${formatRelative(lastSavedAt)}`
-              : "Autosave keeps drafts private"}
+          <span className="ml-auto text-emerald-600">
+            {lastSavedAt ? `Saved ${formatRelative(lastSavedAt)}` : "Autosave on"}
           </span>
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
         <div className="mb-3 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold">Highlights (key points)</h3>
-            <p className="text-xs text-muted-foreground">
+            <h3 className="text-sm font-semibold text-slate-900">Highlights (Key Points)</h3>
+            <p className="text-xs text-slate-500">
               Bullet points that appear at the top of the article
             </p>
           </div>
           <button
             type="button"
             disabled={readOnly}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
             onClick={() =>
               onExtrasChange({ ...extras, highlights: [...highlights, ""] })
             }
           >
-            <Plus className="h-3.5 w-3.5" /> Add point
+            <Plus className="h-3.5 w-3.5" /> Add Point
           </button>
         </div>
         <div className="space-y-2">
@@ -349,12 +330,12 @@ export function ArticleWritingCanvas({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold">FAQ block</h3>
-            <p className="text-xs text-muted-foreground">
-              Enable an FAQ section in this article
+            <h3 className="text-sm font-semibold text-slate-900">FAQ Block</h3>
+            <p className="text-xs text-slate-500">
+              Enable FAQ section for this article
             </p>
           </div>
           <button
@@ -367,7 +348,7 @@ export function ArticleWritingCanvas({
             }
             className={cn(
               "relative h-6 w-11 rounded-full cms-transition",
-              extras.faq_enabled ? "bg-primary" : "bg-muted",
+              extras.faq_enabled ? "bg-blue-600" : "bg-slate-200",
             )}
           >
             <span
@@ -491,17 +472,17 @@ export function ArticleWritingCanvas({
       </Accordion>
 
       {onOpenAi ? (
-        <div className="flex flex-col gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-xl border border-blue-100 bg-blue-50/80 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-sm font-semibold text-foreground">Need help writing?</div>
-            <p className="text-xs text-muted-foreground">
-              Open the Diplomacy Lens AI assistant for headlines, decks, and SEO suggestions.
+            <div className="text-sm font-semibold text-slate-900">Need help writing?</div>
+            <p className="text-xs text-slate-600">
+              Use AI Assistant to generate content, headlines, meta descriptions and more.
             </p>
           </div>
           <button
             type="button"
             onClick={onOpenAi}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground cms-transition hover:opacity-95"
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700"
           >
             <Sparkles className="h-4 w-4" />
             Open AI Assistant
@@ -513,7 +494,7 @@ export function ArticleWritingCanvas({
 }
 
 const fieldClass =
-  "h-11 w-full rounded-xl border border-border/70 bg-background px-3.5 text-sm outline-none cms-transition placeholder:text-muted-foreground/50 focus:border-primary/40 focus:ring-2 focus:ring-primary/15 disabled:opacity-60";
+  "h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:opacity-60";
 
 function FieldLabel({
   label,
@@ -558,18 +539,18 @@ function Accordion({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white">
       <button
         type="button"
         onClick={onToggle}
-        className="flex w-full items-center justify-between px-5 py-3.5 text-left text-sm font-semibold"
+        className="flex w-full items-center justify-between px-5 py-3.5 text-left text-sm font-semibold text-slate-900"
       >
         {title}
         <ChevronDown
-          className={cn("h-4 w-4 text-muted-foreground cms-transition", open && "rotate-180")}
+          className={cn("h-4 w-4 text-slate-400 cms-transition", open && "rotate-180")}
         />
       </button>
-      {open ? <div className="border-t border-border/50 px-5 py-4">{children}</div> : null}
+      {open ? <div className="border-t border-slate-100 px-5 py-4">{children}</div> : null}
     </section>
   );
 }
@@ -614,76 +595,6 @@ function slugify(value: string) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 80);
-}
-
-function HeadlineAnalysis({
-  title,
-  onApplySuggestion,
-  onOpenAi,
-  readOnly,
-}: {
-  title: string;
-  onApplySuggestion: (text: string) => void;
-  onOpenAi?: () => void;
-  readOnly?: boolean;
-}) {
-  const len = title.trim().length;
-  const tip =
-    len === 0
-      ? "Add a clear, searchable headline for SEO and Google News."
-      : len < 40
-        ? "A bit short — expand with a subject and outcome for scanners."
-        : len <= 70
-          ? "Strong headline length for search and social."
-          : "Getting long — trim for mobile and push notifications.";
-  const tipTone =
-    len === 0
-      ? "text-muted-foreground"
-      : len < 40
-        ? "text-amber-700"
-        : len <= 70
-          ? "text-emerald-700"
-          : "text-amber-700";
-
-  const base = title.trim() || "Diplomatic breakthrough";
-  const suggestions = [
-    `${base}: what it means for the region`,
-    `Inside the story: ${base}`,
-    `Analysis — ${base}`,
-  ].map((s) => s.slice(0, HEADLINE_MAX));
-
-  return (
-    <div className="space-y-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className={cn("text-[11px] font-medium", tipTone)}>{tip}</p>
-        {onOpenAi ? (
-          <button
-            type="button"
-            disabled={readOnly}
-            onClick={onOpenAi}
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
-          >
-            <Sparkles className="h-3 w-3" /> AI headline ideas
-          </button>
-        ) : null}
-      </div>
-      {title.trim() ? (
-        <div className="flex flex-wrap gap-1.5">
-          {suggestions.map((s) => (
-            <button
-              key={s}
-              type="button"
-              disabled={readOnly}
-              onClick={() => onApplySuggestion(s)}
-              className="rounded-lg border border-border/60 bg-background px-2 py-1 text-left text-[10px] font-medium text-muted-foreground cms-transition hover:border-primary/40 hover:text-foreground"
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 function formatRelative(date: Date) {
