@@ -63,6 +63,8 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT,
   email TEXT,
+  username TEXT,
+  phone TEXT,
   byline_name TEXT,
   avatar_url TEXT,
   bio TEXT,
@@ -70,10 +72,65 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     CHECK (jsonb_typeof(social_links) = 'object'),
   status TEXT NOT NULL DEFAULT 'active'
     CHECK (status IN ('active', 'suspended', 'invited')),
+  department_id UUID,
+  team_id UUID,
+  designation TEXT,
+  location TEXT,
+  activity_score INT NOT NULL DEFAULT 0,
+  last_login_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS profiles_email_idx ON public.profiles (lower(email));
 CREATE INDEX IF NOT EXISTS profiles_status_idx ON public.profiles (status);
+
+CREATE TABLE IF NOT EXISTS public.departments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  description TEXT,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.teams (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  department_id UUID NOT NULL REFERENCES public.departments(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  description TEXT,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (department_id, slug)
+);
+
+CREATE TABLE IF NOT EXISTS public.staff_invitations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT NOT NULL,
+  invited_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  roles TEXT[] NOT NULL DEFAULT '{}',
+  department_id UUID REFERENCES public.departments(id) ON DELETE SET NULL,
+  team_id UUID REFERENCES public.teams(id) ON DELETE SET NULL,
+  name TEXT,
+  byline_name TEXT,
+  designation TEXT,
+  status TEXT NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'accepted', 'expired', 'revoked')),
+  token TEXT UNIQUE NOT NULL DEFAULT encode(gen_random_bytes(16), 'hex'),
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '14 days'),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  accepted_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS public.staff_activity_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  subject_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  details TEXT,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 -- User Roles
 CREATE TABLE IF NOT EXISTS public.user_roles (

@@ -922,37 +922,225 @@ export type Database = {
       }
       profiles: {
         Row: {
+          activity_score: number
           avatar_url: string | null
           bio: string | null
           byline_name: string | null
           created_at: string
+          department_id: string | null
+          designation: string | null
           email: string | null
           id: string
+          last_login_at: string | null
+          location: string | null
           name: string | null
+          phone: string | null
           social_links: Json
           status: string
+          team_id: string | null
+          updated_at: string
+          username: string | null
         }
         Insert: {
+          activity_score?: number
           avatar_url?: string | null
           bio?: string | null
           byline_name?: string | null
           created_at?: string
+          department_id?: string | null
+          designation?: string | null
           email?: string | null
           id: string
+          last_login_at?: string | null
+          location?: string | null
           name?: string | null
+          phone?: string | null
           social_links?: Json
           status?: string
+          team_id?: string | null
+          updated_at?: string
+          username?: string | null
         }
         Update: {
+          activity_score?: number
           avatar_url?: string | null
           bio?: string | null
           byline_name?: string | null
           created_at?: string
+          department_id?: string | null
+          designation?: string | null
           email?: string | null
           id?: string
+          last_login_at?: string | null
+          location?: string | null
           name?: string | null
+          phone?: string | null
           social_links?: Json
           status?: string
+          team_id?: string | null
+          updated_at?: string
+          username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      departments: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          slug?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      teams: {
+        Row: {
+          created_at: string
+          department_id: string
+          description: string | null
+          id: string
+          name: string
+          slug: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          department_id: string
+          description?: string | null
+          id?: string
+          name: string
+          slug: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          department_id?: string
+          description?: string | null
+          id?: string
+          name?: string
+          slug?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_invitations: {
+        Row: {
+          accepted_at: string | null
+          byline_name: string | null
+          created_at: string
+          department_id: string | null
+          designation: string | null
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          name: string | null
+          roles: string[]
+          status: string
+          team_id: string | null
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          byline_name?: string | null
+          created_at?: string
+          department_id?: string | null
+          designation?: string | null
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          name?: string | null
+          roles?: string[]
+          status?: string
+          team_id?: string | null
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          byline_name?: string | null
+          created_at?: string
+          department_id?: string | null
+          designation?: string | null
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          name?: string | null
+          roles?: string[]
+          status?: string
+          team_id?: string | null
+          token?: string
+        }
+        Relationships: []
+      }
+      staff_activity_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          details: string | null
+          id: string
+          payload: Json
+          subject_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          payload?: Json
+          subject_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          payload?: Json
+          subject_id?: string | null
         }
         Relationships: []
       }

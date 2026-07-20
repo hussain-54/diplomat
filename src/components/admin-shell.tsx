@@ -23,6 +23,7 @@ import {
 import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import { ArticlesSidebarMenu } from "@/components/articles/articles-sidebar-menu";
 import { CategoriesSidebarMenu } from "@/components/categories/categories-sidebar-menu";
+import { StaffSidebarMenu } from "@/components/staff/staff-sidebar-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { getDashboardMetrics, getMe } from "@/lib/admin.functions";
 import {
@@ -62,6 +63,8 @@ const NAV_GROUPS: Array<{
     expandableArticles?: boolean;
     /** Rendered as expandable Categories accordion */
     expandableCategories?: boolean;
+    /** Rendered as expandable Staff accordion */
+    expandableStaff?: boolean;
   }>;
 }> = [
   {
@@ -109,9 +112,10 @@ const NAV_GROUPS: Array<{
       },
       {
         to: "/admin/staff",
-        label: "Staff",
+        label: "Users & Staff",
         icon: Users,
         permission: "staff:manage",
+        expandableStaff: true,
       },
       {
         to: "/admin/analytics",
@@ -316,6 +320,15 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 if (item.expandableCategories) {
                   return (
                     <CategoriesSidebarMenu
+                      key={item.to}
+                      collapsed={collapsed}
+                      roles={roles}
+                    />
+                  );
+                }
+                if (item.expandableStaff) {
+                  return (
+                    <StaffSidebarMenu
                       key={item.to}
                       collapsed={collapsed}
                       roles={roles}
