@@ -142,9 +142,24 @@ export function ArticleWritingCanvas({
           disabled={readOnly}
           maxLength={HEADLINE_MAX}
           value={form.title}
-          onChange={(e) => onTitleChange(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            onTitleChange(next);
+            if (!form.slug.trim() && next.trim()) {
+              onSlugChange(slugify(next));
+            }
+          }}
           placeholder="Write a compelling headline..."
           className={fieldClass}
+        />
+        <HeadlineAnalysis
+          title={form.title}
+          onApplySuggestion={(text) => {
+            onTitleChange(text.slice(0, HEADLINE_MAX));
+            if (!form.slug.trim()) onSlugChange(slugify(text));
+          }}
+          onOpenAi={onOpenAi}
+          readOnly={readOnly}
         />
 
         <FieldLabel
@@ -157,7 +172,7 @@ export function ArticleWritingCanvas({
           maxLength={SHORT_HEADLINE_MAX}
           value={form.deck}
           onChange={(e) => onDeckChange(e.target.value)}
-          placeholder="Short headline (optional)"
+          placeholder="For mobile, push notifications, and Google News"
           className={fieldClass}
         />
 
@@ -590,6 +605,85 @@ function counterTone(len: number, max: number, goodMin: number, goodMax: number)
   if (len > max) return "text-destructive";
   if (len >= goodMin && len <= goodMax) return "text-emerald-600";
   return "text-amber-600";
+}
+
+function slugify(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 80);
+}
+
+function HeadlineAnalysis({
+  title,
+  onApplySuggestion,
+  onOpenAi,
+  readOnly,
+}: {
+  title: string;
+  onApplySuggestion: (text: string) => void;
+  onOpenAi?: () => void;
+  readOnly?: boolean;
+}) {
+  const len = title.trim().length;
+  const tip =
+    len === 0
+      ? "Add a clear, searchable headline for SEO and Google News."
+      : len < 40
+        ? "A bit short — expand with a subject and outcome for scanners."
+        : len <= 70
+          ? "Strong headline length for search and social."
+          : "Getting long — trim for mobile and push notifications.";
+  const tipTone =
+    len === 0
+      ? "text-muted-foreground"
+      : len < 40
+        ? "text-amber-700"
+        : len <= 70
+          ? "text-emerald-700"
+          : "text-amber-700";
+
+  const base = title.trim() || "Diplomatic breakthrough";
+  const suggestions = [
+    `${base}: what it means for the region`,
+    `Inside the story: ${base}`,
+    `Analysis — ${base}`,
+  ].map((s) => s.slice(0, HEADLINE_MAX));
+
+  return (
+    <div className="space-y-2 rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className={cn("text-[11px] font-medium", tipTone)}>{tip}</p>
+        {onOpenAi ? (
+          <button
+            type="button"
+            disabled={readOnly}
+            onClick={onOpenAi}
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline"
+          >
+            <Sparkles className="h-3 w-3" /> AI headline ideas
+          </button>
+        ) : null}
+      </div>
+      {title.trim() ? (
+        <div className="flex flex-wrap gap-1.5">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              type="button"
+              disabled={readOnly}
+              onClick={() => onApplySuggestion(s)}
+              className="rounded-lg border border-border/60 bg-background px-2 py-1 text-left text-[10px] font-medium text-muted-foreground cms-transition hover:border-primary/40 hover:text-foreground"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function formatRelative(date: Date) {

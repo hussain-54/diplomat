@@ -779,7 +779,7 @@ export function SchemaTabPanel({
               <option value="NewsArticle">NewsArticle</option>
               <option value="Article">Article / BlogPosting</option>
               <option value="Report">Report</option>
-              <option value="Review">Review</option>
+              <option value="Review">Review / FAQPage companion</option>
             </select>
           </Field>
           <div>

@@ -1,19 +1,51 @@
-import { CalendarClock, CheckCircle2, AlertTriangle, ChevronDown } from "lucide-react";
+import {
+  Bot,
+  CalendarClock,
+  CheckCircle2,
+  AlertTriangle,
+  ChevronDown,
+  Code2,
+  FileText,
+  FolderTree,
+  ImageIcon,
+  MapPin,
+  Newspaper,
+  Search,
+  Send,
+  Share2,
+  ShieldCheck,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const ARTICLE_EDITOR_TABS = [
-  { id: "content", label: "Content" },
-  { id: "media", label: "Media" },
-  { id: "categories", label: "Categories" },
-  { id: "publishing", label: "Publishing" },
-  { id: "seo", label: "SEO" },
-  { id: "local-seo", label: "Local SEO" },
-  { id: "google-news", label: "Google News" },
-  { id: "eeat", label: "EEAT" },
-  { id: "schema", label: "Schema" },
-  { id: "social", label: "Social" },
-  { id: "ai", label: "AI Assistant" },
-] as const;
+export const ARTICLE_EDITOR_TABS: Array<{
+  id:
+    | "content"
+    | "media"
+    | "categories"
+    | "publishing"
+    | "seo"
+    | "local-seo"
+    | "google-news"
+    | "eeat"
+    | "schema"
+    | "social"
+    | "ai";
+  label: string;
+  icon: LucideIcon;
+}> = [
+  { id: "content", label: "Content", icon: FileText },
+  { id: "media", label: "Media", icon: ImageIcon },
+  { id: "categories", label: "Categories", icon: FolderTree },
+  { id: "publishing", label: "Publishing", icon: Send },
+  { id: "seo", label: "SEO", icon: Search },
+  { id: "local-seo", label: "Local SEO", icon: MapPin },
+  { id: "google-news", label: "Google News", icon: Newspaper },
+  { id: "eeat", label: "EEAT", icon: ShieldCheck },
+  { id: "schema", label: "Schema", icon: Code2 },
+  { id: "social", label: "Social", icon: Share2 },
+  { id: "ai", label: "AI Assistant", icon: Bot },
+];
 
 export type ArticleEditorTabId = (typeof ARTICLE_EDITOR_TABS)[number]["id"];
 
@@ -29,21 +61,25 @@ export function ArticleEditorTabs({
       className="flex gap-0 overflow-x-auto border-b border-border/60 bg-card px-2"
       aria-label="Article editor sections"
     >
-      {ARTICLE_EDITOR_TABS.map((tab) => (
-        <button
-          key={tab.id}
-          type="button"
-          onClick={() => onChange(tab.id)}
-          className={cn(
-            "shrink-0 border-b-2 px-3.5 py-3 text-xs font-semibold cms-transition",
-            active === tab.id
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {tab.label}
-        </button>
-      ))}
+      {ARTICLE_EDITOR_TABS.map((tab) => {
+        const Icon = tab.icon;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onChange(tab.id)}
+            className={cn(
+              "inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-xs font-semibold cms-transition",
+              active === tab.id
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Icon className="h-3.5 w-3.5 opacity-80" />
+            <span className="whitespace-nowrap">{tab.label}</span>
+          </button>
+        );
+      })}
     </nav>
   );
 }

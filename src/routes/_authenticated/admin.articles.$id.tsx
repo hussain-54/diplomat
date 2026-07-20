@@ -1276,9 +1276,14 @@ function EditArticle() {
                 },
                 { label: "Focus Keyword", ok: Boolean(seo.focus_keyword?.trim()) },
                 {
-                  label: "Image Alt Text",
-                  ok: Boolean(cmsExtras.media?.alt_text?.trim() || form.hero_image_url),
+                  label: "Secondary Keywords",
+                  ok: Boolean(cmsExtras.secondary_keywords?.trim()),
                 },
+                {
+                  label: "Image Alt Text",
+                  ok: Boolean(cmsExtras.media?.alt_text?.trim()),
+                },
+                { label: "Featured Image", ok: Boolean(form.hero_image_url) },
                 {
                   label: "Internal Links",
                   ok: (cmsExtras.related_article_ids?.length ?? 0) > 0,
@@ -1295,7 +1300,28 @@ function EditArticle() {
                       (seo.og_description || seo.meta_description),
                   ),
                 },
+                {
+                  label: "Twitter Card",
+                  ok: Boolean(seo.twitter_card && (seo.twitter_title || form.title)),
+                },
+                { label: "Canonical URL", ok: Boolean(seo.canonical_url?.trim() || form.slug) },
+                { label: "Category", ok: Boolean(form.section_id) },
+                { label: "Tags", ok: tagNames.length > 0 },
+                { label: "Slug", ok: Boolean(form.slug.trim()) },
+                {
+                  label: "Google News",
+                  ok: Boolean(cmsExtras.google_news?.eligible || form.status === "published"),
+                },
+                {
+                  label: "EEAT Notes",
+                  ok: Boolean(
+                    cmsExtras.eeat?.author_credentials ||
+                      cmsExtras.eeat?.fact_checker ||
+                      cmsExtras.eeat?.sources_noted,
+                  ),
+                },
                 { label: "Readability Score", ok: writingStats.words >= 200 },
+                { label: "Heading Structure", ok: blocks.some((b) => b.type === "heading") },
                 { label: "Content Length", ok: allScores.word_count >= 300 },
               ]}
               status={form.status}

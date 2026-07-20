@@ -12,6 +12,7 @@ import {
   Maximize2,
   Minimize2,
   MoreHorizontal,
+  Save,
   Send,
   Settings2,
   Share2,
@@ -336,7 +337,14 @@ export function DocumentEditorBar({
               onClick={onSave}
               title={saveBlockedHint || "Save without publishing"}
             >
-              {saving && !publishing ? "Saving…" : saveLabel || "Save Draft"}
+              {saving && !publishing ? (
+                "Saving…"
+              ) : (
+                <>
+                  <Save className="h-3.5 w-3.5" />
+                  {saveLabel || "Save Draft"}
+                </>
+              )}
             </button>
 
             {!isNew ? (
