@@ -176,6 +176,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   "articles:publish": "Publish",
   "articles:delete": "Delete articles",
   "categories:manage": "Categories",
+  "tags:manage": "Tags",
   "staff:manage": "Staff",
   "media:view": "View media",
   "media:upload": "Upload media",

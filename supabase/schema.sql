@@ -233,8 +233,43 @@ CREATE TABLE IF NOT EXISTS public.editor_section_access (
 CREATE TABLE IF NOT EXISTS public.tags (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   slug TEXT UNIQUE NOT NULL,
-  name TEXT NOT NULL
+  name TEXT NOT NULL,
+  description TEXT,
+  parent_id UUID REFERENCES public.tags(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'published'
+    CHECK (status IN ('draft', 'published', 'scheduled')),
+  scheduled_at TIMESTAMPTZ,
+  language TEXT NOT NULL DEFAULT 'en',
+  country TEXT,
+  icon_name TEXT,
+  icon_url TEXT,
+  cover_image_url TEXT,
+  seo_title TEXT,
+  meta_description TEXT,
+  focus_keyword TEXT,
+  seo_score INT NOT NULL DEFAULT 0,
+  ai_optimized BOOLEAN NOT NULL DEFAULT false,
+  discover_eligible BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL
 );
+CREATE INDEX IF NOT EXISTS tags_status_idx ON public.tags (status);
+CREATE INDEX IF NOT EXISTS tags_updated_at_idx ON public.tags (updated_at DESC);
+CREATE INDEX IF NOT EXISTS tags_seo_score_idx ON public.tags (seo_score DESC);
+CREATE INDEX IF NOT EXISTS tags_parent_id_idx ON public.tags (parent_id);
+
+CREATE TABLE IF NOT EXISTS public.tag_activity_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tag_id UUID REFERENCES public.tags(id) ON DELETE SET NULL,
+  actor_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  action TEXT NOT NULL,
+  details TEXT,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS tag_activity_logs_tag_idx
+  ON public.tag_activity_logs (tag_id, created_at DESC);
 
 -- Articles
 CREATE TABLE IF NOT EXISTS public.articles (

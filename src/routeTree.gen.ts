@@ -29,6 +29,7 @@ import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminWarMonitorRouteImport } from './routes/_authenticated/admin.war-monitor'
 import { Route as AuthenticatedAdminVideosRouteImport } from './routes/_authenticated/admin.videos'
 import { Route as AuthenticatedAdminTickerRouteImport } from './routes/_authenticated/admin.ticker'
+import { Route as AuthenticatedAdminTagsRouteImport } from './routes/_authenticated/admin.tags'
 import { Route as AuthenticatedAdminStaffRouteImport } from './routes/_authenticated/admin.staff'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin.settings'
 import { Route as AuthenticatedAdminMediaRouteImport } from './routes/_authenticated/admin.media'
@@ -39,9 +40,18 @@ import { Route as AuthenticatedAdminArticlesRouteImport } from './routes/_authen
 import { Route as AuthenticatedAdminAnalyticsRouteImport } from './routes/_authenticated/admin.analytics'
 import { Route as AuthenticatedAdminAmbassadorsRouteImport } from './routes/_authenticated/admin.ambassadors'
 import { Route as AuthenticatedAdminAccessRouteImport } from './routes/_authenticated/admin.access'
+import { Route as AuthenticatedAdminTagsIndexRouteImport } from './routes/_authenticated/admin.tags.index'
 import { Route as AuthenticatedAdminStaffIndexRouteImport } from './routes/_authenticated/admin.staff.index'
 import { Route as AuthenticatedAdminCategoriesIndexRouteImport } from './routes/_authenticated/admin.categories.index'
 import { Route as AuthenticatedAdminArticlesIndexRouteImport } from './routes/_authenticated/admin.articles.index'
+import { Route as AuthenticatedAdminTagsTrendingRouteImport } from './routes/_authenticated/admin.tags.trending'
+import { Route as AuthenticatedAdminTagsSeoRouteImport } from './routes/_authenticated/admin.tags.seo'
+import { Route as AuthenticatedAdminTagsImportExportRouteImport } from './routes/_authenticated/admin.tags.import-export'
+import { Route as AuthenticatedAdminTagsCreateRouteImport } from './routes/_authenticated/admin.tags.create'
+import { Route as AuthenticatedAdminTagsAnalyticsRouteImport } from './routes/_authenticated/admin.tags.analytics'
+import { Route as AuthenticatedAdminTagsAllRouteImport } from './routes/_authenticated/admin.tags.all'
+import { Route as AuthenticatedAdminTagsActivityRouteImport } from './routes/_authenticated/admin.tags.activity'
+import { Route as AuthenticatedAdminTagsIdRouteImport } from './routes/_authenticated/admin.tags.$id'
 import { Route as AuthenticatedAdminStaffTeamsRouteImport } from './routes/_authenticated/admin.staff.teams'
 import { Route as AuthenticatedAdminStaffRolesRouteImport } from './routes/_authenticated/admin.staff.roles'
 import { Route as AuthenticatedAdminStaffPendingRouteImport } from './routes/_authenticated/admin.staff.pending'
@@ -79,6 +89,8 @@ import { Route as AuthenticatedAdminArticlesAiSeoRouteImport } from './routes/_a
 import { Route as AuthenticatedAdminArticlesIdRouteImport } from './routes/_authenticated/admin.articles.$id'
 import { Route as AuthenticatedAdminArticlesRevisionsIndexRouteImport } from './routes/_authenticated/admin.articles.revisions.index'
 import { Route as AuthenticatedAdminArticlesPreviewIndexRouteImport } from './routes/_authenticated/admin.articles.preview.index'
+import { Route as AuthenticatedAdminTagsIdEditRouteImport } from './routes/_authenticated/admin.tags.$id.edit'
+import { Route as AuthenticatedAdminTagsIdAnalyticsRouteImport } from './routes/_authenticated/admin.tags.$id.analytics'
 import { Route as AuthenticatedAdminStaffIdEditRouteImport } from './routes/_authenticated/admin.staff.$id.edit'
 import { Route as AuthenticatedAdminCategoriesIdSettingsRouteImport } from './routes/_authenticated/admin.categories.$id.settings'
 import { Route as AuthenticatedAdminCategoriesIdEditRouteImport } from './routes/_authenticated/admin.categories.$id.edit'
@@ -189,6 +201,11 @@ const AuthenticatedAdminTickerRoute =
     path: '/ticker',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminTagsRoute = AuthenticatedAdminTagsRouteImport.update({
+  id: '/tags',
+  path: '/tags',
+  getParentRoute: () => AuthenticatedAdminRoute,
+} as any)
 const AuthenticatedAdminStaffRoute = AuthenticatedAdminStaffRouteImport.update({
   id: '/staff',
   path: '/staff',
@@ -247,6 +264,12 @@ const AuthenticatedAdminAccessRoute =
     path: '/access',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminTagsIndexRoute =
+  AuthenticatedAdminTagsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAdminTagsRoute,
+  } as any)
 const AuthenticatedAdminStaffIndexRoute =
   AuthenticatedAdminStaffIndexRouteImport.update({
     id: '/',
@@ -264,6 +287,54 @@ const AuthenticatedAdminArticlesIndexRoute =
     id: '/',
     path: '/',
     getParentRoute: () => AuthenticatedAdminArticlesRoute,
+  } as any)
+const AuthenticatedAdminTagsTrendingRoute =
+  AuthenticatedAdminTagsTrendingRouteImport.update({
+    id: '/trending',
+    path: '/trending',
+    getParentRoute: () => AuthenticatedAdminTagsRoute,
+  } as any)
+const AuthenticatedAdminTagsSeoRoute =
+  AuthenticatedAdminTagsSeoRouteImport.update({
+    id: '/seo',
+    path: '/seo',
+    getParentRoute: () => AuthenticatedAdminTagsRoute,
+  } as any)
+const AuthenticatedAdminTagsImportExportRoute =
+  AuthenticatedAdminTagsImportExportRouteImport.update({
+    id: '/import-export',
+    path: '/import-export',
+    getParentRoute: () => AuthenticatedAdminTagsRoute,
+  } as any)
+const AuthenticatedAdminTagsCreateRoute =
+  AuthenticatedAdminTagsCreateRouteImport.update({
+    id: '/create',
+    path: '/create',
+    getParentRoute: () => AuthenticatedAdminTagsRoute,
+  } as any)
+const AuthenticatedAdminTagsAnalyticsRoute =
+  AuthenticatedAdminTagsAnalyticsRouteImport.update({
+    id: '/analytics',
+    path: '/analytics',
+    getParentRoute: () => AuthenticatedAdminTagsRoute,
+  } as any)
+const AuthenticatedAdminTagsAllRoute =
+  AuthenticatedAdminTagsAllRouteImport.update({
+    id: '/all',
+    path: '/all',
+    getParentRoute: () => AuthenticatedAdminTagsRoute,
+  } as any)
+const AuthenticatedAdminTagsActivityRoute =
+  AuthenticatedAdminTagsActivityRouteImport.update({
+    id: '/activity',
+    path: '/activity',
+    getParentRoute: () => AuthenticatedAdminTagsRoute,
+  } as any)
+const AuthenticatedAdminTagsIdRoute =
+  AuthenticatedAdminTagsIdRouteImport.update({
+    id: '/$id',
+    path: '/$id',
+    getParentRoute: () => AuthenticatedAdminTagsRoute,
   } as any)
 const AuthenticatedAdminStaffTeamsRoute =
   AuthenticatedAdminStaffTeamsRouteImport.update({
@@ -487,6 +558,18 @@ const AuthenticatedAdminArticlesPreviewIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedAdminArticlesPreviewRoute,
   } as any)
+const AuthenticatedAdminTagsIdEditRoute =
+  AuthenticatedAdminTagsIdEditRouteImport.update({
+    id: '/edit',
+    path: '/edit',
+    getParentRoute: () => AuthenticatedAdminTagsIdRoute,
+  } as any)
+const AuthenticatedAdminTagsIdAnalyticsRoute =
+  AuthenticatedAdminTagsIdAnalyticsRouteImport.update({
+    id: '/analytics',
+    path: '/analytics',
+    getParentRoute: () => AuthenticatedAdminTagsIdRoute,
+  } as any)
 const AuthenticatedAdminStaffIdEditRoute =
   AuthenticatedAdminStaffIdEditRouteImport.update({
     id: '/edit',
@@ -556,6 +639,7 @@ export interface FileRoutesByFullPath {
   '/admin/media': typeof AuthenticatedAdminMediaRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
+  '/admin/tags': typeof AuthenticatedAdminTagsRouteWithChildren
   '/admin/ticker': typeof AuthenticatedAdminTickerRoute
   '/admin/videos': typeof AuthenticatedAdminVideosRoute
   '/admin/war-monitor': typeof AuthenticatedAdminWarMonitorRoute
@@ -595,9 +679,18 @@ export interface FileRoutesByFullPath {
   '/admin/staff/pending': typeof AuthenticatedAdminStaffPendingRoute
   '/admin/staff/roles': typeof AuthenticatedAdminStaffRolesRoute
   '/admin/staff/teams': typeof AuthenticatedAdminStaffTeamsRoute
+  '/admin/tags/$id': typeof AuthenticatedAdminTagsIdRouteWithChildren
+  '/admin/tags/activity': typeof AuthenticatedAdminTagsActivityRoute
+  '/admin/tags/all': typeof AuthenticatedAdminTagsAllRoute
+  '/admin/tags/analytics': typeof AuthenticatedAdminTagsAnalyticsRoute
+  '/admin/tags/create': typeof AuthenticatedAdminTagsCreateRoute
+  '/admin/tags/import-export': typeof AuthenticatedAdminTagsImportExportRoute
+  '/admin/tags/seo': typeof AuthenticatedAdminTagsSeoRoute
+  '/admin/tags/trending': typeof AuthenticatedAdminTagsTrendingRoute
   '/admin/articles/': typeof AuthenticatedAdminArticlesIndexRoute
   '/admin/categories/': typeof AuthenticatedAdminCategoriesIndexRoute
   '/admin/staff/': typeof AuthenticatedAdminStaffIndexRoute
+  '/admin/tags/': typeof AuthenticatedAdminTagsIndexRoute
   '/admin/articles/preview/$articleId': typeof AuthenticatedAdminArticlesPreviewArticleIdRoute
   '/admin/articles/revisions/$articleId': typeof AuthenticatedAdminArticlesRevisionsArticleIdRoute
   '/admin/categories/$id/analytics': typeof AuthenticatedAdminCategoriesIdAnalyticsRoute
@@ -605,6 +698,8 @@ export interface FileRoutesByFullPath {
   '/admin/categories/$id/edit': typeof AuthenticatedAdminCategoriesIdEditRoute
   '/admin/categories/$id/settings': typeof AuthenticatedAdminCategoriesIdSettingsRoute
   '/admin/staff/$id/edit': typeof AuthenticatedAdminStaffIdEditRoute
+  '/admin/tags/$id/analytics': typeof AuthenticatedAdminTagsIdAnalyticsRoute
+  '/admin/tags/$id/edit': typeof AuthenticatedAdminTagsIdEditRoute
   '/admin/articles/preview/': typeof AuthenticatedAdminArticlesPreviewIndexRoute
   '/admin/articles/revisions/': typeof AuthenticatedAdminArticlesRevisionsIndexRoute
 }
@@ -667,9 +762,18 @@ export interface FileRoutesByTo {
   '/admin/staff/pending': typeof AuthenticatedAdminStaffPendingRoute
   '/admin/staff/roles': typeof AuthenticatedAdminStaffRolesRoute
   '/admin/staff/teams': typeof AuthenticatedAdminStaffTeamsRoute
+  '/admin/tags/$id': typeof AuthenticatedAdminTagsIdRouteWithChildren
+  '/admin/tags/activity': typeof AuthenticatedAdminTagsActivityRoute
+  '/admin/tags/all': typeof AuthenticatedAdminTagsAllRoute
+  '/admin/tags/analytics': typeof AuthenticatedAdminTagsAnalyticsRoute
+  '/admin/tags/create': typeof AuthenticatedAdminTagsCreateRoute
+  '/admin/tags/import-export': typeof AuthenticatedAdminTagsImportExportRoute
+  '/admin/tags/seo': typeof AuthenticatedAdminTagsSeoRoute
+  '/admin/tags/trending': typeof AuthenticatedAdminTagsTrendingRoute
   '/admin/articles': typeof AuthenticatedAdminArticlesIndexRoute
   '/admin/categories': typeof AuthenticatedAdminCategoriesIndexRoute
   '/admin/staff': typeof AuthenticatedAdminStaffIndexRoute
+  '/admin/tags': typeof AuthenticatedAdminTagsIndexRoute
   '/admin/articles/preview/$articleId': typeof AuthenticatedAdminArticlesPreviewArticleIdRoute
   '/admin/articles/revisions/$articleId': typeof AuthenticatedAdminArticlesRevisionsArticleIdRoute
   '/admin/categories/$id/analytics': typeof AuthenticatedAdminCategoriesIdAnalyticsRoute
@@ -677,6 +781,8 @@ export interface FileRoutesByTo {
   '/admin/categories/$id/edit': typeof AuthenticatedAdminCategoriesIdEditRoute
   '/admin/categories/$id/settings': typeof AuthenticatedAdminCategoriesIdSettingsRoute
   '/admin/staff/$id/edit': typeof AuthenticatedAdminStaffIdEditRoute
+  '/admin/tags/$id/analytics': typeof AuthenticatedAdminTagsIdAnalyticsRoute
+  '/admin/tags/$id/edit': typeof AuthenticatedAdminTagsIdEditRoute
   '/admin/articles/preview': typeof AuthenticatedAdminArticlesPreviewIndexRoute
   '/admin/articles/revisions': typeof AuthenticatedAdminArticlesRevisionsIndexRoute
 }
@@ -708,6 +814,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/media': typeof AuthenticatedAdminMediaRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/staff': typeof AuthenticatedAdminStaffRouteWithChildren
+  '/_authenticated/admin/tags': typeof AuthenticatedAdminTagsRouteWithChildren
   '/_authenticated/admin/ticker': typeof AuthenticatedAdminTickerRoute
   '/_authenticated/admin/videos': typeof AuthenticatedAdminVideosRoute
   '/_authenticated/admin/war-monitor': typeof AuthenticatedAdminWarMonitorRoute
@@ -747,9 +854,18 @@ export interface FileRoutesById {
   '/_authenticated/admin/staff/pending': typeof AuthenticatedAdminStaffPendingRoute
   '/_authenticated/admin/staff/roles': typeof AuthenticatedAdminStaffRolesRoute
   '/_authenticated/admin/staff/teams': typeof AuthenticatedAdminStaffTeamsRoute
+  '/_authenticated/admin/tags/$id': typeof AuthenticatedAdminTagsIdRouteWithChildren
+  '/_authenticated/admin/tags/activity': typeof AuthenticatedAdminTagsActivityRoute
+  '/_authenticated/admin/tags/all': typeof AuthenticatedAdminTagsAllRoute
+  '/_authenticated/admin/tags/analytics': typeof AuthenticatedAdminTagsAnalyticsRoute
+  '/_authenticated/admin/tags/create': typeof AuthenticatedAdminTagsCreateRoute
+  '/_authenticated/admin/tags/import-export': typeof AuthenticatedAdminTagsImportExportRoute
+  '/_authenticated/admin/tags/seo': typeof AuthenticatedAdminTagsSeoRoute
+  '/_authenticated/admin/tags/trending': typeof AuthenticatedAdminTagsTrendingRoute
   '/_authenticated/admin/articles/': typeof AuthenticatedAdminArticlesIndexRoute
   '/_authenticated/admin/categories/': typeof AuthenticatedAdminCategoriesIndexRoute
   '/_authenticated/admin/staff/': typeof AuthenticatedAdminStaffIndexRoute
+  '/_authenticated/admin/tags/': typeof AuthenticatedAdminTagsIndexRoute
   '/_authenticated/admin/articles/preview/$articleId': typeof AuthenticatedAdminArticlesPreviewArticleIdRoute
   '/_authenticated/admin/articles/revisions/$articleId': typeof AuthenticatedAdminArticlesRevisionsArticleIdRoute
   '/_authenticated/admin/categories/$id/analytics': typeof AuthenticatedAdminCategoriesIdAnalyticsRoute
@@ -757,6 +873,8 @@ export interface FileRoutesById {
   '/_authenticated/admin/categories/$id/edit': typeof AuthenticatedAdminCategoriesIdEditRoute
   '/_authenticated/admin/categories/$id/settings': typeof AuthenticatedAdminCategoriesIdSettingsRoute
   '/_authenticated/admin/staff/$id/edit': typeof AuthenticatedAdminStaffIdEditRoute
+  '/_authenticated/admin/tags/$id/analytics': typeof AuthenticatedAdminTagsIdAnalyticsRoute
+  '/_authenticated/admin/tags/$id/edit': typeof AuthenticatedAdminTagsIdEditRoute
   '/_authenticated/admin/articles/preview/': typeof AuthenticatedAdminArticlesPreviewIndexRoute
   '/_authenticated/admin/articles/revisions/': typeof AuthenticatedAdminArticlesRevisionsIndexRoute
 }
@@ -788,6 +906,7 @@ export interface FileRouteTypes {
     | '/admin/media'
     | '/admin/settings'
     | '/admin/staff'
+    | '/admin/tags'
     | '/admin/ticker'
     | '/admin/videos'
     | '/admin/war-monitor'
@@ -827,9 +946,18 @@ export interface FileRouteTypes {
     | '/admin/staff/pending'
     | '/admin/staff/roles'
     | '/admin/staff/teams'
+    | '/admin/tags/$id'
+    | '/admin/tags/activity'
+    | '/admin/tags/all'
+    | '/admin/tags/analytics'
+    | '/admin/tags/create'
+    | '/admin/tags/import-export'
+    | '/admin/tags/seo'
+    | '/admin/tags/trending'
     | '/admin/articles/'
     | '/admin/categories/'
     | '/admin/staff/'
+    | '/admin/tags/'
     | '/admin/articles/preview/$articleId'
     | '/admin/articles/revisions/$articleId'
     | '/admin/categories/$id/analytics'
@@ -837,6 +965,8 @@ export interface FileRouteTypes {
     | '/admin/categories/$id/edit'
     | '/admin/categories/$id/settings'
     | '/admin/staff/$id/edit'
+    | '/admin/tags/$id/analytics'
+    | '/admin/tags/$id/edit'
     | '/admin/articles/preview/'
     | '/admin/articles/revisions/'
   fileRoutesByTo: FileRoutesByTo
@@ -899,9 +1029,18 @@ export interface FileRouteTypes {
     | '/admin/staff/pending'
     | '/admin/staff/roles'
     | '/admin/staff/teams'
+    | '/admin/tags/$id'
+    | '/admin/tags/activity'
+    | '/admin/tags/all'
+    | '/admin/tags/analytics'
+    | '/admin/tags/create'
+    | '/admin/tags/import-export'
+    | '/admin/tags/seo'
+    | '/admin/tags/trending'
     | '/admin/articles'
     | '/admin/categories'
     | '/admin/staff'
+    | '/admin/tags'
     | '/admin/articles/preview/$articleId'
     | '/admin/articles/revisions/$articleId'
     | '/admin/categories/$id/analytics'
@@ -909,6 +1048,8 @@ export interface FileRouteTypes {
     | '/admin/categories/$id/edit'
     | '/admin/categories/$id/settings'
     | '/admin/staff/$id/edit'
+    | '/admin/tags/$id/analytics'
+    | '/admin/tags/$id/edit'
     | '/admin/articles/preview'
     | '/admin/articles/revisions'
   id:
@@ -939,6 +1080,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/media'
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/staff'
+    | '/_authenticated/admin/tags'
     | '/_authenticated/admin/ticker'
     | '/_authenticated/admin/videos'
     | '/_authenticated/admin/war-monitor'
@@ -978,9 +1120,18 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/staff/pending'
     | '/_authenticated/admin/staff/roles'
     | '/_authenticated/admin/staff/teams'
+    | '/_authenticated/admin/tags/$id'
+    | '/_authenticated/admin/tags/activity'
+    | '/_authenticated/admin/tags/all'
+    | '/_authenticated/admin/tags/analytics'
+    | '/_authenticated/admin/tags/create'
+    | '/_authenticated/admin/tags/import-export'
+    | '/_authenticated/admin/tags/seo'
+    | '/_authenticated/admin/tags/trending'
     | '/_authenticated/admin/articles/'
     | '/_authenticated/admin/categories/'
     | '/_authenticated/admin/staff/'
+    | '/_authenticated/admin/tags/'
     | '/_authenticated/admin/articles/preview/$articleId'
     | '/_authenticated/admin/articles/revisions/$articleId'
     | '/_authenticated/admin/categories/$id/analytics'
@@ -988,6 +1139,8 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/categories/$id/edit'
     | '/_authenticated/admin/categories/$id/settings'
     | '/_authenticated/admin/staff/$id/edit'
+    | '/_authenticated/admin/tags/$id/analytics'
+    | '/_authenticated/admin/tags/$id/edit'
     | '/_authenticated/admin/articles/preview/'
     | '/_authenticated/admin/articles/revisions/'
   fileRoutesById: FileRoutesById
@@ -1152,6 +1305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminTickerRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/tags': {
+      id: '/_authenticated/admin/tags'
+      path: '/tags'
+      fullPath: '/admin/tags'
+      preLoaderRoute: typeof AuthenticatedAdminTagsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/admin/staff': {
       id: '/_authenticated/admin/staff'
       path: '/staff'
@@ -1222,6 +1382,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAccessRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/admin/tags/': {
+      id: '/_authenticated/admin/tags/'
+      path: '/'
+      fullPath: '/admin/tags/'
+      preLoaderRoute: typeof AuthenticatedAdminTagsIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminTagsRoute
+    }
     '/_authenticated/admin/staff/': {
       id: '/_authenticated/admin/staff/'
       path: '/'
@@ -1242,6 +1409,62 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/articles/'
       preLoaderRoute: typeof AuthenticatedAdminArticlesIndexRouteImport
       parentRoute: typeof AuthenticatedAdminArticlesRoute
+    }
+    '/_authenticated/admin/tags/trending': {
+      id: '/_authenticated/admin/tags/trending'
+      path: '/trending'
+      fullPath: '/admin/tags/trending'
+      preLoaderRoute: typeof AuthenticatedAdminTagsTrendingRouteImport
+      parentRoute: typeof AuthenticatedAdminTagsRoute
+    }
+    '/_authenticated/admin/tags/seo': {
+      id: '/_authenticated/admin/tags/seo'
+      path: '/seo'
+      fullPath: '/admin/tags/seo'
+      preLoaderRoute: typeof AuthenticatedAdminTagsSeoRouteImport
+      parentRoute: typeof AuthenticatedAdminTagsRoute
+    }
+    '/_authenticated/admin/tags/import-export': {
+      id: '/_authenticated/admin/tags/import-export'
+      path: '/import-export'
+      fullPath: '/admin/tags/import-export'
+      preLoaderRoute: typeof AuthenticatedAdminTagsImportExportRouteImport
+      parentRoute: typeof AuthenticatedAdminTagsRoute
+    }
+    '/_authenticated/admin/tags/create': {
+      id: '/_authenticated/admin/tags/create'
+      path: '/create'
+      fullPath: '/admin/tags/create'
+      preLoaderRoute: typeof AuthenticatedAdminTagsCreateRouteImport
+      parentRoute: typeof AuthenticatedAdminTagsRoute
+    }
+    '/_authenticated/admin/tags/analytics': {
+      id: '/_authenticated/admin/tags/analytics'
+      path: '/analytics'
+      fullPath: '/admin/tags/analytics'
+      preLoaderRoute: typeof AuthenticatedAdminTagsAnalyticsRouteImport
+      parentRoute: typeof AuthenticatedAdminTagsRoute
+    }
+    '/_authenticated/admin/tags/all': {
+      id: '/_authenticated/admin/tags/all'
+      path: '/all'
+      fullPath: '/admin/tags/all'
+      preLoaderRoute: typeof AuthenticatedAdminTagsAllRouteImport
+      parentRoute: typeof AuthenticatedAdminTagsRoute
+    }
+    '/_authenticated/admin/tags/activity': {
+      id: '/_authenticated/admin/tags/activity'
+      path: '/activity'
+      fullPath: '/admin/tags/activity'
+      preLoaderRoute: typeof AuthenticatedAdminTagsActivityRouteImport
+      parentRoute: typeof AuthenticatedAdminTagsRoute
+    }
+    '/_authenticated/admin/tags/$id': {
+      id: '/_authenticated/admin/tags/$id'
+      path: '/$id'
+      fullPath: '/admin/tags/$id'
+      preLoaderRoute: typeof AuthenticatedAdminTagsIdRouteImport
+      parentRoute: typeof AuthenticatedAdminTagsRoute
     }
     '/_authenticated/admin/staff/teams': {
       id: '/_authenticated/admin/staff/teams'
@@ -1501,6 +1724,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/articles/preview/'
       preLoaderRoute: typeof AuthenticatedAdminArticlesPreviewIndexRouteImport
       parentRoute: typeof AuthenticatedAdminArticlesPreviewRoute
+    }
+    '/_authenticated/admin/tags/$id/edit': {
+      id: '/_authenticated/admin/tags/$id/edit'
+      path: '/edit'
+      fullPath: '/admin/tags/$id/edit'
+      preLoaderRoute: typeof AuthenticatedAdminTagsIdEditRouteImport
+      parentRoute: typeof AuthenticatedAdminTagsIdRoute
+    }
+    '/_authenticated/admin/tags/$id/analytics': {
+      id: '/_authenticated/admin/tags/$id/analytics'
+      path: '/analytics'
+      fullPath: '/admin/tags/$id/analytics'
+      preLoaderRoute: typeof AuthenticatedAdminTagsIdAnalyticsRouteImport
+      parentRoute: typeof AuthenticatedAdminTagsIdRoute
     }
     '/_authenticated/admin/staff/$id/edit': {
       id: '/_authenticated/admin/staff/$id/edit'
@@ -1763,6 +2000,54 @@ const AuthenticatedAdminStaffRouteWithChildren =
     AuthenticatedAdminStaffRouteChildren,
   )
 
+interface AuthenticatedAdminTagsIdRouteChildren {
+  AuthenticatedAdminTagsIdAnalyticsRoute: typeof AuthenticatedAdminTagsIdAnalyticsRoute
+  AuthenticatedAdminTagsIdEditRoute: typeof AuthenticatedAdminTagsIdEditRoute
+}
+
+const AuthenticatedAdminTagsIdRouteChildren: AuthenticatedAdminTagsIdRouteChildren =
+  {
+    AuthenticatedAdminTagsIdAnalyticsRoute:
+      AuthenticatedAdminTagsIdAnalyticsRoute,
+    AuthenticatedAdminTagsIdEditRoute: AuthenticatedAdminTagsIdEditRoute,
+  }
+
+const AuthenticatedAdminTagsIdRouteWithChildren =
+  AuthenticatedAdminTagsIdRoute._addFileChildren(
+    AuthenticatedAdminTagsIdRouteChildren,
+  )
+
+interface AuthenticatedAdminTagsRouteChildren {
+  AuthenticatedAdminTagsIdRoute: typeof AuthenticatedAdminTagsIdRouteWithChildren
+  AuthenticatedAdminTagsActivityRoute: typeof AuthenticatedAdminTagsActivityRoute
+  AuthenticatedAdminTagsAllRoute: typeof AuthenticatedAdminTagsAllRoute
+  AuthenticatedAdminTagsAnalyticsRoute: typeof AuthenticatedAdminTagsAnalyticsRoute
+  AuthenticatedAdminTagsCreateRoute: typeof AuthenticatedAdminTagsCreateRoute
+  AuthenticatedAdminTagsImportExportRoute: typeof AuthenticatedAdminTagsImportExportRoute
+  AuthenticatedAdminTagsSeoRoute: typeof AuthenticatedAdminTagsSeoRoute
+  AuthenticatedAdminTagsTrendingRoute: typeof AuthenticatedAdminTagsTrendingRoute
+  AuthenticatedAdminTagsIndexRoute: typeof AuthenticatedAdminTagsIndexRoute
+}
+
+const AuthenticatedAdminTagsRouteChildren: AuthenticatedAdminTagsRouteChildren =
+  {
+    AuthenticatedAdminTagsIdRoute: AuthenticatedAdminTagsIdRouteWithChildren,
+    AuthenticatedAdminTagsActivityRoute: AuthenticatedAdminTagsActivityRoute,
+    AuthenticatedAdminTagsAllRoute: AuthenticatedAdminTagsAllRoute,
+    AuthenticatedAdminTagsAnalyticsRoute: AuthenticatedAdminTagsAnalyticsRoute,
+    AuthenticatedAdminTagsCreateRoute: AuthenticatedAdminTagsCreateRoute,
+    AuthenticatedAdminTagsImportExportRoute:
+      AuthenticatedAdminTagsImportExportRoute,
+    AuthenticatedAdminTagsSeoRoute: AuthenticatedAdminTagsSeoRoute,
+    AuthenticatedAdminTagsTrendingRoute: AuthenticatedAdminTagsTrendingRoute,
+    AuthenticatedAdminTagsIndexRoute: AuthenticatedAdminTagsIndexRoute,
+  }
+
+const AuthenticatedAdminTagsRouteWithChildren =
+  AuthenticatedAdminTagsRoute._addFileChildren(
+    AuthenticatedAdminTagsRouteChildren,
+  )
+
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAccessRoute: typeof AuthenticatedAdminAccessRoute
   AuthenticatedAdminAmbassadorsRoute: typeof AuthenticatedAdminAmbassadorsRoute
@@ -1774,6 +2059,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminMediaRoute: typeof AuthenticatedAdminMediaRoute
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminStaffRoute: typeof AuthenticatedAdminStaffRouteWithChildren
+  AuthenticatedAdminTagsRoute: typeof AuthenticatedAdminTagsRouteWithChildren
   AuthenticatedAdminTickerRoute: typeof AuthenticatedAdminTickerRoute
   AuthenticatedAdminVideosRoute: typeof AuthenticatedAdminVideosRoute
   AuthenticatedAdminWarMonitorRoute: typeof AuthenticatedAdminWarMonitorRoute
@@ -1792,6 +2078,7 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminMediaRoute: AuthenticatedAdminMediaRoute,
   AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
   AuthenticatedAdminStaffRoute: AuthenticatedAdminStaffRouteWithChildren,
+  AuthenticatedAdminTagsRoute: AuthenticatedAdminTagsRouteWithChildren,
   AuthenticatedAdminTickerRoute: AuthenticatedAdminTickerRoute,
   AuthenticatedAdminVideosRoute: AuthenticatedAdminVideosRoute,
   AuthenticatedAdminWarMonitorRoute: AuthenticatedAdminWarMonitorRoute,

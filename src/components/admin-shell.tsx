@@ -17,6 +17,7 @@ import {
   Plus,
   Settings,
   Sun,
+  Tag,
   Users,
   X,
 } from "lucide-react";
@@ -24,6 +25,7 @@ import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from
 import { ArticlesSidebarMenu } from "@/components/articles/articles-sidebar-menu";
 import { CategoriesSidebarMenu } from "@/components/categories/categories-sidebar-menu";
 import { StaffSidebarMenu } from "@/components/staff/staff-sidebar-menu";
+import { TagsSidebarMenu } from "@/components/tags/tags-sidebar-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { getDashboardMetrics, getMe } from "@/lib/admin.functions";
 import {
@@ -65,6 +67,8 @@ const NAV_GROUPS: Array<{
     expandableCategories?: boolean;
     /** Rendered as expandable Staff accordion */
     expandableStaff?: boolean;
+    /** Rendered as expandable Tags accordion */
+    expandableTags?: boolean;
   }>;
 }> = [
   {
@@ -84,6 +88,13 @@ const NAV_GROUPS: Array<{
         permission: "articles:view",
         badgeKey: "review",
         expandableArticles: true,
+      },
+      {
+        to: "/admin/tags",
+        label: "Tags",
+        icon: Tag,
+        permission: "tags:manage",
+        expandableTags: true,
       },
       {
         to: "/admin/media",
@@ -329,6 +340,15 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 if (item.expandableStaff) {
                   return (
                     <StaffSidebarMenu
+                      key={item.to}
+                      collapsed={collapsed}
+                      roles={roles}
+                    />
+                  );
+                }
+                if (item.expandableTags) {
+                  return (
+                    <TagsSidebarMenu
                       key={item.to}
                       collapsed={collapsed}
                       roles={roles}

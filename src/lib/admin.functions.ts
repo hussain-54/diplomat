@@ -2074,6 +2074,28 @@ export {
   upsertCategory,
 } from "@/lib/category.functions";
 
+// TAGS CMS — see tag.functions.ts (legacy listTags / setArticleTags remain above)
+export {
+  deleteTag,
+  exportTags,
+  getTagAnalytics,
+  getTagArticles,
+  getTagDetail,
+  getTagsDashboard,
+  getTagsLibraryCounts,
+  getTagsModuleAnalytics,
+  getTagsSidebarWidgets,
+  importTags,
+  listSeoTagsQueue,
+  listTagActivity,
+  listTagsAdmin,
+  listTagsTable,
+  listTrendingTags,
+  optimizeTagSeo,
+  rowToTagWizardPayload,
+  upsertTag,
+} from "@/lib/tag.functions";
+
 // STAFF
 export const updateStaffProfile = async ({
   data,

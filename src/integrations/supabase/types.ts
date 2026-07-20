@@ -1395,21 +1395,135 @@ export type Database = {
       }
       tags: {
         Row: {
+          ai_optimized: boolean
+          country: string | null
+          cover_image_url: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          discover_eligible: boolean
+          focus_keyword: string | null
+          icon_name: string | null
+          icon_url: string | null
           id: string
+          language: string
+          meta_description: string | null
           name: string
+          parent_id: string | null
+          scheduled_at: string | null
+          seo_score: number
+          seo_title: string | null
           slug: string
+          status: string
+          updated_at: string
         }
         Insert: {
+          ai_optimized?: boolean
+          country?: string | null
+          cover_image_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discover_eligible?: boolean
+          focus_keyword?: string | null
+          icon_name?: string | null
+          icon_url?: string | null
           id?: string
+          language?: string
+          meta_description?: string | null
           name: string
+          parent_id?: string | null
+          scheduled_at?: string | null
+          seo_score?: number
+          seo_title?: string | null
           slug: string
+          status?: string
+          updated_at?: string
         }
         Update: {
+          ai_optimized?: boolean
+          country?: string | null
+          cover_image_url?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discover_eligible?: boolean
+          focus_keyword?: string | null
+          icon_name?: string | null
+          icon_url?: string | null
           id?: string
+          language?: string
+          meta_description?: string | null
           name?: string
+          parent_id?: string | null
+          scheduled_at?: string | null
+          seo_score?: number
+          seo_title?: string | null
           slug?: string
+          status?: string
+          updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tags_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tags_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tag_activity_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          details: string | null
+          id: string
+          payload: Json
+          tag_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          payload?: Json
+          tag_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          details?: string | null
+          id?: string
+          payload?: Json
+          tag_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tag_activity_logs_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tag_activity_logs_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ticker_items: {
         Row: {
