@@ -27,6 +27,7 @@ export function ArticleAiAssistantPanel({
   deck,
   blocks,
   readOnly,
+  compact,
   onApplyTitle,
   onApplyDeck,
   onApplyMeta,
@@ -36,6 +37,7 @@ export function ArticleAiAssistantPanel({
   deck: string;
   blocks: Block[];
   readOnly?: boolean;
+  compact?: boolean;
   onApplyTitle: (title: string) => void;
   onApplyDeck: (deck: string) => void;
   onApplyMeta: (meta: {
@@ -85,23 +87,31 @@ export function ArticleAiAssistantPanel({
       if (block.type === "pullquote") {
         return { ...block, data: { ...block.data, text: transform(block.data.text) } };
       }
+      if (block.type === "callout") {
+        return { ...block, data: { ...block.data, text: transform(block.data.text) } };
+      }
       return block;
     });
     onInsertSummaryBlock(next);
   };
 
-  return (
-    <CmsPanel title="AI Assistant" description="Desk helpers · full AI writing in Phase 20">
-      <div className="space-y-4 p-5">
-        <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 px-3 py-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-foreground text-background">
-            <Bot className="h-4 w-4" />
+  const body = (
+      <div className={cn("space-y-4", compact ? "p-0" : "p-5")}>
+        {!compact ? (
+          <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/20 px-3 py-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-foreground text-background">
+              <Bot className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 text-xs leading-relaxed text-muted-foreground">
+              Generate headlines, polish body copy, draft SEO/social text, and suggest tags from the
+              story on the canvas. Suggestions stay local until the AI Writing service is connected.
+            </div>
           </div>
-          <div className="min-w-0 text-xs leading-relaxed text-muted-foreground">
-            Generate headlines, polish body copy, draft SEO/social text, and suggest tags from the
-            story on the canvas. Suggestions stay local until the AI Writing service is connected.
-          </div>
-        </div>
+        ) : (
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            Local desk helpers · full AI writing in Phase 20
+          </p>
+        )}
 
         <AssistantGroup icon={Wand2} label="Rewrite body" disabled={readOnly || !plain}>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -225,6 +235,13 @@ export function ArticleAiAssistantPanel({
           </button>
         </AssistantGroup>
       </div>
+  );
+
+  if (compact) return body;
+
+  return (
+    <CmsPanel title="AI Assistant" description="Desk helpers · full AI writing in Phase 20">
+      {body}
     </CmsPanel>
   );
 }

@@ -200,6 +200,30 @@ function BlockView({ block }: { block: Block }) {
           )}
         </blockquote>
       );
+    case "callout": {
+      if (!block.data.text.trim() && !block.data.title.trim()) return null;
+      const tone = block.data.tone ?? "info";
+      const toneClass =
+        tone === "warning"
+          ? "border-cat-amber/40 bg-cat-amber/10"
+          : tone === "urgent"
+            ? "border-cat-rose/40 bg-cat-rose/10"
+            : tone === "tip"
+              ? "border-cat-green/40 bg-cat-green/10"
+              : "border-cat-blue/40 bg-cat-blue/10";
+      return (
+        <aside className={`my-8 rounded-xl border px-5 py-4 ${toneClass}`}>
+          {block.data.title.trim() ? (
+            <div className="mb-1 text-xs font-bold uppercase tracking-[0.08em] text-ink">
+              {block.data.title}
+            </div>
+          ) : null}
+          <p className="text-[0.95rem] leading-relaxed text-ink">
+            <InlineRichText text={block.data.text} />
+          </p>
+        </aside>
+      );
+    }
     case "list": {
       const items = block.data.items.filter((item) => item.text.trim());
       if (!items.length) return null;

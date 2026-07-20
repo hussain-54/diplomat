@@ -140,7 +140,7 @@ export function ArticleInspectorRail(props: InspectorProps & {
 
   return (
     <>
-      <aside className="hidden w-[300px] shrink-0 flex-col border-l border-border/50 bg-background xl:flex 2xl:w-[340px]">
+      <aside className="hidden w-[300px] shrink-0 flex-col border-l border-border/50 bg-background lg:flex 2xl:w-[340px]">
         <div className="flex h-11 items-center border-b border-border/40 px-4">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Story settings
@@ -253,6 +253,7 @@ function CardBody({ id, ...props }: InspectorProps & { id: InspectorCardId }) {
           deck={props.form.deck}
           blocks={props.blocks}
           readOnly={props.readOnly}
+          compact
           onApplyTitle={props.onApplyTitle}
           onApplyDeck={props.onApplyDeck}
           onApplyMeta={props.onApplyMeta}
@@ -305,11 +306,17 @@ function FeaturedCard({
       )}
 
       <div className="flex flex-wrap gap-2">
-        {mayUploadMedia && !readOnly ? (
-          <span className="inline-flex h-7 items-center gap-1 rounded-lg border border-border/70 px-2 text-[10px] font-semibold text-muted-foreground">
-            <Replace className="h-3 w-3" /> Replace via upload
-          </span>
-        ) : null}
+        <button
+          type="button"
+          disabled={!hasImage}
+          title={hasImage ? "Open featured image" : "Upload an image first"}
+          onClick={() => {
+            if (form.hero_image_url) window.open(form.hero_image_url, "_blank", "noopener,noreferrer");
+          }}
+          className="inline-flex h-7 items-center gap-1 rounded-lg border border-border/70 px-2 text-[10px] font-semibold text-muted-foreground hover:bg-accent disabled:opacity-40"
+        >
+          <Replace className="h-3 w-3" /> Open
+        </button>
         <button
           type="button"
           disabled

@@ -654,7 +654,7 @@ function EditArticle() {
   const focusLike = viewMode === "focus" || viewMode === "fullscreen";
   const openInspector = (section: InspectorCardId = "publishing") => {
     setInspectorCard(section);
-    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1280px)").matches) {
+    if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches) {
       setMobileInspectorOpen(true);
     }
   };

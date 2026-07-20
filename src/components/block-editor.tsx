@@ -19,6 +19,7 @@ import {
   Highlighter,
   Image as ImageIcon,
   Images,
+  Info,
   Italic,
   Link2,
   List,
@@ -52,6 +53,7 @@ import {
   isDirectVideoFile,
   type Block,
   type BlockType,
+  type CalloutTone,
   type HeadingLevel,
   type ImageAlign,
   type ImageSize,
@@ -80,6 +82,7 @@ import {
   transformSelection,
 } from "@/lib/desk-ai";
 import { wrapSelection } from "@/lib/writing-stats";
+import { cn } from "@/lib/utils";
 
 function insertAtCaret(
   value: string,
@@ -101,6 +104,7 @@ const BLOCK_ICONS: Record<BlockType, typeof AlignLeft> = {
   file: File,
   quote: Quote,
   pullquote: Quote,
+  callout: Info,
   list: List,
   divider: Minus,
   embed: Code2,
@@ -123,6 +127,7 @@ const BLOCK_MENU: BlockType[] = [
   "gallery",
   "quote",
   "pullquote",
+  "callout",
   "list",
   "divider",
   "embed",
@@ -170,6 +175,7 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage, onOpenAi
   const [bubblePos, setBubblePos] = useState<BubblePos | null>(null);
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
   const [sizeMenuOpen, setSizeMenuOpen] = useState(false);
+  const [fontMenuOpen, setFontMenuOpen] = useState(false);
   const [aiMenuOpen, setAiMenuOpen] = useState(false);
   const bubbleBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -314,7 +320,7 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage, onOpenAi
     if (!block) return;
 
     let nextData: Block["data"] | null = null;
-    if (block.type === "paragraph" || block.type === "heading" || block.type === "quote" || block.type === "pullquote") {
+    if (block.type === "paragraph" || block.type === "heading" || block.type === "quote" || block.type === "pullquote" || block.type === "callout") {
       nextData = { ...block.data, text: result.text };
     } else if (block.type === "code" || block.type === "html") {
       nextData = { ...block.data, code: result.text };
@@ -340,7 +346,7 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage, onOpenAi
     if (!block) return;
 
     let nextData: Block["data"] | null = null;
-    if (block.type === "paragraph" || block.type === "heading" || block.type === "quote" || block.type === "pullquote") {
+    if (block.type === "paragraph" || block.type === "heading" || block.type === "quote" || block.type === "pullquote" || block.type === "callout") {
       nextData = { ...block.data, text: result.text };
     } else if (block.type === "code" || block.type === "html") {
       nextData = { ...block.data, code: result.text };
@@ -373,7 +379,8 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage, onOpenAi
     if (
       focusedBlock.type === "paragraph" ||
       focusedBlock.type === "quote" ||
-      focusedBlock.type === "pullquote"
+      focusedBlock.type === "pullquote" ||
+      focusedBlock.type === "callout"
     ) {
       const converted = convertBlockType(focusedBlock, "heading");
       if (converted.type === "heading") {
@@ -520,6 +527,7 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage, onOpenAi
             onClick={() => {
               setColorMenuOpen((open) => !open);
               setSizeMenuOpen(false);
+              setFontMenuOpen(false);
               setAiMenuOpen(false);
             }}
           >
@@ -554,6 +562,7 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage, onOpenAi
             onClick={() => {
               setSizeMenuOpen((open) => !open);
               setColorMenuOpen(false);
+              setFontMenuOpen(false);
               setAiMenuOpen(false);
             }}
           >
@@ -586,6 +595,52 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage, onOpenAi
           ) : null}
         </div>
 
+        <div className="relative">
+          <ToolButton
+            title="Font family"
+            disabled={readOnly || !activeField}
+            active={fontMenuOpen}
+            onClick={() => {
+              setFontMenuOpen((open) => !open);
+              setColorMenuOpen(false);
+              setSizeMenuOpen(false);
+              setAiMenuOpen(false);
+            }}
+          >
+            <span className="text-[10px] font-bold tracking-tight">Aa</span>
+          </ToolButton>
+          {fontMenuOpen ? (
+            <div className="absolute left-0 top-full z-30 mt-1 min-w-[8rem] rounded-lg border border-border bg-card py-1 shadow-md">
+              {(
+                [
+                  ["serif", "Serif"],
+                  ["sans", "Sans"],
+                  ["mono", "Mono"],
+                ] as const
+              ).map(([font, label]) => (
+                <button
+                  key={font}
+                  type="button"
+                  disabled={readOnly || !activeField}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    applyMark(`{font:${font}}`, "{/font}");
+                    setFontMenuOpen(false);
+                  }}
+                  className={cn(
+                    "flex w-full px-3 py-1.5 text-left text-xs hover:bg-accent disabled:opacity-40",
+                    font === "serif" && "font-serif",
+                    font === "sans" && "font-sans",
+                    font === "mono" && "font-mono",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
         <ToolbarSep />
         {([1, 2, 3, 4, 5, 6] as HeadingLevel[]).map((level) => (
           <ToolButton
@@ -599,7 +654,8 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage, onOpenAi
                 (focusedBlock.type === "heading" ||
                   focusedBlock.type === "paragraph" ||
                   focusedBlock.type === "quote" ||
-                  focusedBlock.type === "pullquote")
+                  focusedBlock.type === "pullquote" ||
+                  focusedBlock.type === "callout")
               )
             }
             onClick={() => setHeadingLevel(level)}
@@ -685,6 +741,7 @@ export function BlockEditor({ value, onChange, readOnly, onUploadImage, onOpenAi
                 setAiMenuOpen((open) => !open);
                 setColorMenuOpen(false);
                 setSizeMenuOpen(false);
+                setFontMenuOpen(false);
               }}
             >
               <Sparkles className="h-3.5 w-3.5" />
@@ -1441,7 +1498,41 @@ function BlockFields({
       );
     case "video":
       return (
-        <div className="space-y-2">
+        <div
+          className="space-y-2"
+          onDragOver={(e) => {
+            if (!onUploadImage || readOnly) return;
+            if (Array.from(e.dataTransfer.types).includes("Files")) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "copy";
+            }
+          }}
+          onDrop={(e) => {
+            if (!onUploadImage || readOnly) return;
+            const file = Array.from(e.dataTransfer.files).find((f) =>
+              f.type.startsWith("video/"),
+            );
+            if (!file) return;
+            e.preventDefault();
+            e.stopPropagation();
+            void (async () => {
+              try {
+                const url = await onUploadImage(file);
+                onChange({ ...block.data, url });
+              } catch {
+                /* ignore */
+              }
+            })();
+          }}
+        >
+          {!block.data.url && !readOnly ? (
+            <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center">
+              <Video className="h-6 w-6 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">
+                Drop a video file, paste a URL, or pick from the library
+              </p>
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2">
             <input
               {...common}
@@ -1454,7 +1545,7 @@ function BlockFields({
               <button
                 type="button"
                 onClick={() => setDamOpen(true)}
-                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-sm px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <FolderOpen className="h-3.5 w-3.5" /> Library
               </button>
@@ -1653,6 +1744,46 @@ function BlockFields({
             placeholder="Attribution"
             onChange={(e) => onChange({ ...block.data, attribution: e.target.value })}
             className={`${canvasField} text-center text-xs`}
+          />
+        </div>
+      );
+    case "callout":
+      return (
+        <div className="space-y-2 rounded-xl border border-border/70 bg-muted/20 px-3 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Info className="h-3.5 w-3.5 text-muted-foreground" />
+            <select
+              disabled={readOnly}
+              value={block.data.tone}
+              onChange={(e) =>
+                onChange({ ...block.data, tone: e.target.value as CalloutTone })
+              }
+              className="h-7 rounded-md border-0 bg-transparent text-xs font-semibold text-muted-foreground hover:bg-accent"
+            >
+              <option value="info">Info</option>
+              <option value="tip">Tip</option>
+              <option value="warning">Warning</option>
+              <option value="urgent">Urgent</option>
+            </select>
+            <input
+              {...common}
+              value={block.data.title}
+              placeholder="Callout title (optional)"
+              onChange={(e) => onChange({ ...block.data, title: e.target.value })}
+              className={`${canvasField} flex-1 text-xs font-semibold`}
+            />
+          </div>
+          <AutoTextarea
+            {...common}
+            value={block.data.text}
+            placeholder="Callout body…"
+            onChange={(text) => onChange({ ...block.data, text })}
+            onPaste={(e) =>
+              handleRichTextPaste(e, block.data.text, (text) =>
+                onChange({ ...block.data, text }),
+              )
+            }
+            className={`${canvasField} text-[0.95rem] leading-7`}
           />
         </div>
       );

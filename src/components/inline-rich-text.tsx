@@ -12,10 +12,16 @@ const SIZE_CLASS: Record<string, string> = {
   xl: "text-[1.25em]",
 };
 
+const FONT_CLASS: Record<string, string> = {
+  serif: "font-serif",
+  sans: "font-sans",
+  mono: "font-mono",
+};
+
 function parseInline(input: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   const pattern =
-    /(\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|~~(.+?)~~|==(.+?)==|\{#([0-9a-fA-F]{3,8})\}(.+?)\{\/\}|\{size:(sm|lg|xl)\}(.+?)\{\/size\}|`(.+?)`|\[(.+?)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\))/g;
+    /(\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|~~(.+?)~~|==(.+?)==|\{#([0-9a-fA-F]{3,8})\}(.+?)\{\/\}|\{size:(sm|lg|xl)\}(.+?)\{\/size\}|\{font:(serif|sans|mono)\}(.+?)\{\/font\}|`(.+?)`|\[(.+?)\]\((https?:\/\/[^\s)]+|\/[^\s)]*)\))/g;
   let last = 0;
   let match: RegExpExecArray | null;
   let key = 0;
@@ -45,22 +51,28 @@ function parseInline(input: string): ReactNode[] {
           {match[10]}
         </span>,
       );
-    else if (match[11])
+    else if (match[11] && match[12])
+      nodes.push(
+        <span key={key++} className={FONT_CLASS[match[11]] ?? ""}>
+          {match[12]}
+        </span>,
+      );
+    else if (match[13])
       nodes.push(
         <code key={key++} className="rounded bg-secondary px-1 text-[0.9em]">
-          {match[11]}
+          {match[13]}
         </code>,
       );
-    else if (match[12] && match[13])
+    else if (match[14] && match[15])
       nodes.push(
         <a
           key={key++}
-          href={match[13]}
+          href={match[15]}
           className="text-crimson underline underline-offset-2"
-          target={match[13].startsWith("http") ? "_blank" : undefined}
-          rel={match[13].startsWith("http") ? "noopener noreferrer" : undefined}
+          target={match[15].startsWith("http") ? "_blank" : undefined}
+          rel={match[15].startsWith("http") ? "noopener noreferrer" : undefined}
         >
-          {match[12]}
+          {match[14]}
         </a>,
       );
     last = match.index + match[0].length;

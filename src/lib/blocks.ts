@@ -10,6 +10,7 @@ export type BlockType =
   | "file"
   | "quote"
   | "pullquote"
+  | "callout"
   | "list"
   | "divider"
   | "embed"
@@ -28,6 +29,7 @@ export type ImageAlign = "left" | "center" | "right" | "full";
 export type ImageSize = "small" | "medium" | "large" | "full";
 export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 export type TextAlign = "left" | "center" | "right" | "justify";
+export type CalloutTone = "info" | "tip" | "warning" | "urgent";
 
 export type BlockData = {
   paragraph: { text: string; align?: TextAlign };
@@ -45,6 +47,7 @@ export type BlockData = {
   file: { url: string; title: string; fileName: string; fileType: string };
   quote: { text: string; attribution: string };
   pullquote: { text: string; attribution: string };
+  callout: { text: string; tone: CalloutTone; title: string };
   list: { style: ListStyle; items: ListItem[] };
   divider: Record<string, never>;
   embed: { url: string; caption: string };
@@ -82,6 +85,7 @@ export const BLOCK_LABELS: Record<BlockType, string> = {
   file: "File",
   quote: "Quote",
   pullquote: "Pull Quote",
+  callout: "Callout",
   list: "List",
   divider: "Divider",
   embed: "Embed",
@@ -100,6 +104,7 @@ export const CONVERTIBLE_TYPES: BlockType[] = [
   "heading",
   "quote",
   "pullquote",
+  "callout",
   "list",
   "code",
   "html",
@@ -134,6 +139,8 @@ export function createBlock(type: BlockType): Block {
       return { id, type, data: { text: "", attribution: "" } };
     case "pullquote":
       return { id, type, data: { text: "", attribution: "" } };
+    case "callout":
+      return { id, type, data: { text: "", tone: "info", title: "" } };
     case "list":
       return {
         id,
@@ -197,6 +204,7 @@ function extractText(block: Block): string {
     case "heading":
     case "quote":
     case "pullquote":
+    case "callout":
       return block.data.text;
     case "list":
       return block.data.items.map((item) => item.text).join("\n");
@@ -245,6 +253,16 @@ export function convertBlockType(block: Block, to: BlockType): Block {
               : "",
         },
       };
+    case "callout":
+      return {
+        id,
+        type: "callout",
+        data: {
+          text,
+          title: block.type === "callout" ? block.data.title : "",
+          tone: block.type === "callout" ? block.data.tone : "info",
+        },
+      };
     case "list": {
       const lines = text
         .split("\n")
@@ -287,6 +305,14 @@ function normalizeBlock(raw: unknown): Block | null {
     if (heading.align && !["left", "center", "right", "justify"].includes(heading.align)) {
       delete heading.align;
     }
+  }
+  if (type === "callout") {
+    const callout = data as BlockData["callout"];
+    callout.tone = (
+      ["info", "tip", "warning", "urgent"].includes(callout.tone) ? callout.tone : "info"
+    ) as CalloutTone;
+    callout.title = typeof callout.title === "string" ? callout.title : "";
+    callout.text = typeof callout.text === "string" ? callout.text : "";
   }
   if (type === "paragraph") {
     const para = data as BlockData["paragraph"];
@@ -362,6 +388,7 @@ export function stripInlineMarks(text: string): string {
     .replace(/==(.+?)==/g, "$1")
     .replace(/\{#([0-9a-fA-F]{3,8})\}(.+?)\{\/\}/g, "$2")
     .replace(/\{size:(sm|lg|xl)\}(.+?)\{\/size\}/g, "$2")
+    .replace(/\{font:(serif|sans|mono)\}(.+?)\{\/font\}/g, "$2")
     .replace(/`(.+?)`/g, "$1")
     .replace(/\[(.+?)\]\((.+?)\)/g, "$1");
 }
@@ -375,6 +402,7 @@ export function blocksToPlainText(blocks: Block[]): string {
         case "heading":
         case "quote":
         case "pullquote":
+        case "callout":
           return stripInlineMarks(b.data.text);
         case "list":
           return b.data.items.map((item) => stripInlineMarks(item.text)).join("\n");

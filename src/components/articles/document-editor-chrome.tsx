@@ -203,7 +203,7 @@ export function DocumentEditorBar({
 
           <button
             type="button"
-            className={cn(cmsGhostButton, "xl:hidden")}
+            className={cn(cmsGhostButton, "lg:hidden")}
             onClick={onOpenSettings}
             title="Article settings"
           >
