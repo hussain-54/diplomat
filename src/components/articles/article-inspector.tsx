@@ -76,6 +76,7 @@ type ListArticle = {
 const WORKFLOW_STAGE: Record<ArticleStatus, string> = {
   draft: "Draft",
   review: "Editor Review",
+  approved: "Approved",
   scheduled: "Scheduled",
   published: "Published",
   archived: "Archived",

@@ -191,14 +191,28 @@ export function ArticlesListPanel({
     const viewTotals = views.data ?? {};
     const commentTotals = comments.data ?? {};
     return (articles.data ?? []).map((article) => {
-      const seo = computeArticleSeoScore(article);
-      const content = computeArticleContentScore(article);
+      const seo =
+        typeof article.seo_score === "number" && article.seo_score > 0
+          ? article.seo_score
+          : computeArticleSeoScore(article);
+      const content =
+        typeof article.content_score === "number" && article.content_score > 0
+          ? article.content_score
+          : computeArticleContentScore(article);
+      const eeat =
+        typeof article.eeat_score === "number" && article.eeat_score > 0
+          ? article.eeat_score
+          : 0;
       return {
         ...article,
         views: viewTotals[article.id] ?? 0,
         comments: commentTotals[article.id] ?? 0,
         seoScore: seo,
         contentScore: content,
+        eeatScore: eeat,
+        wordCount: typeof article.word_count === "number" ? article.word_count : 0,
+        readingMinutes:
+          typeof article.reading_minutes === "number" ? article.reading_minutes : 0,
       };
     });
   }, [articles.data, comments.data, views.data]);
@@ -234,10 +248,18 @@ export function ArticlesListPanel({
             return (authorName(article.author) || "").toLowerCase();
           case "category":
             return sectionName(article.sections).toLowerCase();
+          case "language":
+            return (article.language || "en").toLowerCase();
+          case "words":
+            return article.wordCount;
+          case "reading":
+            return article.readingMinutes;
           case "seo":
             return article.seoScore;
           case "content":
             return article.contentScore;
+          case "eeat":
+            return article.eeatScore;
           case "views":
             return article.views;
           case "comments":
@@ -383,8 +405,26 @@ export function ArticlesListPanel({
         return { key: column.key, header: "Author", width: "130px", ...sortProps("author") };
       case "category":
         return { key: column.key, header: "Category", width: "120px", ...sortProps("category") };
+      case "language":
+        return { key: column.key, header: "Lang", width: "72px", ...sortProps("language") };
       case "tags":
         return { key: column.key, header: "Tags", width: "160px" };
+      case "words":
+        return {
+          key: column.key,
+          header: "Words",
+          width: "80px",
+          align: "right" as const,
+          ...sortProps("words"),
+        };
+      case "reading":
+        return {
+          key: column.key,
+          header: "Read",
+          width: "72px",
+          align: "right" as const,
+          ...sortProps("reading"),
+        };
       case "seo":
         return { key: column.key, header: "SEO", width: "88px", align: "right" as const, ...sortProps("seo") };
       case "content":
@@ -394,6 +434,14 @@ export function ArticlesListPanel({
           width: "96px",
           align: "right" as const,
           ...sortProps("content"),
+        };
+      case "eeat":
+        return {
+          key: column.key,
+          header: "EEAT",
+          width: "80px",
+          align: "right" as const,
+          ...sortProps("eeat"),
         };
       case "views":
         return {
@@ -709,6 +757,10 @@ function ArticleTableRow({
     comments: number;
     seoScore: number;
     contentScore: number;
+    eeatScore: number;
+    wordCount: number;
+    readingMinutes: number;
+    language?: string | null;
     tags?: Array<{ id: string; name: string; slug: string }>;
     hero_image_url?: string | null;
   };
@@ -780,9 +832,24 @@ function ArticleTableRow({
           <CategoryPill name={sectionName(article.sections)} />
         </DataTableCell>
       ) : null}
+      {visibility.language ? (
+        <DataTableCell className="text-xs uppercase text-muted-foreground">
+          {article.language || "en"}
+        </DataTableCell>
+      ) : null}
       {visibility.tags ? (
         <DataTableCell>
           <TagOverflow tags={article.tags ?? []} max={2} />
+        </DataTableCell>
+      ) : null}
+      {visibility.words ? (
+        <DataTableCell align="right" mono className="text-xs">
+          {article.wordCount.toLocaleString()}
+        </DataTableCell>
+      ) : null}
+      {visibility.reading ? (
+        <DataTableCell align="right" mono className="text-xs">
+          {article.readingMinutes ? `${article.readingMinutes}m` : "—"}
         </DataTableCell>
       ) : null}
       {visibility.seo ? (
@@ -793,6 +860,11 @@ function ArticleTableRow({
       {visibility.content ? (
         <DataTableCell align="right">
           <CmsStatus tone={scoreTone(article.contentScore)}>{article.contentScore}</CmsStatus>
+        </DataTableCell>
+      ) : null}
+      {visibility.eeat ? (
+        <DataTableCell align="right">
+          <CmsStatus tone={scoreTone(article.eeatScore)}>{article.eeatScore}</CmsStatus>
         </DataTableCell>
       ) : null}
       {visibility.views ? (
@@ -858,6 +930,7 @@ function sectionName(section: { name?: string } | { name?: string }[] | null) {
 
 function statusLabel(status: ArticleStatus) {
   if (status === "review") return "In Review";
+  if (status === "approved") return "Approved";
   return status[0].toUpperCase() + status.slice(1);
 }
 
@@ -865,6 +938,7 @@ function statusTone(
   status: ArticleStatus,
 ): "neutral" | "warning" | "info" | "success" | "danger" | "accent" {
   if (status === "published") return "success";
+  if (status === "approved") return "success";
   if (status === "review") return "warning";
   if (status === "scheduled") return "info";
   if (status === "archived") return "accent";

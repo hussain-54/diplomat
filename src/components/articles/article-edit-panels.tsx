@@ -259,7 +259,7 @@ export function WorkflowActions({
             Submit for review
           </button>
         ) : null}
-        {canPublish && (status === "draft" || status === "review") ? (
+        {canPublish && (status === "draft" || status === "review" || status === "approved") ? (
           <button
             type="button"
             className={cn(cmsButton)}
@@ -267,7 +267,7 @@ export function WorkflowActions({
             title="Opens confirm dialog — publish only after you confirm"
             onClick={() => (onRequestPublish ? onRequestPublish() : onAction("publish"))}
           >
-            {status === "review" ? "Approve & publish" : "Publish now"}
+            {status === "approved" || status === "review" ? "Publish now" : "Publish now"}
           </button>
         ) : null}
         {canReview && status === "review" ? (

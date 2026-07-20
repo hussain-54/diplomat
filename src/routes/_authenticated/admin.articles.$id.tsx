@@ -29,7 +29,13 @@ import {
   type InspectorCardId,
 } from "@/components/articles/article-inspector-rail";
 import { ArticleWritingCanvas } from "@/components/articles/article-writing-canvas";
+import {
+  ArticleEditorTabs,
+  ArticleLiveAnalysis,
+  type ArticleEditorTabId,
+} from "@/components/articles/article-editor-tabs";
 import { computeArticleSeoScore } from "@/components/articles/articles-filters";
+import { computeAllArticleScores } from "@/lib/article-scores";
 import { computeEditorSeoInsights } from "@/lib/editor-seo-insights";
 import {
   clearArticleDraftCache,
@@ -142,6 +148,7 @@ function EditArticle() {
   const [draftRecovery, setDraftRecovery] = useState<ArticleDraftCachePayload | null>(null);
   const [viewMode, setViewMode] = useState<DocumentViewMode>("edit");
   const [inspectorCard, setInspectorCard] = useState<InspectorCardId | null>("publishing");
+  const [editorTab, setEditorTab] = useState<ArticleEditorTabId>("content");
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [publishNotice, setPublishNotice] = useState<{ title: string; slug?: string } | null>(
     null,
@@ -169,6 +176,24 @@ function EditArticle() {
         robots_index: seo.robots_index,
       }),
     [seo.seo_title, seo.meta_description, seo.focus_keyword, seo.robots_index],
+  );
+  const allScores = useMemo(
+    () =>
+      computeAllArticleScores({
+        title: form.title,
+        slug: form.slug,
+        deck: form.deck,
+        body: serializeBlocks(blocks),
+        seo_title: seo.seo_title,
+        meta_description: seo.meta_description,
+        focus_keyword: seo.focus_keyword,
+        hero_image_url: form.hero_image_url,
+        author_id: meQ.data?.userId,
+        schema_type: seo.schema_type,
+        robots_index: seo.robots_index,
+        google_news: false,
+      }),
+    [form, seo, blocks, meQ.data?.userId],
   );
   const seoInsights = useMemo(
     () =>
@@ -810,6 +835,31 @@ function EditArticle() {
         onOpenAi={() => openInspector("ai")}
       />
 
+      {!focusLike ? (
+        <ArticleEditorTabs
+          active={editorTab}
+          onChange={(tab) => {
+            setEditorTab(tab);
+            const map: Partial<Record<ArticleEditorTabId, InspectorCardId>> = {
+              media: "featured",
+              categories: "categories",
+              publishing: "publishing",
+              seo: "seo",
+              "local-seo": "seo",
+              "google-news": "publishing",
+              eeat: "seo",
+              schema: "seo",
+              social: "social",
+              ai: "ai",
+            };
+            if (map[tab]) {
+              setInspectorCard(map[tab]!);
+              setMobileInspectorOpen(true);
+            }
+          }}
+        />
+      ) : null}
+
       {draftRecovery ? (
         <div className="flex flex-col gap-2 border-b border-gold/30 bg-gold/5 px-4 py-2.5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -899,7 +949,23 @@ function EditArticle() {
         </main>
 
         {!focusLike ? (
-          <ArticleInspectorRail
+          <div className="flex w-full max-w-[420px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-border/60 bg-[#f7f8fa] p-3 xl:max-w-[440px]">
+            <ArticleLiveAnalysis
+              wordCount={allScores.word_count || writingStats.words}
+              readingMinutes={allScores.reading_minutes || Math.max(1, Math.ceil(writingStats.words / 220))}
+              seoScore={Math.max(seoScore, allScores.seo_score)}
+              contentScore={allScores.content_score}
+              eeatScore={allScores.eeat_score}
+              checklist={[
+                { label: "Keyword in title", ok: Boolean(seo.focus_keyword && form.title.toLowerCase().includes(seo.focus_keyword.toLowerCase())) },
+                { label: "Meta description", ok: Boolean((seo.meta_description || "").length >= 50) },
+                { label: "Featured image", ok: Boolean(form.hero_image_url) },
+                { label: "Category selected", ok: Boolean(form.section_id) },
+                { label: "Slug set", ok: Boolean(form.slug.trim()) },
+                { label: "Body length 300+", ok: allScores.word_count >= 300 },
+              ]}
+            />
+            <ArticleInspectorRail
             mobileOpen={mobileInspectorOpen}
             onMobileOpenChange={setMobileInspectorOpen}
             openCard={inspectorCard}
@@ -987,6 +1053,7 @@ function EditArticle() {
             restoreError={restore.error?.message}
             onRestore={(revisionId) => restore.mutate(revisionId)}
           />
+          </div>
         ) : null}
       </form>
     </div>

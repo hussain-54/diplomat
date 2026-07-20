@@ -27,6 +27,7 @@ const STATUSES: Array<"all" | ArticleStatus> = [
   "all",
   "draft",
   "review",
+  "approved",
   "scheduled",
   "published",
   "archived",

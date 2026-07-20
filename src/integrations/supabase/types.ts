@@ -252,12 +252,18 @@ export type Database = {
       }
       articles: {
         Row: {
+          archive_reason: string | null
           author_id: string | null
           badge_type: Database["public"]["Enums"]["badge_type"]
           body: string | null
           canonical_url: string | null
+          content_score: number
           created_at: string
           deck: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          eeat_score: number
           focus_keyword: string | null
           google_discover: boolean
           google_news: boolean
@@ -270,6 +276,7 @@ export type Database = {
           og_description: string | null
           og_image_url: string | null
           og_title: string | null
+          priority: string
           published_at: string | null
           region: string | null
           robots_follow: boolean
@@ -278,6 +285,7 @@ export type Database = {
           scheduled_at: string | null
           schema_type: string
           section_id: string | null
+          seo_score: number
           seo_title: string | null
           slug: string
           status: Database["public"]["Enums"]["article_status"]
@@ -289,12 +297,18 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          archive_reason?: string | null
           author_id?: string | null
           badge_type?: Database["public"]["Enums"]["badge_type"]
           body?: string | null
           canonical_url?: string | null
+          content_score?: number
           created_at?: string
           deck?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          eeat_score?: number
           focus_keyword?: string | null
           google_discover?: boolean
           google_news?: boolean
@@ -307,6 +321,7 @@ export type Database = {
           og_description?: string | null
           og_image_url?: string | null
           og_title?: string | null
+          priority?: string
           published_at?: string | null
           region?: string | null
           robots_follow?: boolean
@@ -315,6 +330,7 @@ export type Database = {
           scheduled_at?: string | null
           schema_type?: string
           section_id?: string | null
+          seo_score?: number
           seo_title?: string | null
           slug: string
           status?: Database["public"]["Enums"]["article_status"]
@@ -326,12 +342,18 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          archive_reason?: string | null
           author_id?: string | null
           badge_type?: Database["public"]["Enums"]["badge_type"]
           body?: string | null
           canonical_url?: string | null
+          content_score?: number
           created_at?: string
           deck?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          eeat_score?: number
           focus_keyword?: string | null
           google_discover?: boolean
           google_news?: boolean
@@ -344,6 +366,7 @@ export type Database = {
           og_description?: string | null
           og_image_url?: string | null
           og_title?: string | null
+          priority?: string
           published_at?: string | null
           region?: string | null
           robots_follow?: boolean
@@ -352,6 +375,7 @@ export type Database = {
           scheduled_at?: string | null
           schema_type?: string
           section_id?: string | null
+          seo_score?: number
           seo_title?: string | null
           slug?: string
           status?: Database["public"]["Enums"]["article_status"]
@@ -1737,7 +1761,7 @@ export type Database = {
         | "videographer"
         | "fact_checker"
         | "translator"
-      article_status: "draft" | "review" | "scheduled" | "published" | "archived"
+      article_status: "draft" | "review" | "approved" | "scheduled" | "published" | "archived"
       badge_type:
         | "none"
         | "breaking"
@@ -1889,7 +1913,7 @@ export const Constants = {
         "fact_checker",
         "translator",
       ],
-      article_status: ["draft", "review", "scheduled", "published", "archived"],
+      article_status: ["draft", "review", "approved", "scheduled", "published", "archived"],
       badge_type: [
         "none",
         "breaking",

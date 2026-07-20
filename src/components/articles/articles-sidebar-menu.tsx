@@ -63,11 +63,11 @@ export function ArticlesSidebarMenu({
       all: data?.all ?? 0,
       draft: data?.draft ?? 0,
       review: data?.review ?? 0,
-      approved: 0,
+      approved: data?.approved ?? 0,
       scheduled: data?.scheduled ?? 0,
       published: data?.published ?? 0,
       archived: data?.archived ?? 0,
-      trash: 0,
+      trash: data?.trash ?? 0,
     };
   }, [countsQ.data]);
 

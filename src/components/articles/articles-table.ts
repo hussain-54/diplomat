@@ -6,9 +6,13 @@ export type ArticlesTableColumnKey =
   | "title"
   | "author"
   | "category"
+  | "language"
   | "tags"
+  | "words"
+  | "reading"
   | "seo"
   | "content"
+  | "eeat"
   | "views"
   | "comments"
   | "status"
@@ -19,8 +23,12 @@ export type ArticlesSortKey =
   | "title"
   | "author"
   | "category"
+  | "language"
+  | "words"
+  | "reading"
   | "seo"
   | "content"
+  | "eeat"
   | "views"
   | "comments"
   | "status"
@@ -37,9 +45,13 @@ export const ARTICLES_TABLE_COLUMNS: Array<{
   { key: "title", label: "Title", hideable: false, defaultVisible: true },
   { key: "author", label: "Author", hideable: true, defaultVisible: true },
   { key: "category", label: "Category", hideable: true, defaultVisible: true },
+  { key: "language", label: "Language", hideable: true, defaultVisible: false },
   { key: "tags", label: "Tags", hideable: true, defaultVisible: false },
+  { key: "words", label: "Words", hideable: true, defaultVisible: true },
+  { key: "reading", label: "Reading", hideable: true, defaultVisible: false },
   { key: "seo", label: "SEO", hideable: true, defaultVisible: true },
   { key: "content", label: "Content Score", hideable: true, defaultVisible: false },
+  { key: "eeat", label: "EEAT", hideable: true, defaultVisible: false },
   { key: "views", label: "Views", hideable: true, defaultVisible: true },
   { key: "comments", label: "Comments", hideable: true, defaultVisible: false },
   { key: "status", label: "Status", hideable: true, defaultVisible: true },
@@ -47,7 +59,7 @@ export const ARTICLES_TABLE_COLUMNS: Array<{
   { key: "actions", label: "Actions", hideable: false, defaultVisible: true },
 ];
 
-const VISIBILITY_KEY = "diplomacy.articles.tableColumns.v2";
+const VISIBILITY_KEY = "diplomacy.articles.tableColumns.v3";
 
 export function defaultColumnVisibility(): Record<ArticlesTableColumnKey, boolean> {
   return Object.fromEntries(

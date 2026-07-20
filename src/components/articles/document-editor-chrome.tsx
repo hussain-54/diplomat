@@ -46,6 +46,7 @@ export type DocumentViewMode = "edit" | "focus" | "fullscreen" | "reading";
 export type EditorWorkflowStatus =
   | "draft"
   | "review"
+  | "approved"
   | "scheduled"
   | "published"
   | "archived";
@@ -65,6 +66,12 @@ const STATUS_META: Record<
     hint: "Waiting on editorial review",
     className: "bg-amber-50 text-amber-800 ring-amber-200/80",
     dot: "bg-amber-500",
+  },
+  approved: {
+    label: "Approved",
+    hint: "Cleared for schedule or publish",
+    className: "bg-violet-50 text-violet-800 ring-violet-200/80",
+    dot: "bg-violet-500",
   },
   scheduled: {
     label: "Scheduled",
@@ -187,7 +194,7 @@ export function DocumentEditorBar({
   }, [publishIntentKey]);
 
   const statusOptions: EditorWorkflowStatus[] = canPublish
-    ? ["draft", "review", "scheduled", "published", "archived"]
+    ? ["draft", "review", "approved", "scheduled", "published", "archived"]
     : ["draft", "review"];
 
   const requestPublish = () => {

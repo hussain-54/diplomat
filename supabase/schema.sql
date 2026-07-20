@@ -21,7 +21,7 @@ EXCEPTION
 END $$;
 
 DO $$ BEGIN
-  CREATE TYPE public.article_status AS ENUM ('draft', 'review', 'scheduled', 'published', 'archived');
+  CREATE TYPE public.article_status AS ENUM ('draft', 'review', 'approved', 'scheduled', 'published', 'archived');
 EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
@@ -287,6 +287,15 @@ CREATE TABLE IF NOT EXISTS public.articles (
   seo_title TEXT,
   meta_description TEXT,
   focus_keyword TEXT,
+  seo_score INT NOT NULL DEFAULT 0,
+  content_score INT NOT NULL DEFAULT 0,
+  eeat_score INT NOT NULL DEFAULT 0,
+  priority TEXT NOT NULL DEFAULT 'medium'
+    CHECK (priority IN ('low', 'medium', 'high')),
+  archive_reason TEXT,
+  deleted_at TIMESTAMPTZ,
+  deleted_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  delete_reason TEXT,
   canonical_url TEXT,
   robots_index BOOLEAN NOT NULL DEFAULT true,
   robots_follow BOOLEAN NOT NULL DEFAULT true,

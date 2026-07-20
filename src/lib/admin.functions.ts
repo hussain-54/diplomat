@@ -17,6 +17,7 @@ import {
   type AppRole,
   type Permission,
 } from "@/lib/permissions";
+import { computeAllArticleScores } from "@/lib/article-scores";
 
 type BadgeType = Database["public"]["Enums"]["badge_type"];
 type ArticleStatus = Database["public"]["Enums"]["article_status"];
@@ -148,17 +149,47 @@ export const listAdminArticles = async () => {
     });
 
   const selectFull =
-    "id,slug,title,deck,status,badge_type,hero_image_url,published_at,scheduled_at,updated_at,created_at,section_id,author_id,is_featured,google_news,google_discover,language,schema_type,seo_title,meta_description,focus_keyword,robots_index, article_tags(tag_id, tags(id,name,slug)), sections(name,slug), author:profiles!articles_author_id_fkey(id,name)";
-  const { data, error } = await supabase
+    "id,slug,title,deck,body,status,badge_type,hero_image_url,published_at,scheduled_at,updated_at,created_at,section_id,author_id,region,is_featured,google_news,google_discover,language,schema_type,seo_title,meta_description,focus_keyword,robots_index,seo_score,content_score,eeat_score,priority,deleted_at,delete_reason,archive_reason, article_tags(tag_id, tags(id,name,slug)), sections(name,slug), author:profiles!articles_author_id_fkey(id,name)";
+  let query = supabase
     .from("articles")
     .select(selectFull)
     .order("updated_at", { ascending: false })
     .limit(200);
 
-  if (!error) return enrich(data ?? []);
+  // Soft-deleted excluded unless caller needs trash (use listTrashedArticles)
+  query = query.is("deleted_at", null);
+
+  const { data, error } = await query;
+
+  if (!error) {
+    return enrich(data ?? []).map((row) => {
+      const scores = computeAllArticleScores({
+        title: row.title as string,
+        slug: row.slug as string,
+        deck: row.deck as string | null,
+        body: row.body as string | null,
+        seo_title: row.seo_title as string | null,
+        meta_description: row.meta_description as string | null,
+        focus_keyword: row.focus_keyword as string | null,
+        hero_image_url: row.hero_image_url as string | null,
+        author_id: row.author_id as string | null,
+        schema_type: row.schema_type as string | null,
+        robots_index: row.robots_index as boolean,
+        google_news: row.google_news as boolean,
+      });
+      return {
+        ...row,
+        seo_score: (row.seo_score as number) || scores.seo_score,
+        content_score: (row.content_score as number) || scores.content_score,
+        eeat_score: (row.eeat_score as number) || scores.eeat_score,
+        word_count: scores.word_count,
+        reading_minutes: scores.reading_minutes,
+      };
+    });
+  }
 
   if (
-    !/language|schema_type|seo_title|article_tags|is_featured|google_news|google_discover|hero_image_url|deck|schema cache|PGRST/i.test(
+    !/language|schema_type|seo_title|article_tags|is_featured|google_news|google_discover|hero_image_url|deck|seo_score|content_score|eeat_score|deleted_at|priority|schema cache|PGRST/i.test(
       error.message,
     )
   ) {
@@ -187,9 +218,46 @@ export const listAdminArticles = async () => {
       robots_index: true,
       hero_image_url: null,
       deck: null,
+      body: null,
       article_tags: [],
+      seo_score: 0,
+      content_score: 0,
+      eeat_score: 0,
+      priority: "medium",
     })),
-  );
+  ).map((row) => {
+    const scores = computeAllArticleScores({
+      title: row.title as string,
+      slug: row.slug as string,
+      deck: row.deck as string | null,
+      body: row.body as string | null,
+    });
+    return {
+      ...row,
+      word_count: scores.word_count,
+      reading_minutes: scores.reading_minutes,
+      seo_score: scores.seo_score,
+      content_score: scores.content_score,
+      eeat_score: scores.eeat_score,
+    };
+  });
+};
+
+export const listTrashedArticles = async () => {
+  await requirePermission("articles:delete");
+  const { data, error } = await supabase
+    .from("articles")
+    .select(
+      "id,slug,title,status,hero_image_url,deleted_at,delete_reason,deleted_by,updated_at,section_id,author_id, sections(name,slug), author:profiles!articles_author_id_fkey(id,name), deleter:profiles!articles_deleted_by_fkey(id,name)",
+    )
+    .not("deleted_at", "is", null)
+    .order("deleted_at", { ascending: false })
+    .limit(200);
+  if (error) {
+    if (/deleted_at|schema cache|PGRST/i.test(error.message)) return [];
+    throw toAppError(error);
+  }
+  return data ?? [];
 };
 
 /** Lifetime view totals keyed by article id (Phase 5 filters) */
@@ -289,8 +357,10 @@ export type ArticlesLibraryTab =
   | "published"
   | "draft"
   | "review"
+  | "approved"
   | "scheduled"
   | "archived"
+  | "trash"
   | "breaking"
   | "featured"
   | "google_news"
@@ -300,39 +370,84 @@ export type ArticlesLibraryTab =
 export const getArticlesLibraryCounts = async () => {
   await requirePermission("articles:view");
 
-  const countEq = async (column: string, value: string | boolean) => {
+  const countActive = async (column: string, value: string | boolean) => {
     let query = supabase.from("articles").select("id", { count: "exact", head: true });
-    query = query.eq(column, value);
+    query = query.eq(column, value).is("deleted_at", null);
     const { count, error } = await query;
-    if (error) throw error;
+    if (error) {
+      // Fallback without deleted_at filter if column missing
+      if (/deleted_at|schema cache|PGRST/i.test(error.message)) {
+        const retry = await supabase
+          .from("articles")
+          .select("id", { count: "exact", head: true })
+          .eq(column, value);
+        if (retry.error) throw retry.error;
+        return retry.count ?? 0;
+      }
+      throw error;
+    }
     return count ?? 0;
   };
 
   try {
-    const [all, published, draft, review, scheduled, archived, breaking, featured, googleNews, discover] =
-      await Promise.all([
-        supabase.from("articles").select("id", { count: "exact", head: true }).then((r) => {
+    const [
+      all,
+      published,
+      draft,
+      review,
+      approved,
+      scheduled,
+      archived,
+      trash,
+      breaking,
+      featured,
+      googleNews,
+      discover,
+    ] = await Promise.all([
+      supabase
+        .from("articles")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null)
+        .then((r) => {
+          if (r.error && /deleted_at/i.test(r.error.message)) {
+            return supabase.from("articles").select("id", { count: "exact", head: true }).then((x) => {
+              if (x.error) throw x.error;
+              return x.count ?? 0;
+            });
+          }
           if (r.error) throw r.error;
           return r.count ?? 0;
         }),
-        countEq("status", "published"),
-        countEq("status", "draft"),
-        countEq("status", "review"),
-        countEq("status", "scheduled"),
-        countEq("status", "archived"),
-        countEq("badge_type", "breaking"),
-        countEq("is_featured", true),
-        countEq("google_news", true),
-        countEq("google_discover", true),
-      ]);
+      countActive("status", "published"),
+      countActive("status", "draft"),
+      countActive("status", "review"),
+      countActive("status", "approved"),
+      countActive("status", "scheduled"),
+      countActive("status", "archived"),
+      supabase
+        .from("articles")
+        .select("id", { count: "exact", head: true })
+        .not("deleted_at", "is", null)
+        .then((r) => {
+          if (r.error && /deleted_at/i.test(r.error.message)) return 0;
+          if (r.error) throw r.error;
+          return r.count ?? 0;
+        }),
+      countActive("badge_type", "breaking"),
+      countActive("is_featured", true),
+      countActive("google_news", true),
+      countActive("google_discover", true),
+    ]);
 
     return {
       all,
       published,
       draft,
       review,
+      approved,
       scheduled,
       archived,
+      trash,
       breaking,
       featured,
       google_news: googleNews,
@@ -340,9 +455,18 @@ export const getArticlesLibraryCounts = async () => {
     } satisfies Record<ArticlesLibraryTab, number>;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!/is_featured|google_news|google_discover|schema cache|PGRST/i.test(message)) {
+    if (!/is_featured|google_news|google_discover|approved|deleted_at|schema cache|PGRST/i.test(message)) {
       throw toAppError(error);
     }
+
+    const countEq = async (column: string, value: string | boolean) => {
+      const { count, error: err } = await supabase
+        .from("articles")
+        .select("id", { count: "exact", head: true })
+        .eq(column, value);
+      if (err) throw err;
+      return count ?? 0;
+    };
 
     const [all, published, draft, review, scheduled, archived, breaking] = await Promise.all([
       supabase.from("articles").select("id", { count: "exact", head: true }).then((r) => {
@@ -362,8 +486,10 @@ export const getArticlesLibraryCounts = async () => {
       published,
       draft,
       review,
+      approved: 0,
       scheduled,
       archived,
+      trash: 0,
       breaking,
       featured: 0,
       google_news: 0,
@@ -979,6 +1105,22 @@ export const upsertArticle = async ({
 
   if (!rpcError && viaRpc) {
     trackUsage(viaRpc);
+    const scores = computeAllArticleScores({
+      title: data.title,
+      slug,
+      deck: data.deck,
+      body: data.body,
+      hero_image_url: data.hero_image_url,
+      author_id: user.id,
+    });
+    void supabase
+      .from("articles")
+      .update({
+        seo_score: scores.seo_score,
+        content_score: scores.content_score,
+        eeat_score: scores.eeat_score,
+      })
+      .eq("id", viaRpc.id);
     return viaRpc;
   }
 
@@ -1053,9 +1195,59 @@ export const upsertArticle = async ({
   return r;
 };
 
-export const deleteArticle = async ({ data }: { data: { id: string } }) => {
+export const deleteArticle = async ({
+  data,
+}: {
+  data: { id: string; reason?: string; permanent?: boolean };
+}) => {
   await requirePermission("articles:delete");
-  const { error } = await supabase.from("articles").delete().eq("id", data.id);
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  if (data.permanent) {
+    const { error } = await supabase.from("articles").delete().eq("id", data.id);
+    if (error) throw toAppError(error);
+    return { ok: true, permanent: true };
+  }
+
+  const { error } = await supabase
+    .from("articles")
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_by: user.id,
+      delete_reason: data.reason?.trim() || "Deleted by editor",
+    })
+    .eq("id", data.id);
+  if (error) {
+    if (/deleted_at|schema cache|PGRST/i.test(error.message)) {
+      const hard = await supabase.from("articles").delete().eq("id", data.id);
+      if (hard.error) throw toAppError(hard.error);
+      return { ok: true, permanent: true };
+    }
+    throw toAppError(error);
+  }
+  return { ok: true, permanent: false };
+};
+
+export const restoreArticle = async ({ data }: { data: { id: string } }) => {
+  await requirePermission("articles:delete");
+  const { error } = await supabase
+    .from("articles")
+    .update({ deleted_at: null, deleted_by: null, delete_reason: null })
+    .eq("id", data.id);
+  if (error) throw toAppError(error);
+  return { ok: true };
+};
+
+export const purgeArticle = async ({ data }: { data: { id: string } }) => {
+  return deleteArticle({ data: { id: data.id, permanent: true } });
+};
+
+export const emptyTrash = async () => {
+  await requirePermission("articles:delete");
+  const { error } = await supabase.from("articles").delete().not("deleted_at", "is", null);
   if (error) throw toAppError(error);
   return { ok: true };
 };
@@ -1252,11 +1444,13 @@ export const applyArticleWorkflowAction = async ({
       break;
     case "approve":
       if (from !== "review") throw new Error("Only articles in review can be approved.");
-      to = "review";
+      to = "approved";
       break;
     case "reject":
     case "request_changes":
-      if (from !== "review") throw new Error("Only articles in review can be sent back.");
+      if (from !== "review" && from !== "approved") {
+        throw new Error("Only articles in review or approved can be sent back.");
+      }
       to = "draft";
       break;
     case "publish":
@@ -1315,6 +1509,162 @@ export const applyArticleWorkflowAction = async ({
   });
 
   return updated;
+};
+
+export const getArticlesQueueSnapshot = async ({
+  data,
+}: {
+  data: { queue: "review" | "approved" | "published" | "scheduled" | "archived" | "trash" | "all" };
+}) => {
+  await requirePermission("articles:view");
+  const counts = await getArticlesLibraryCounts();
+  const articles =
+    data.queue === "trash" ? await listTrashedArticles() : await listAdminArticles();
+  const filtered =
+    data.queue === "all" || data.queue === "trash"
+      ? articles
+      : articles.filter((a) => (a as { status?: string }).status === data.queue);
+
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const weekAgo = new Date(startOfToday);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+
+  if (data.queue === "review") {
+    const dueToday = filtered.filter((a) => new Date((a as { updated_at: string }).updated_at) < startOfToday).length;
+    return {
+      kpis: [
+        { label: "Pending Review", value: counts.review, detail: "In editorial queue" },
+        { label: "Due Today", value: dueToday, detail: "Waiting longer than today" },
+        { label: "Assigned to Me", value: "—", detail: "Assignment not configured" },
+        { label: "Approved Today", value: "—", detail: "Connect approvals feed" },
+      ],
+      items: filtered,
+      counts,
+    };
+  }
+  if (data.queue === "approved") {
+    return {
+      kpis: [
+        { label: "Approved Articles", value: counts.approved, detail: "Ready for publish" },
+        {
+          label: "Ready to Publish",
+          value: counts.approved,
+          detail: "No schedule set",
+        },
+        { label: "Scheduled", value: counts.scheduled, detail: "From pipeline" },
+        { label: "Est. Total Views", value: "—", detail: "Connect analytics" },
+      ],
+      items: filtered,
+      counts,
+    };
+  }
+  if (data.queue === "published") {
+    return {
+      kpis: [
+        { label: "Published Articles", value: counts.published },
+        { label: "Total Views", value: "—", detail: "Connect analytics" },
+        { label: "Avg. Engagement", value: "—", detail: "Connect analytics" },
+        { label: "Total Shares", value: "—", detail: "Connect analytics" },
+      ],
+      items: filtered,
+      counts,
+    };
+  }
+  if (data.queue === "scheduled") {
+    const dueToday = filtered.filter((a) => {
+      const at = (a as { scheduled_at?: string | null }).scheduled_at;
+      if (!at) return false;
+      const d = new Date(at);
+      return d >= startOfToday && d < new Date(startOfToday.getTime() + 86400000);
+    }).length;
+    const next = [...filtered]
+      .filter((a) => (a as { scheduled_at?: string | null }).scheduled_at)
+      .sort(
+        (a, b) =>
+          new Date((a as { scheduled_at: string }).scheduled_at).getTime() -
+          new Date((b as { scheduled_at: string }).scheduled_at).getTime(),
+      )[0] as { title?: string; scheduled_at?: string } | undefined;
+    return {
+      kpis: [
+        { label: "Scheduled Articles", value: counts.scheduled },
+        { label: "Due Today", value: dueToday },
+        {
+          label: "Due This Week",
+          value: filtered.filter((a) => {
+            const at = (a as { scheduled_at?: string | null }).scheduled_at;
+            return at && new Date(at) < new Date(startOfToday.getTime() + 7 * 86400000);
+          }).length,
+        },
+        {
+          label: "Next Article",
+          value: next?.scheduled_at
+            ? new Date(next.scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "—",
+          detail: next?.title?.slice(0, 40) || "None queued",
+        },
+      ],
+      items: filtered,
+      upcoming: filtered
+        .filter((a) => (a as { scheduled_at?: string | null }).scheduled_at)
+        .sort(
+          (a, b) =>
+            new Date((a as { scheduled_at: string }).scheduled_at).getTime() -
+            new Date((b as { scheduled_at: string }).scheduled_at).getTime(),
+        )
+        .slice(0, 5),
+      counts,
+    };
+  }
+  if (data.queue === "archived") {
+    const thisMonth = filtered.filter(
+      (a) => new Date((a as { updated_at: string }).updated_at) >= new Date(startOfToday.getFullYear(), startOfToday.getMonth(), 1),
+    ).length;
+    return {
+      kpis: [
+        { label: "Total Archived", value: counts.archived },
+        { label: "This Month", value: thisMonth },
+        { label: "This Year", value: filtered.filter((a) => new Date((a as { updated_at: string }).updated_at).getFullYear() === startOfToday.getFullYear()).length },
+        { label: "Last Archived", value: filtered[0] ? new Date((filtered[0] as { updated_at: string }).updated_at).toLocaleDateString() : "—" },
+      ],
+      items: filtered,
+      counts,
+    };
+  }
+  if (data.queue === "trash") {
+    const autoDeleteDays = 30;
+    const willDelete = filtered.filter((a) => {
+      const del = (a as { deleted_at?: string | null }).deleted_at;
+      if (!del) return false;
+      const age = (Date.now() - new Date(del).getTime()) / 86400000;
+      return age >= autoDeleteDays - 2;
+    }).length;
+    return {
+      kpis: [
+        { label: "Total in Trash", value: counts.trash },
+        { label: "Will be deleted soon", value: willDelete, detail: `Older than ${autoDeleteDays - 2} days` },
+        { label: "Auto-delete after", value: `${autoDeleteDays} Days` },
+        { label: "Recovered this month", value: "—", detail: "Not tracked yet" },
+      ],
+      items: filtered,
+      counts,
+      autoDeleteDays,
+    };
+  }
+
+  return {
+    kpis: [
+      { label: "Total Articles", value: counts.all },
+      { label: "Published", value: counts.published },
+      { label: "Drafts", value: counts.draft },
+      { label: "Pending Review", value: counts.review },
+      { label: "Scheduled", value: counts.scheduled },
+      { label: "Archived", value: counts.archived },
+    ],
+    items: filtered,
+    counts,
+    weekAgo: weekAgo.toISOString(),
+  };
 };
 
 export const restoreArticleRevision = async ({

@@ -64,6 +64,12 @@ export function ArticlesDashboardPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <MetricCard
+          label="Total Articles"
+          value={(kpis?.published ?? 0) + (kpis?.drafts ?? 0) + (kpis?.pendingReview ?? 0) + (kpis?.scheduled ?? 0)}
+          icon={FileText}
+          detail="Active library"
+        />
+        <MetricCard
           label="Published"
           value={kpis?.published ?? 0}
           icon={FileText}
@@ -99,33 +105,23 @@ export function ArticlesDashboardPage() {
           changePercent={kpis?.viewsTodayChange}
           detail="vs yesterday"
         />
-        <MetricCard
-          label="SEO health"
-          value={`${kpis?.seoHealth ?? 0}`}
-          icon={Sparkles}
-          changePercent={kpis?.seoHealthChange}
-          detail="Avg metadata score"
-          trend={(kpis?.seoHealth ?? 0) >= 70 ? "up" : "down"}
-        />
       </div>
 
-      <CmsPanel title="Quick actions" description="Jump into high-frequency desk work">
-        <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-4">
+      <CmsPanel title="Article modules" description="Jump into newsroom workflows">
+        <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {[
-            { to: "/admin/articles/all", label: "All Articles", icon: List },
-            { to: "/admin/articles/drafts", label: "Drafts", icon: FilePenLine },
-            { to: "/admin/articles/review", label: "Pending Review", icon: ClipboardList },
-            { to: "/admin/articles/scheduled", label: "Scheduled", icon: CalendarClock },
-            { to: "/admin/articles/published", label: "Published", icon: FileText },
-            { to: "/admin/articles/archived", label: "Archived", icon: Archive },
-            { to: "/admin/articles/content-score", label: "Content Score", icon: Search },
-            {
-              to: "/admin/articles/$id",
-              label: "New Article",
-              icon: FilePlus2,
-              params: { id: "new" },
-              createOnly: true,
-            },
+            { to: "/admin/articles/all", label: "All Articles", sub: "Library", icon: List },
+            { to: "/admin/articles/$id", label: "Create Article", sub: "New story", icon: FilePlus2, params: { id: "new" }, createOnly: true },
+            { to: "/admin/articles/drafts", label: "Drafts", sub: `${kpis?.drafts ?? 0} open`, icon: FilePenLine },
+            { to: "/admin/articles/review", label: "Pending Review", sub: `${kpis?.pendingReview ?? 0} waiting`, icon: ClipboardList },
+            { to: "/admin/articles/approved", label: "Approved", sub: "Ready to publish", icon: CheckCircle2 },
+            { to: "/admin/articles/published", label: "Published", sub: `${kpis?.published ?? 0} live`, icon: FileText },
+            { to: "/admin/articles/scheduled", label: "Scheduled", sub: `${kpis?.scheduled ?? 0} timed`, icon: CalendarClock },
+            { to: "/admin/articles/archived", label: "Archived", sub: "Pipeline archive", icon: Archive },
+            { to: "/admin/articles/trash", label: "Trash", sub: "Restore or purge", icon: Search },
+            { to: "/admin/articles/ai-writing", label: "AI Writer", sub: "Assist desk", icon: Sparkles },
+            { to: "/admin/articles/content-score", label: "Content Score", sub: "Quality", icon: Search },
+            { to: "/admin/articles/workflow", label: "Workflow", sub: "Stages", icon: ClipboardList },
           ].map((item) => {
             if ("createOnly" in item && item.createOnly && !canCreate) return null;
             const Icon = item.icon;
@@ -134,12 +130,15 @@ export function ArticlesDashboardPage() {
                 key={item.label}
                 to={item.to}
                 params={"params" in item ? item.params : undefined}
-                className="flex items-center gap-3 border border-border bg-background px-3 py-3 cms-transition hover:border-foreground/20 hover:bg-accent/40"
+                className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card px-3 py-3 shadow-sm cms-transition hover:border-foreground/20 hover:bg-accent/40"
               >
-                <div className="flex h-9 w-9 items-center justify-center bg-muted">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                   <Icon className="h-4 w-4" />
                 </div>
-                <span className="text-sm font-semibold">{item.label}</span>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold">{item.label}</div>
+                  <div className="text-xs text-muted-foreground">{item.sub}</div>
+                </div>
               </Link>
             );
           })}
