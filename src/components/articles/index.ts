@@ -24,6 +24,7 @@ export type { ArticleSettingsSection } from "./article-settings-drawer";
 export { ArticleInspectorRail } from "./article-inspector-rail";
 export type { InspectorCardId } from "./article-inspector-rail";
 export { ArticleWritingCanvas } from "./article-writing-canvas";
+export { CreateArticleWorkspace } from "./create-article-workspace";
 export {
   ARTICLES_NAV,
   ARTICLES_PRIMARY_TABS,
