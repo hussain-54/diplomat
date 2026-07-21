@@ -41,6 +41,7 @@ import {
 } from "@/components/articles/articles-table";
 import {
   CmsAlert,
+  CmsStat,
   CmsPagination,
   CmsStatus,
   CmsTableSkeleton,
@@ -187,6 +188,15 @@ export function ArticlesListPanel({
     return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [articles.data]);
 
+  const regionOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const article of articles.data ?? []) {
+      const region = typeof article.region === "string" ? article.region.trim() : "";
+      if (region) set.add(region);
+    }
+    return [...set].sort((a, b) => a.localeCompare(b));
+  }, [articles.data]);
+
   const enriched = useMemo(() => {
     const viewTotals = views.data ?? {};
     const commentTotals = comments.data ?? {};
@@ -248,6 +258,8 @@ export function ArticlesListPanel({
             return (authorName(article.author) || "").toLowerCase();
           case "category":
             return sectionName(article.sections).toLowerCase();
+          case "region":
+            return (article.region || "").toLowerCase();
           case "language":
             return (article.language || "en").toLowerCase();
           case "words":
@@ -289,6 +301,26 @@ export function ArticlesListPanel({
   }, [page, sorted]);
 
   const visibleColumns = ARTICLES_TABLE_COLUMNS.filter((column) => visibility[column.key]);
+  const summary = useMemo(() => {
+    const total = filtered.length;
+    const avgSeo = total
+      ? Math.round(filtered.reduce((sum, article) => sum + article.seoScore, 0) / total)
+      : 0;
+    const avgContent = total
+      ? Math.round(filtered.reduce((sum, article) => sum + article.contentScore, 0) / total)
+      : 0;
+    const avgEeat = total
+      ? Math.round(filtered.reduce((sum, article) => sum + article.eeatScore, 0) / total)
+      : 0;
+    const featured = filtered.filter((article) => article.is_featured).length;
+    const googleNews = filtered.filter((article) => article.google_news).length;
+    const scheduledSoon = filtered.filter((article) => {
+      if (article.status !== "scheduled" || !article.scheduled_at) return false;
+      const at = new Date(article.scheduled_at).getTime();
+      return at <= Date.now() + 7 * 86400000;
+    }).length;
+    return { total, avgSeo, avgContent, avgEeat, featured, googleNews, scheduledSoon };
+  }, [filtered]);
   const allVisibleSelected =
     pageRows.length > 0 && pageRows.every((article) => selected.includes(article.id));
   const error =
@@ -309,7 +341,11 @@ export function ArticlesListPanel({
       return;
     }
     setSortKey(key);
-    setSortDir(key === "title" || key === "author" || key === "category" ? "asc" : "desc");
+    setSortDir(
+      key === "title" || key === "author" || key === "category" || key === "region"
+        ? "asc"
+        : "desc",
+    );
   };
 
   const setColumnVisible = (key: ArticlesTableColumnKey, visible: boolean) => {
@@ -405,6 +441,8 @@ export function ArticlesListPanel({
         return { key: column.key, header: "Author", width: "130px", ...sortProps("author") };
       case "category":
         return { key: column.key, header: "Category", width: "120px", ...sortProps("category") };
+      case "region":
+        return { key: column.key, header: "Country", width: "110px", ...sortProps("region") };
       case "language":
         return { key: column.key, header: "Lang", width: "72px", ...sortProps("language") };
       case "tags":
@@ -490,6 +528,23 @@ export function ArticlesListPanel({
       {importMessage ? <CmsAlert>{importMessage}</CmsAlert> : null}
 
       <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+          <CmsStat
+            label={lockedStatus ? `${statusLabel(lockedStatus)} Articles` : "Matching Articles"}
+            value={summary.total}
+            detail={lockedStatus ? "Current queue size" : "After filters"}
+          />
+          <CmsStat label="Avg SEO" value={summary.avgSeo} detail="Metadata health" />
+          <CmsStat label="Avg Content" value={summary.avgContent} detail="Story quality" />
+          <CmsStat label="Avg EEAT" value={summary.avgEeat} detail="Trust signals" />
+          <CmsStat label="Featured" value={summary.featured} detail="Editorial picks" />
+          <CmsStat
+            label={lockedStatus === "scheduled" ? "Due in 7 Days" : "Google News"}
+            value={lockedStatus === "scheduled" ? summary.scheduledSoon : summary.googleNews}
+            detail={lockedStatus === "scheduled" ? "Upcoming publishes" : "Eligible stories"}
+          />
+        </div>
+
         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1">
             <ArticlesAdvancedFilters
@@ -503,6 +558,7 @@ export function ArticlesListPanel({
               }))}
               tags={(tags.data ?? []).map((tag) => ({ id: tag.id, name: tag.name }))}
               showStatus={showStatusFilter}
+              regions={regionOptions}
             />
           </div>
 
@@ -761,6 +817,7 @@ function ArticleTableRow({
     wordCount: number;
     readingMinutes: number;
     language?: string | null;
+    region?: string | null;
     tags?: Array<{ id: string; name: string; slug: string }>;
     hero_image_url?: string | null;
   };
@@ -830,6 +887,11 @@ function ArticleTableRow({
       {visibility.category ? (
         <DataTableCell>
           <CategoryPill name={sectionName(article.sections)} />
+        </DataTableCell>
+      ) : null}
+      {visibility.region ? (
+        <DataTableCell className="text-xs text-muted-foreground">
+          {article.region || "—"}
         </DataTableCell>
       ) : null}
       {visibility.language ? (

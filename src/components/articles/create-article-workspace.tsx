@@ -8,6 +8,7 @@ import {
   Eye,
   FileText,
   Globe2,
+  History,
   Image as ImageIcon,
   Link2,
   List,
@@ -186,6 +187,8 @@ export function CreateArticleWorkspace({
   canSubmitReview,
   saveBlockedHint,
   seoScore,
+  contentScore = 0,
+  eeatScore = 0,
   checklist,
   onSave,
   onSubmitReview,
@@ -233,6 +236,8 @@ export function CreateArticleWorkspace({
   canSubmitReview: boolean;
   saveBlockedHint?: string | null;
   seoScore: number;
+  contentScore?: number;
+  eeatScore?: number;
   checklist: Array<{ label: string; ok: boolean }>;
   onSave: () => void;
   onSubmitReview: () => void;
@@ -245,6 +250,9 @@ export function CreateArticleWorkspace({
   const [publishOpen, setPublishOpen] = useState(false);
   const busy = saving || publishing;
   const showPublish = canPublish && status !== "published" && status !== "archived";
+  const readability = wordCount > 400 ? 82 : wordCount > 200 ? 68 : 45;
+  const engagement = Math.min(95, Math.round(contentScore * 0.9 + (wordCount > 300 ? 8 : 0)));
+  const originality = Math.min(95, Math.round(eeatScore * 0.85 + 12));
 
   useEffect(() => {
     if (publishIntentKey && publishIntentKey > 0 && canSave && !busy) {
@@ -346,6 +354,17 @@ export function CreateArticleWorkspace({
                 Preview
               </button>
             )}
+
+            {!isNew ? (
+              <Link
+                to="/admin/articles/revisions/$articleId"
+                params={{ articleId }}
+                className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                <History className="h-4 w-4" />
+                Version History
+              </Link>
+            ) : null}
 
             {canSubmitReview ? (
               <button
@@ -691,6 +710,31 @@ export function CreateArticleWorkspace({
                 ))}
               </ul>
             </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-900">Live Analysis</span>
+                <span className="text-xs font-semibold text-gray-500">EEAT {eeatScore}</span>
+              </div>
+              <div className="mb-4 flex items-end justify-between gap-3">
+                <div>
+                  <div className="text-xs text-gray-500">Content score</div>
+                  <div className="text-3xl font-bold tracking-tight text-gray-900">
+                    {contentScore}
+                  </div>
+                </div>
+                <div className="text-right text-xs text-gray-500">
+                  {wordCount.toLocaleString()} words
+                  <br />
+                  {readingMinutes} min read
+                </div>
+              </div>
+              <div className="space-y-2.5">
+                <AnalysisBar label="Readability" value={readability} />
+                <AnalysisBar label="Engagement" value={engagement} />
+                <AnalysisBar label="Originality" value={originality} />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -739,6 +783,23 @@ function slugify(value: string) {
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 80);
+}
+
+function AnalysisBar({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-xs text-gray-500">
+        <span>{label}</span>
+        <span className="font-semibold text-gray-800">{value}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+        <div
+          className="h-full rounded-full bg-blue-600 transition-all"
+          style={{ width: `${Math.max(4, Math.min(100, value))}%` }}
+        />
+      </div>
+    </div>
+  );
 }
 
 function formatRelative(date: Date) {

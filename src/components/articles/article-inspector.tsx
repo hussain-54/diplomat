@@ -34,6 +34,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   getAdminArticle,
+  listArticleApprovals,
+  listArticleNotes,
   getArticleCommentCounts,
   getArticleTags,
   getArticleViewTotals,
@@ -138,6 +140,18 @@ export function ArticleInspector({
     queryFn: getArticleCommentCounts,
     enabled: open,
     staleTime: 60_000,
+  });
+  const approvals = useQuery({
+    queryKey: ["article-approvals", articleId],
+    queryFn: () => listArticleApprovals({ data: { article_id: articleId! } }),
+    enabled: open && Boolean(articleId),
+    staleTime: 30_000,
+  });
+  const notes = useQuery({
+    queryKey: ["article-notes", articleId],
+    queryFn: () => listArticleNotes({ data: { article_id: articleId! } }),
+    enabled: open && Boolean(articleId),
+    staleTime: 30_000,
   });
 
   const loading = open && Boolean(articleId) && detail.isLoading && !seed;
@@ -440,7 +454,79 @@ export function ArticleInspector({
                                 label="Workflow stage"
                                 value={WORKFLOW_STAGE[article.status] ?? article.status}
                               />
+                              <MetaRow
+                                label="Priority"
+                                value={(full as { priority?: string | null } | undefined)?.priority || "medium"}
+                              />
+                              <MetaRow
+                                label="Archive reason"
+                                value={(full as { archive_reason?: string | null } | undefined)?.archive_reason || "—"}
+                              />
+                              <MetaRow
+                                label="Delete reason"
+                                value={(full as { delete_reason?: string | null } | undefined)?.delete_reason || "—"}
+                              />
                             </dl>
+                            <div className="space-y-2">
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+                                Activity timeline
+                              </div>
+                              {approvals.isLoading || notes.isLoading ? (
+                                <div className="space-y-2">
+                                  <Skeleton className="h-12 w-full" />
+                                  <Skeleton className="h-12 w-full" />
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {[...(approvals.data ?? []).map((row) => ({
+                                    kind: "approval" as const,
+                                    id: row.id,
+                                    created_at: row.created_at,
+                                    title: `${row.action.replaceAll("_", " ")}`,
+                                    body: row.note ?? "",
+                                    actor:
+                                      Array.isArray(row.actor) ? row.actor[0]?.name : row.actor?.name,
+                                  })), ...(notes.data ?? []).map((row) => ({
+                                    kind: "note" as const,
+                                    id: row.id,
+                                    created_at: row.created_at,
+                                    title: row.note_type === "fact_check" ? "Fact-check note" : "Editorial note",
+                                    body: row.body,
+                                    actor:
+                                      Array.isArray(row.author) ? row.author[0]?.name : row.author?.name,
+                                  }))]
+                                    .sort(
+                                      (a, b) =>
+                                        new Date(b.created_at).getTime() -
+                                        new Date(a.created_at).getTime(),
+                                    )
+                                    .slice(0, 6)
+                                    .map((entry) => (
+                                      <div
+                                        key={`${entry.kind}-${entry.id}`}
+                                        className="rounded-xl border border-border/60 bg-background px-3 py-2.5"
+                                      >
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div className="text-xs font-semibold capitalize">
+                                            {entry.title}
+                                          </div>
+                                          <div className="text-[10px] text-muted-foreground">
+                                            {new Date(entry.created_at).toLocaleString()}
+                                          </div>
+                                        </div>
+                                        <div className="mt-1 text-[11px] text-muted-foreground">
+                                          {entry.actor || "Newsroom"}{entry.body ? ` · ${entry.body}` : ""}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  {(approvals.data?.length ?? 0) + (notes.data?.length ?? 0) === 0 ? (
+                                    <div className="rounded-xl border border-dashed border-border/70 px-3 py-4 text-xs text-muted-foreground">
+                                      Workflow events and notes will appear here.
+                                    </div>
+                                  ) : null}
+                                </div>
+                              )}
+                            </div>
                             <div className="grid grid-cols-2 gap-2">
                               <Link
                                 to="/admin/articles/$id"
@@ -589,6 +675,7 @@ function statusLabel(status: ArticleStatus) {
 
 function statusTone(status: ArticleStatus): "neutral" | "warning" | "info" | "success" | "danger" | "accent" {
   if (status === "published") return "success";
+  if (status === "approved") return "success";
   if (status === "review") return "warning";
   if (status === "scheduled") return "info";
   if (status === "archived") return "accent";

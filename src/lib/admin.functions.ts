@@ -199,7 +199,7 @@ export const listAdminArticles = async () => {
   const legacy = await supabase
     .from("articles")
     .select(
-      "id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,created_at,section_id,author_id, sections(name,slug), author:profiles!articles_author_id_fkey(id,name)",
+      "id,slug,title,status,badge_type,published_at,scheduled_at,updated_at,created_at,section_id,author_id,region, sections(name,slug), author:profiles!articles_author_id_fkey(id,name)",
     )
     .order("updated_at", { ascending: false })
     .limit(200);
@@ -212,6 +212,7 @@ export const listAdminArticles = async () => {
       google_discover: false,
       language: "en",
       schema_type: "NewsArticle",
+      region: row.region ?? null,
       seo_title: null,
       meta_description: null,
       focus_keyword: null,
@@ -666,6 +667,7 @@ export const getArticlesDashboardSnapshot = async () => {
     publishedPrevWeekRes,
     draftRes,
     reviewRes,
+    approvedRes,
     scheduledRes,
     articlesRes,
     viewsTodayRes,
@@ -673,37 +675,63 @@ export const getArticlesDashboardSnapshot = async () => {
     metricsWeekRes,
     publishWindowRes,
   ] = await Promise.all([
-    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "published"),
     supabase
       .from("articles")
       .select("id", { count: "exact", head: true })
       .eq("status", "published")
+      .is("deleted_at", null),
+    supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "published")
+      .is("deleted_at", null)
       .gte("published_at", startOfToday.toISOString()),
     supabase
       .from("articles")
       .select("id", { count: "exact", head: true })
       .eq("status", "published")
+      .is("deleted_at", null)
       .gte("published_at", startOfYesterday.toISOString())
       .lt("published_at", startOfToday.toISOString()),
     supabase
       .from("articles")
       .select("id", { count: "exact", head: true })
       .eq("status", "published")
+      .is("deleted_at", null)
       .gte("published_at", weekAgo.toISOString()),
     supabase
       .from("articles")
       .select("id", { count: "exact", head: true })
       .eq("status", "published")
+      .is("deleted_at", null)
       .gte("published_at", twoWeeksAgo.toISOString())
       .lt("published_at", weekAgo.toISOString()),
-    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "draft"),
-    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "review"),
-    supabase.from("articles").select("id", { count: "exact", head: true }).eq("status", "scheduled"),
+    supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "draft")
+      .is("deleted_at", null),
+    supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "review")
+      .is("deleted_at", null),
+    supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "approved")
+      .is("deleted_at", null),
+    supabase
+      .from("articles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "scheduled")
+      .is("deleted_at", null),
     supabase
       .from("articles")
       .select(
-        "id,slug,title,status,badge_type,published_at,updated_at,seo_title,meta_description,focus_keyword,robots_index,author:profiles!articles_author_id_fkey(name),sections(name)",
+        "id,slug,title,status,badge_type,published_at,updated_at,scheduled_at,seo_title,meta_description,focus_keyword,robots_index,author:profiles!articles_author_id_fkey(name),sections(name),article_tags(tags(name))",
       )
+      .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(100),
     supabase.from("article_daily_metrics").select("views").eq("metric_date", todayKey),
@@ -716,6 +744,7 @@ export const getArticlesDashboardSnapshot = async () => {
       .from("articles")
       .select("published_at")
       .not("published_at", "is", null)
+      .is("deleted_at", null)
       .gte("published_at", twoWeeksAgo.toISOString()),
   ]);
 
@@ -724,6 +753,7 @@ export const getArticlesDashboardSnapshot = async () => {
     publishedTodayRes,
     draftRes,
     reviewRes,
+    approvedRes,
     scheduledRes,
   ]) {
     if (result.error) throw toAppError(result.error);
@@ -756,6 +786,18 @@ export const getArticlesDashboardSnapshot = async () => {
   ).length;
 
   const storyViews = new Map<string, { title: string; slug: string; views: number }>();
+  const tagUsage = new Map<string, number>();
+  for (const article of articles) {
+    const tags = (article.article_tags ?? []) as Array<
+      { tags?: { name?: string | null } | { name?: string | null }[] | null }
+    >;
+    for (const entry of tags) {
+      const tag = Array.isArray(entry.tags) ? entry.tags[0] : entry.tags;
+      const name = tag?.name?.trim();
+      if (!name) continue;
+      tagUsage.set(name, (tagUsage.get(name) ?? 0) + 1);
+    }
+  }
   for (const row of metricsWeekRes.error ? [] : metricsWeekRes.data ?? []) {
     const article = Array.isArray(row.articles) ? row.articles[0] : row.articles;
     const current = storyViews.get(row.article_id) ?? {
@@ -789,6 +831,7 @@ export const getArticlesDashboardSnapshot = async () => {
   const publishedYesterday = publishedYesterdayRes.error ? 0 : (publishedYesterdayRes.count ?? 0);
   const drafts = draftRes.count ?? 0;
   const pendingReview = reviewRes.count ?? 0;
+  const approved = approvedRes.count ?? 0;
   const scheduled = scheduledRes.count ?? 0;
   const publishedWeek = publishedWeekRes.error ? 0 : (publishedWeekRes.count ?? 0);
   const publishedPrevWeek = publishedPrevWeekRes.error ? 0 : (publishedPrevWeekRes.count ?? 0);
@@ -801,6 +844,7 @@ export const getArticlesDashboardSnapshot = async () => {
       draftsChange: null as number | null,
       pendingReview,
       pendingReviewChange: null as number | null,
+      approved,
       scheduled,
       scheduledChange: null as number | null,
       viewsToday,
@@ -816,7 +860,7 @@ export const getArticlesDashboardSnapshot = async () => {
       seoWeak,
       missingMeta,
       totalSampled: articles.length,
-      backlog: drafts + pendingReview + scheduled,
+      backlog: drafts + pendingReview + approved + scheduled,
     },
     topPerforming,
     recentlyUpdated: articles.slice(0, 8).map((article) => ({
@@ -839,6 +883,28 @@ export const getArticlesDashboardSnapshot = async () => {
         author: Array.isArray(article.author) ? article.author[0]?.name : article.author?.name,
         badge_type: article.badge_type,
       })),
+    latestDrafts: articles
+      .filter((a) => a.status === "draft")
+      .slice(0, 6)
+      .map((article) => ({
+        id: article.id,
+        title: article.title,
+        updated_at: article.updated_at,
+        section: Array.isArray(article.sections) ? article.sections[0]?.name : article.sections?.name,
+      })),
+    approvedQueue: articles
+      .filter((a) => a.status === "approved")
+      .slice(0, 6)
+      .map((article) => ({
+        id: article.id,
+        title: article.title,
+        updated_at: article.updated_at,
+        scheduled_at: article.scheduled_at,
+      })),
+    trendingTags: [...tagUsage.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 8),
     publishingActivity: [...publishActivity.entries()].map(([date, count]) => ({
       date,
       count,

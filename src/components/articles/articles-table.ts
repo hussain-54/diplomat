@@ -6,6 +6,7 @@ export type ArticlesTableColumnKey =
   | "title"
   | "author"
   | "category"
+  | "region"
   | "language"
   | "tags"
   | "words"
@@ -23,6 +24,7 @@ export type ArticlesSortKey =
   | "title"
   | "author"
   | "category"
+  | "region"
   | "language"
   | "words"
   | "reading"
@@ -45,6 +47,7 @@ export const ARTICLES_TABLE_COLUMNS: Array<{
   { key: "title", label: "Title", hideable: false, defaultVisible: true },
   { key: "author", label: "Author", hideable: true, defaultVisible: true },
   { key: "category", label: "Category", hideable: true, defaultVisible: true },
+  { key: "region", label: "Country", hideable: true, defaultVisible: false },
   { key: "language", label: "Language", hideable: true, defaultVisible: false },
   { key: "tags", label: "Tags", hideable: true, defaultVisible: false },
   { key: "words", label: "Words", hideable: true, defaultVisible: true },

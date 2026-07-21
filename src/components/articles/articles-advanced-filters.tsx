@@ -57,6 +57,7 @@ export function ArticlesCompactFilters({
   categories,
   tags,
   showStatus = true,
+  regions = [],
 }: {
   filters: ArticlesFilterState;
   onChange: (next: ArticlesFilterState) => void;
@@ -65,6 +66,7 @@ export function ArticlesCompactFilters({
   categories: Array<{ id: string; name: string }>;
   tags: Array<{ id: string; name: string }>;
   showStatus?: boolean;
+  regions?: string[];
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [presetName, setPresetName] = useState("");
@@ -96,6 +98,7 @@ export function ArticlesCompactFilters({
     filters.language === "all"
       ? null
       : (ARTICLE_LANGUAGES.find((l) => l.id === filters.language)?.label ?? filters.language);
+  const regionLabel = filters.region === "all" ? null : filters.region;
   const contentTypeLabel =
     filters.contentType === "all"
       ? null
@@ -137,6 +140,13 @@ export function ArticlesCompactFilters({
       onRemove: () => patch({ status: "all" }),
     });
   }
+  if (regionLabel) {
+    chips.push({
+      id: "region",
+      label: `Region: ${regionLabel}`,
+      onRemove: () => patch({ region: "all" }),
+    });
+  }
   if (languageLabel) {
     chips.push({
       id: "language",
@@ -156,6 +166,41 @@ export function ArticlesCompactFilters({
       id: "seo",
       label: `SEO: ${filters.seoScore}`,
       onRemove: () => patch({ seoScore: "all" }),
+    });
+  }
+  if (filters.contentScore !== "all") {
+    chips.push({
+      id: "contentScore",
+      label: `Content: ${filters.contentScore}`,
+      onRemove: () => patch({ contentScore: "all" }),
+    });
+  }
+  if (filters.eeatScore !== "all") {
+    chips.push({
+      id: "eeatScore",
+      label: `EEAT: ${filters.eeatScore}`,
+      onRemove: () => patch({ eeatScore: "all" }),
+    });
+  }
+  if (filters.featured !== "all") {
+    chips.push({
+      id: "featured",
+      label: `Featured: ${filters.featured}`,
+      onRemove: () => patch({ featured: "all" }),
+    });
+  }
+  if (filters.googleNews !== "all") {
+    chips.push({
+      id: "googleNews",
+      label: `Google News: ${filters.googleNews}`,
+      onRemove: () => patch({ googleNews: "all" }),
+    });
+  }
+  if (filters.priority !== "all") {
+    chips.push({
+      id: "priority",
+      label: `Priority: ${filters.priority}`,
+      onRemove: () => patch({ priority: "all" }),
     });
   }
   if (filters.dateFrom || filters.dateTo) {
@@ -180,7 +225,13 @@ export function ArticlesCompactFilters({
     filters.viewsMin,
     filters.viewsMax,
     filters.seoScore !== "all",
+    filters.contentScore !== "all",
+    filters.eeatScore !== "all",
+    filters.featured !== "all",
+    filters.googleNews !== "all",
+    filters.priority !== "all",
     filters.contentType !== "all",
+    filters.region !== "all",
   ].filter(Boolean).length;
 
   return (
@@ -212,6 +263,7 @@ export function ArticlesCompactFilters({
                 categories={categories}
                 tags={tags}
                 showStatus={showStatus}
+                regions={regions}
               />
             </div>
 
@@ -285,6 +337,7 @@ export function ArticlesCompactFilters({
                   categories={categories}
                   tags={tags}
                   showStatus={showStatus}
+                  regions={regions}
                 />
               </div>
             </div>
@@ -377,6 +430,36 @@ export function ArticlesCompactFilters({
               </select>
             </Field>
 
+            <Field label="Content score">
+              <select
+                value={filters.contentScore}
+                onChange={(event) =>
+                  patch({ contentScore: event.target.value as ArticlesFilterState["contentScore"] })
+                }
+                className={cn(cmsInput, "cursor-pointer")}
+              >
+                <option value="all">Any</option>
+                <option value="weak">Weak (&lt;50)</option>
+                <option value="fair">Fair (50–74)</option>
+                <option value="strong">Strong (75+)</option>
+              </select>
+            </Field>
+
+            <Field label="EEAT score">
+              <select
+                value={filters.eeatScore}
+                onChange={(event) =>
+                  patch({ eeatScore: event.target.value as ArticlesFilterState["eeatScore"] })
+                }
+                className={cn(cmsInput, "cursor-pointer")}
+              >
+                <option value="all">Any</option>
+                <option value="weak">Weak (&lt;50)</option>
+                <option value="fair">Fair (50–74)</option>
+                <option value="strong">Strong (75+)</option>
+              </select>
+            </Field>
+
             <Field label="Views range">
               <div className="grid grid-cols-2 gap-2">
                 <input
@@ -416,6 +499,49 @@ export function ArticlesCompactFilters({
                 ))}
               </select>
             </Field>
+
+            <Field label="Priority">
+              <select
+                value={filters.priority}
+                onChange={(event) =>
+                  patch({ priority: event.target.value as ArticlesFilterState["priority"] })
+                }
+                className={cn(cmsInput, "cursor-pointer")}
+              >
+                <option value="all">Any</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </Field>
+
+            <Field label="Featured">
+              <select
+                value={filters.featured}
+                onChange={(event) =>
+                  patch({ featured: event.target.value as ArticlesFilterState["featured"] })
+                }
+                className={cn(cmsInput, "cursor-pointer")}
+              >
+                <option value="all">Any</option>
+                <option value="featured">Featured only</option>
+                <option value="standard">Standard only</option>
+              </select>
+            </Field>
+
+            <Field label="Google News">
+              <select
+                value={filters.googleNews}
+                onChange={(event) =>
+                  patch({ googleNews: event.target.value as ArticlesFilterState["googleNews"] })
+                }
+                className={cn(cmsInput, "cursor-pointer")}
+              >
+                <option value="all">Any</option>
+                <option value="yes">Eligible</option>
+                <option value="no">Off</option>
+              </select>
+            </Field>
           </div>
           <div className="flex gap-2 border-t border-border/60 px-5 py-4">
             <button type="button" className={cmsGhostButton} onClick={onClear}>
@@ -442,6 +568,7 @@ function PrimarySelects({
   categories,
   tags,
   showStatus,
+  regions,
 }: {
   filters: ArticlesFilterState;
   patch: (partial: Partial<ArticlesFilterState>) => void;
@@ -449,6 +576,7 @@ function PrimarySelects({
   categories: Array<{ id: string; name: string }>;
   tags: Array<{ id: string; name: string }>;
   showStatus: boolean;
+  regions: string[];
 }) {
   return (
     <>
@@ -513,6 +641,20 @@ function PrimarySelects({
           ))}
         </select>
       ) : null}
+      <select
+        value={filters.region}
+        onChange={(event) => patch({ region: event.target.value })}
+        className={selectClass}
+        style={selectStyle}
+        aria-label="Region"
+      >
+        <option value="all">Country</option>
+        {regions.map((region) => (
+          <option key={region} value={region}>
+            {region}
+          </option>
+        ))}
+      </select>
       <select
         value={filters.language}
         onChange={(event) => patch({ language: event.target.value })}

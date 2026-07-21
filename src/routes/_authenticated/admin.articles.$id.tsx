@@ -840,6 +840,8 @@ function EditArticle() {
       canSubmitReview={canSubmitReview && !readOnly}
       saveBlockedHint={saveBlockedHint}
       seoScore={Math.max(seoScore, allScores.seo_score)}
+      contentScore={allScores.content_score}
+      eeatScore={allScores.eeat_score}
       checklist={seoChecklist}
       onSave={() => save.mutate({})}
       onSubmitReview={() => {

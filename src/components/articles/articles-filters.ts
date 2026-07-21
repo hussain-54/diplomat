@@ -9,11 +9,17 @@ export type ArticlesFilterState = {
   category: string;
   tag: string;
   status: "all" | ArticleStatus;
+  region: string;
   language: string;
   contentType: "all" | SchemaType;
   dateFrom: string;
   dateTo: string;
   seoScore: "all" | "weak" | "fair" | "strong";
+  contentScore: "all" | "weak" | "fair" | "strong";
+  eeatScore: "all" | "weak" | "fair" | "strong";
+  featured: "all" | "featured" | "standard";
+  googleNews: "all" | "yes" | "no";
+  priority: "all" | "low" | "medium" | "high";
   viewsMin: string;
   viewsMax: string;
 };
@@ -31,11 +37,17 @@ export const DEFAULT_ARTICLES_FILTERS: ArticlesFilterState = {
   category: "all",
   tag: "all",
   status: "all",
+  region: "all",
   language: "all",
   contentType: "all",
   dateFrom: "",
   dateTo: "",
   seoScore: "all",
+  contentScore: "all",
+  eeatScore: "all",
+  featured: "all",
+  googleNews: "all",
+  priority: "all",
   viewsMin: "",
   viewsMax: "",
 };
@@ -81,9 +93,15 @@ export function isArticlesFilterActive(
     filters.author !== "all" ||
     filters.category !== "all" ||
     filters.tag !== "all" ||
+    filters.region !== "all" ||
     filters.language !== "all" ||
     filters.contentType !== "all" ||
     filters.seoScore !== "all" ||
+    filters.contentScore !== "all" ||
+    filters.eeatScore !== "all" ||
+    filters.featured !== "all" ||
+    filters.googleNews !== "all" ||
+    filters.priority !== "all" ||
     (!options?.ignoreStatus && filters.status !== "all")
   );
 }
@@ -95,6 +113,7 @@ export function matchesArticlesFilters(
     author_id: string | null;
     section_id: string | null;
     status: ArticleStatus;
+    region?: string | null;
     language?: string | null;
     schema_type?: string | null;
     updated_at: string;
@@ -103,6 +122,11 @@ export function matchesArticlesFilters(
     focus_keyword?: string | null;
     robots_index?: boolean | null;
     tag_ids?: string[];
+    content_score?: number | null;
+    eeat_score?: number | null;
+    is_featured?: boolean | null;
+    google_news?: boolean | null;
+    priority?: string | null;
   },
   filters: ArticlesFilterState,
   views = 0,
@@ -121,6 +145,7 @@ export function matchesArticlesFilters(
   }
   if (filters.author !== "all" && article.author_id !== filters.author) return false;
   if (filters.category !== "all" && article.section_id !== filters.category) return false;
+  if (filters.region !== "all" && (article.region?.trim() || "all") !== filters.region) return false;
   if (filters.tag === "untagged") {
     if ((article.tag_ids?.length ?? 0) > 0) return false;
   } else if (filters.tag !== "all" && !(article.tag_ids ?? []).includes(filters.tag)) {
@@ -138,6 +163,19 @@ export function matchesArticlesFilters(
   if (filters.seoScore === "weak" && seo >= 50) return false;
   if (filters.seoScore === "fair" && (seo < 50 || seo >= 75)) return false;
   if (filters.seoScore === "strong" && seo < 75) return false;
+  const contentScore = article.content_score ?? 0;
+  if (filters.contentScore === "weak" && contentScore >= 50) return false;
+  if (filters.contentScore === "fair" && (contentScore < 50 || contentScore >= 75)) return false;
+  if (filters.contentScore === "strong" && contentScore < 75) return false;
+  const eeatScore = article.eeat_score ?? 0;
+  if (filters.eeatScore === "weak" && eeatScore >= 50) return false;
+  if (filters.eeatScore === "fair" && (eeatScore < 50 || eeatScore >= 75)) return false;
+  if (filters.eeatScore === "strong" && eeatScore < 75) return false;
+  if (filters.featured === "featured" && !article.is_featured) return false;
+  if (filters.featured === "standard" && article.is_featured) return false;
+  if (filters.googleNews === "yes" && !article.google_news) return false;
+  if (filters.googleNews === "no" && article.google_news) return false;
+  if (filters.priority !== "all" && (article.priority ?? "medium") !== filters.priority) return false;
   if (viewsMin !== null && !Number.isNaN(viewsMin) && views < viewsMin) return false;
   if (viewsMax !== null && !Number.isNaN(viewsMax) && views > viewsMax) return false;
   return true;
@@ -168,6 +206,24 @@ export function builtinFilterPresets(): ArticlesFilterPreset[] {
       name: "In review",
       builtin: true,
       filters: { ...DEFAULT_ARTICLES_FILTERS, status: "review" },
+    },
+    {
+      id: "builtin-approved-ready",
+      name: "Ready to publish",
+      builtin: true,
+      filters: { ...DEFAULT_ARTICLES_FILTERS, status: "approved" },
+    },
+    {
+      id: "builtin-featured",
+      name: "Featured stories",
+      builtin: true,
+      filters: { ...DEFAULT_ARTICLES_FILTERS, featured: "featured" },
+    },
+    {
+      id: "builtin-google-news",
+      name: "Google News",
+      builtin: true,
+      filters: { ...DEFAULT_ARTICLES_FILTERS, googleNews: "yes" },
     },
   ];
 }

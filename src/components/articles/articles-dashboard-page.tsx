@@ -65,7 +65,13 @@ export function ArticlesDashboardPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <MetricCard
           label="Total Articles"
-          value={(kpis?.published ?? 0) + (kpis?.drafts ?? 0) + (kpis?.pendingReview ?? 0) + (kpis?.scheduled ?? 0)}
+          value={
+            (kpis?.published ?? 0) +
+            (kpis?.drafts ?? 0) +
+            (kpis?.pendingReview ?? 0) +
+            (kpis?.approved ?? 0) +
+            (kpis?.scheduled ?? 0)
+          }
           icon={FileText}
           detail="Active library"
         />
@@ -97,6 +103,12 @@ export function ArticlesDashboardPage() {
           icon={CalendarClock}
           changePercent={kpis?.scheduledChange}
           detail="Timed publishes"
+        />
+        <MetricCard
+          label="Approved"
+          value={kpis?.approved ?? 0}
+          icon={CheckCircle2}
+          detail="Ready to publish"
         />
         <MetricCard
           label="Views today"
@@ -276,6 +288,103 @@ export function ArticlesDashboardPage() {
                     </div>
                   </div>
                   <StatusBadge status={article.status}>{article.status}</StatusBadge>
+                </Link>
+              ))}
+            </div>
+          )}
+        </CmsPanel>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <CmsPanel
+          title="Approved to publish"
+          description="Stories cleared for scheduling or immediate release"
+          action={
+            <Link to="/admin/articles/approved" className="text-xs font-semibold text-cat-blue">
+              Open approved
+            </Link>
+          }
+        >
+          {!data?.approvedQueue.length ? (
+            <CmsEmptyState title="No approved stories" description="Approved articles will appear here." />
+          ) : (
+            <div className="divide-y divide-border">
+              {data.approvedQueue.map((article) => (
+                <Link
+                  key={article.id}
+                  to="/admin/articles/$id"
+                  params={{ id: article.id }}
+                  className="flex items-center justify-between gap-3 px-5 py-3.5 cms-transition hover:bg-accent/50"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">{article.title}</div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      {article.scheduled_at
+                        ? `Scheduled ${new Date(article.scheduled_at).toLocaleString()}`
+                        : `Updated ${new Date(article.updated_at).toLocaleString()}`}
+                    </div>
+                  </div>
+                  <StatusBadge status="approved">approved</StatusBadge>
+                </Link>
+              ))}
+            </div>
+          )}
+        </CmsPanel>
+
+        <CmsPanel
+          title="Trending tags"
+          description="Most used tags across recent desk activity"
+          action={
+            <Link to="/admin/tags/trending" className="text-xs font-semibold text-cat-blue">
+              Open tags
+            </Link>
+          }
+        >
+          {!data?.trendingTags.length ? (
+            <CmsEmptyState title="No tag trends yet" description="Tag usage will surface here." />
+          ) : (
+            <div className="divide-y divide-border">
+              {data.trendingTags.map((tag, index) => (
+                <div key={tag.name} className="flex items-center justify-between gap-3 px-5 py-3.5">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">
+                      #{index + 1} {tag.name}
+                    </div>
+                  </div>
+                  <div className="cms-metric text-sm font-semibold">{tag.count}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CmsPanel>
+
+        <CmsPanel
+          title="Latest drafts"
+          description="Fresh in-progress stories"
+          action={
+            <Link to="/admin/articles/drafts" className="text-xs font-semibold text-cat-blue">
+              Open drafts
+            </Link>
+          }
+        >
+          {!data?.latestDrafts.length ? (
+            <CmsEmptyState title="No drafts open" description="Draft activity will show up here." />
+          ) : (
+            <div className="divide-y divide-border">
+              {data.latestDrafts.map((article) => (
+                <Link
+                  key={article.id}
+                  to="/admin/articles/$id"
+                  params={{ id: article.id }}
+                  className="flex items-center justify-between gap-3 px-5 py-3.5 cms-transition hover:bg-accent/50"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold">{article.title}</div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      {article.section ?? "Unassigned"} · {new Date(article.updated_at).toLocaleString()}
+                    </div>
+                  </div>
+                  <StatusBadge status="draft">draft</StatusBadge>
                 </Link>
               ))}
             </div>
